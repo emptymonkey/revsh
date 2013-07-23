@@ -18,9 +18,18 @@ There are [many techniques](http://pentestmonkey.net/cheat-sheet/shells/reverse-
 
 _revsh_ is intended as a supplementary tool for a [pentester's](http://en.wikipedia.org/wiki/Pentester) toolkit that provides the full set of terminal features in a small (~20k) easy to use binary.
 
+**Where can I use _revsh_?**
+
+_revsh_ was developed and tested on Linux x86_64. It hasn't been tested on other platforms, but it should port reasonably easily.
+
 ## Usage ##
 
-	usage: revsh [-l] [-s SHELL] [-e ENV_ARGS] ADDRESS PORT
+	usage: revsh [-l [-e ENV_ARGS]] [-s SHELL] ADDRESS PORT
+
+* -l: Setup the listener.
+* -e ENV_ARGS: Export this list of environment args from the listeners environment back to the connector. (Default is "TERM".)
+* -s SHELL: Invoke your favorite SHELL. (Default is /bin/sh.)
+* ADDRESS PORT: Connect to (or listen at) this ADDRESS and PORT number.
 
 ## Example ##
 
