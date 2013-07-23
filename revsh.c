@@ -13,8 +13,6 @@
  *	as a replacement for netcat, but rather as a supplementary tool to ease 
  *	remote interaction during long engagements.
  *
- *
- *
  *******************************************************************************/
 
 
@@ -591,9 +589,13 @@ int main(int argc, char **argv){
 				error(-1, errno, "close(%d)", pty_slave);
 			}
 
-			if((retval = io_loop(pty_master, sock_fd, listener) == -1)){
+			retval = io_loop(pty_master, sock_fd, listener);
+
+#ifdef debug
+			if((retval == -1)){
 				error(-1, errno, "io_loop(%d, %d, %d)", pty_master, sock_fd, listener);
 			}
+#endif
 
 			return(0);
 		}
