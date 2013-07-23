@@ -18,11 +18,11 @@ There are [many techniques](http://pentestmonkey.net/cheat-sheet/shells/reverse-
 
 _revsh_ is intended as a supplementary tool for a [pentester's](http://en.wikipedia.org/wiki/Pentester) toolkit that provides the full set of terminal features in a small (~20k) easy to use binary.
 
-## _revsh_ Usage ##
+## Usage ##
 
 	usage: revsh [-l] [-s SHELL] [-e ENV_ARGS] ADDRESS PORT
 
-## _revsh_ Example ##
+## Example ##
 
 First, setup the listener on the local host:
 
