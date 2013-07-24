@@ -56,7 +56,7 @@ We will now find a shell waiting for us back at the listener:
 
 ## Installation ##
 
-	git clone git@github.com:emptymonkey/revsh.git
+	git clone https://github.com/emptymonkey/revsh.git
 	cd revsh
 	make
 
