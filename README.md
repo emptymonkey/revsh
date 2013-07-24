@@ -1,6 +1,6 @@
 # revsh #
 
-_revsh_ is a tool for establishing reverse shells with full [terminal](http://en.wikipedia.org/wiki/Computer_terminal) support.
+_revsh_ is a tool for establishing a [reverse shell](http://en.wikipedia.org/wiki/Shellcode#Remote) with [terminal](http://en.wikipedia.org/wiki/Computer_terminal) support.
 
 **What is a "reverse shell"?**
 
