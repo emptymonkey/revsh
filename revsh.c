@@ -63,7 +63,7 @@ int io_loop(int local_fd, int remote_fd, int listener);
 
 int main(int argc, char **argv){
 
-	int i, retval;
+	int i, retval, err_flag;
 
 	int opt;
 	int listener = 0;
@@ -119,9 +119,6 @@ int main(int argc, char **argv){
 		usage();
 	}
 
-	if(listener && shell){
-		error(-1, 0, "listeners don't invoke shells");
-	}
 
 	buff_len = getpagesize();
 	if((buff_head = (char *) calloc(buff_len, sizeof(char))) == NULL){
@@ -132,6 +129,7 @@ int main(int argc, char **argv){
 	 * Listener:
 	 *	- Open a socket.	
 	 *	- Listen for a connection.
+	 *	- Send initial shell data.
 	 *	- Send initial environment data.
 	 *	- Send initial termios data.
 	 *	-	Set local terminal to raw. 
@@ -192,6 +190,36 @@ int main(int argc, char **argv){
 		printf("Initializing...");
 		fflush(stdout);
 
+	 	//	- Send initial shell data.
+		memset(buff_head, 0, buff_len);
+    buff_tail = buff_head;
+    *(buff_tail++) = (char) APC;
+		if(shell){
+			tmp_len = strlen(shell);
+			memcpy(buff_tail, shell, tmp_len);
+		}else{
+			tmp_len = strlen(DEFAULT_SHELL);
+			memcpy(buff_tail, DEFAULT_SHELL, tmp_len);
+		}
+		buff_tail += tmp_len;
+
+    *(buff_tail++) = (char) ST;
+
+    if((buff_tail - buff_head) >= buff_len){
+      error(-1, 0, "Environment string too long.");
+    }
+
+    tmp_len = strlen(buff_head);
+    if((io_bytes = write(sock_fd, buff_head, tmp_len)) == -1){
+      error(-1, errno, "write(%d, %lx, %d)", \
+          sock_fd, (unsigned long) buff_head, tmp_len);
+    }
+
+    if(io_bytes != (buff_tail - buff_head)){
+      error(-1, 0, "write(%d, %lx, %d): Unable to write entire string.", \
+          sock_fd, (unsigned long) buff_head, buff_len);
+    }
+
 		//	- Send initial environment data.
 		if(!env_string){
 			tmp_len = strlen(DEFAULT_ENV);
@@ -231,12 +259,13 @@ int main(int argc, char **argv){
 			*(buff_tail++) = '=';
 
 			if((tmp_ptr = getenv(exec_envp[i])) == NULL){
-				error(-1, errno, "getenv(%s)", exec_envp[i]);
+				fprintf(stderr, "%s: No such environment variable \"%s\". Ignoring.\n", \
+					program_invocation_short_name, exec_envp[i]);
+			}else{
+				tmp_len = strlen(tmp_ptr);
+				memcpy(buff_tail, tmp_ptr, tmp_len);
+				buff_tail += tmp_len;
 			}
-
-			tmp_len = strlen(tmp_ptr);
-			memcpy(buff_tail, tmp_ptr, tmp_len);
-			buff_tail += tmp_len;
 		}
 
 		*(buff_tail++) = (char) ST;
@@ -312,19 +341,32 @@ int main(int argc, char **argv){
 		printf("\tDone!\r\n");
 		fflush(stdout);
 
+		errno = 0;
 		//	- Enter io_loop() for data brokering.
 		if((retval = io_loop(STDIN_FILENO, sock_fd, listener) == -1)){
-			error(-1, errno, "io_loop(%d, %d, %d)", STDIN_FILENO, sock_fd, listener);
+			fprintf(stderr, "%s: io_loop(%d, %d, %d): %s\r\n", \
+				program_invocation_short_name, STDIN_FILENO, sock_fd, listener,
+				strerror(errno));
+		}
+
+		err_flag = 0;
+		if(errno == ECONNRESET){
+			err_flag = errno;
 		}
 
 		//	- Reset local term.
-		if((retval = tcsetattr(STDIN_FILENO, TCSANOW, &saved_termios_attrs)) == -1){
-			error(-1, errno, "tcsetattr(STDIN_FILENO, TCSANOW, %lx)", \
-					(unsigned long) &new_termios_attrs);
-		}	
+		tcsetattr(STDIN_FILENO, TCSANOW, &saved_termios_attrs);
 
 		//	- Exit.
-		printf("Good-bye!\n");
+		if(!err_flag){
+			printf("Good-bye!\n");
+
+		}else{
+			while((retval = read(sock_fd, buff_head, buff_len)) > 0){
+				write(STDERR_FILENO, buff_head, retval);
+			}
+		}
+
 		return(0);
 
 	}else{
@@ -333,6 +375,8 @@ int main(int argc, char **argv){
 		 * Connector: 
 		 *	- Become a daemon.
 		 *	- Open a network connection back to a listener.
+		 *	- Check for usage and exit, if needed. 
+		 *	- Receive and set the shell.
 		 *	- Receive and set the initial environment.
 		 *	- Receive and set the initial termios.
 		 *	- Create a pseudo-terminal (pty).
@@ -409,6 +453,57 @@ int main(int argc, char **argv){
 		if((retval = dup2(sock_fd, STDOUT_FILENO)) == -1){
 			error(-1, errno, "dup2(%d, STDOUT_FILENO)", sock_fd);
 		}
+
+		// - Check for usage and exit, if needed. 
+		// We do this after the network connect so the error
+		// reporting gets sent back to the listener, if possible.
+		if(shell || env_string){
+			
+			fprintf(stderr, \
+					"\r%s: remote usage error: Only listeners can invoke -s or -e!\r\n", \
+					program_invocation_short_name);
+			fflush(stderr);
+			exit(-1);
+		}
+
+		// - Receive and set the shell.
+    if((io_bytes = read(sock_fd, &tmp_char, 1)) == -1){
+      error(-1, errno, "read(%d, %lx, %d)", \
+          sock_fd, (unsigned long) &tmp_char, 1);
+    }
+
+    if(tmp_char != (char) APC){
+      error(-1, 0, "invalid initialization: shell");
+    }
+
+    memset(buff_head, 0, buff_len);
+    buff_tail = buff_head;
+
+    if((io_bytes = read(sock_fd, &tmp_char, 1)) == -1){
+      error(-1, errno, "read(%d, %lx, %d)", \
+          sock_fd, (unsigned long) &tmp_char, 1);
+    }
+
+    while(tmp_char != (char) ST){
+      *(buff_tail++) = tmp_char;
+
+      if((buff_tail - buff_head) >= buff_len){
+        error(-1, 0, "Shell string too long.");
+      }
+
+      if((io_bytes = read(sock_fd, &tmp_char, 1)) == -1){
+        error(-1, errno, "read(%d, %lx, %d)", \
+            sock_fd, (unsigned long) &tmp_char, 1);
+      }
+    }
+
+		tmp_len = strlen(buff_head);
+		if((shell = (char *) calloc(tmp_len + 1, sizeof(char))) == NULL){
+			error(-1, errno, "calloc(%d, %d)", \
+					tmp_len + 1, (int) sizeof(char));
+		}
+		memcpy(shell, buff_head, tmp_len);
+
 
 		// - Receive and set the initial environment.
 		if((io_bytes = read(sock_fd, &tmp_char, 1)) == -1){
@@ -671,8 +766,13 @@ int main(int argc, char **argv){
  *
  ******************************************************************************/
 void usage(){
-	fprintf(stderr, "usage: %s [-l] [-s SHELL] [-e ENV_ARGS] ADDRESS PORT\n", \
+	fprintf(stderr, "\nusage: %s [-l [-e ENV_ARGS] [-s SHELL]] ADDRESS PORT\n", \
 			program_invocation_short_name);
+	fprintf(stderr, "\n\t-l: Setup a listener.\n");
+	fprintf(stderr, "\t-e ENV_ARGS: Export ENV_ARGS to the remote shell. (Default is \"TERM\".)\n");
+	fprintf(stderr, "\t-s SHELL: Invoke SHELL as the remote shell. (Default is /bin/sh.)\n");
+	fprintf(stderr, "\n\tNote: '-e' and '-s' only work with a listener.\n\n");
+
 	exit(-1);
 }
 
