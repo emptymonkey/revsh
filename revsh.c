@@ -734,15 +734,9 @@ int main(int argc, char **argv){
 		}
 
 		//	- Child: Call execve() to invoke a shell.
-		if(shell){	
-			errno = 0;
-			if((exec_argv = string_to_vector(shell)) == NULL){
-				error(-1, errno, "string_to_vector(%s)", shell);
-			}
-		}else{
-			if((exec_argv = string_to_vector(DEFAULT_SHELL)) == NULL){
-				error(-1, errno, "string_to_vector(%s)", DEFAULT_SHELL);
-			}
+		errno = 0;
+		if((exec_argv = string_to_vector(shell)) == NULL){
+			error(-1, errno, "string_to_vector(%s)", shell);
 		}
 
 		execve(exec_argv[0], exec_argv, exec_envp);
