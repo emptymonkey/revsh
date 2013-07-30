@@ -24,12 +24,13 @@ _revsh_ was developed and tested on Linux x86_64. It hasn't been tested on other
 
 ## Usage ##
 
-	usage: revsh [-l [-e ENV_ARGS]] [-s SHELL] ADDRESS PORT
+	usage: revsh [-l [-e ENV_ARGS] [-s SHELL]] ADDRESS PORT
 
-* -l: Setup the listener.
-* -e ENV_ARGS: Export this list of environment args from the listeners environment back to the connector. (Default is "TERM".)
-* -s SHELL: Invoke your favorite SHELL. (Default is /bin/sh.)
-* ADDRESS PORT: Connect to (or listen at) this ADDRESS and PORT number.
+		-l: Setup a listener.
+		-e ENV_ARGS: Export ENV_ARGS to the remote shell. (Default is "TERM".)
+		-s SHELL: Invoke SHELL as the remote shell. (Default is /bin/sh.)
+
+		Note: '-e' and '-s' only work with a listener.
 
 ## Example ##
 
