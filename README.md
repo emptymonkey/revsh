@@ -57,14 +57,6 @@ We will now find a shell waiting for us back at the listener:
 
 ## Installation ##
 
-If you trust me (which, let's be honest, you shouldn't) then you can just grab the binary directly:
-
-	wget https://github.com/emptymonkey/revsh/raw/master/revsh.Linux-x86_64
-	mv revsh.Linux-x86_64 revsh
-	chmod u+x revsh
-
-Otherwise, grab the source and build it yourself:
-
 	git clone https://github.com/emptymonkey/revsh.git
 	cd revsh
 	make
