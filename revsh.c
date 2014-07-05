@@ -764,7 +764,7 @@ void usage(){
 			program_invocation_short_name);
 	fprintf(stderr, "\n\t-l: Setup a listener.\n");
 	fprintf(stderr, "\t-e ENV_ARGS: Export ENV_ARGS to the remote shell. (Default is \"TERM\".)\n");
-	fprintf(stderr, "\t-s SHELL: Invoke SHELL as the remote shell. (Default is /bin/sh.)\n");
+	fprintf(stderr, "\t-s SHELL: Invoke SHELL as the remote shell. (Default is /bin/bash.)\n");
 	fprintf(stderr, "\n\tNote: '-e' and '-s' only work with a listener.\n\n");
 
 	exit(-1);

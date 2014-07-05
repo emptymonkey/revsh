@@ -36,7 +36,7 @@ _revsh_ was developed and tested on Linux x86_64. It hasn't been tested on other
 
 First, setup the listener on the local host:
 
-	empty@monkey:~$ revsh -s /bin/bash -l 192.168.0.42 9999
+	empty@monkey:~$ revsh -l 192.168.0.42 9999
 
 Then connect out from the remote host:
 
@@ -44,7 +44,7 @@ Then connect out from the remote host:
 	
 We will now find a shell waiting for us back at the listener:
 
-	empty@monkey:~$ revsh -s /bin/bash -l 192.168.0.42 9999
+	empty@monkey:~$ revsh -l 192.168.0.42 9999
 	Listening...	Connected!
 	Initializing...	Done!
 	################################
