@@ -28,7 +28,7 @@ _revsh_ was developed and tested on Linux x86_64. It hasn't been tested on other
 
 		-l: Setup a listener.
 		-e ENV_ARGS: Export ENV_ARGS to the remote shell. (Default is "TERM".)
-		-s SHELL: Invoke SHELL as the remote shell. (Default is /bin/sh.)
+		-s SHELL: Invoke SHELL as the remote shell. (Default is /bin/bash.)
 
 		Note: '-e' and '-s' only work with a listener.
 
