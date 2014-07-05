@@ -43,7 +43,7 @@
 #include <sys/types.h>
 
 
-#define DEFAULT_SHELL	"/bin/sh"
+#define DEFAULT_SHELL	"/bin/bash"
 #define DEFAULT_ENV	"TERM"
 
 #define WINSIZE_BUFF_LEN	16
