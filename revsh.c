@@ -44,7 +44,7 @@
 
 
 #define DEFAULT_SHELL	"/bin/bash"
-#define DEFAULT_ENV	"TERM"
+#define DEFAULT_ENV	"TERM LANG"
 
 #define WINSIZE_BUFF_LEN	16
 
@@ -763,7 +763,7 @@ void usage(){
 	fprintf(stderr, "\nusage: %s [-l [-e ENV_ARGS] [-s SHELL]] ADDRESS PORT\n", \
 			program_invocation_short_name);
 	fprintf(stderr, "\n\t-l: Setup a listener.\n");
-	fprintf(stderr, "\t-e ENV_ARGS: Export ENV_ARGS to the remote shell. (Default is \"TERM\".)\n");
+	fprintf(stderr, "\t-e ENV_ARGS: Export ENV_ARGS to the remote shell. (Defaults are \"TERM\" and \"LANG\".)\n");
 	fprintf(stderr, "\t-s SHELL: Invoke SHELL as the remote shell. (Default is /bin/bash.)\n");
 	fprintf(stderr, "\n\tNote: '-e' and '-s' only work with a listener.\n\n");
 
