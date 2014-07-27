@@ -64,7 +64,7 @@ We will now find a shell waiting for us back at the listener:
 ## Updates / Feature Additions ##
 
 * Added support for UTF-8.
-* Added support for an ~/.revsh/rc file. (Executes commands from the local file on the remote machine upon login.)
+* Added support for a ~/.revsh/rc file. (Executes commands from the local file on the remote machine upon login.)
 
 ## A Quick Note on Ethics ##
 
