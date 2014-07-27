@@ -1,6 +1,4 @@
 
-//XXX Go back through and add ifdef debug checks for all the new error cases.
-
 /*******************************************************************************
  *
  * revsh
