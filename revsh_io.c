@@ -113,21 +113,34 @@ int remote_printf(struct remote_io_helper *io, char *fmt, ...){
 
 	int retval;
 	char buff[BUFFER_SIZE];
-
 	va_list list_ptr;
+
 
 	va_start(list_ptr, fmt);
 
-	// adding a listener section to simplify the broker() loop. If listener, just pass through to printf().
-	if(io->listener){
-		retval = vfprintf(stderr, fmt, list_ptr);
-	}else{
-		memset(buff, 0, BUFFER_SIZE);
-		retval = vsnprintf(buff, BUFFER_SIZE - 1, fmt, list_ptr);
-		io->remote_write(io, buff, retval + 1);
-	}
+	memset(buff, 0, BUFFER_SIZE);
+	retval = vsnprintf(buff, BUFFER_SIZE - 1, fmt, list_ptr);
+	io->remote_write(io, buff, retval + 1);
 
 	va_end(list_ptr);
+
+	return(retval);
+}
+
+int print_error(struct remote_io_helper *io, char *fmt, ...){
+
+	int retval = 0;
+	va_list list_ptr;
+
+
+	va_start(list_ptr, fmt);
+
+	if(io->listener){
+		retval = vfprintf(stderr, fmt, list_ptr);
+		fflush(stderr);
+	}else{
+		retval = remote_printf(io, fmt, list_ptr); 
+	}
 
 	return(retval);
 }
