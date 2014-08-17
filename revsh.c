@@ -3,7 +3,6 @@
 	XXX
 
 	Fixes:
-		* clean up .h files. Lots of overlap. Make a common.h.
 		* redo comments. Everything there is from the previous incarnation.
 
 	Features:
