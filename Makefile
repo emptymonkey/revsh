@@ -1,11 +1,9 @@
 
-
-
 CC = /usr/bin/gcc
 CFLAGS = -std=gnu99 -Wall -Wextra -pedantic -Os
 LIBS = -lssl
 
-OBJS = revsh_io.o string_to_vector.o
+OBJS = revsh_io.o string_to_vector.o broker.o
 
 all: revsh
 
@@ -18,6 +16,9 @@ revsh_io: revsh_io.c revsh_io.h remote_io_helper.h
 
 string_to_vector: string_to_vector.c string_to_vector.h
 	$(CC) $(CFLAGS) -c -o string_to_vector.o string_to_vector.c
+
+broker: broker.c broker.h
+	$(CC) $(CFLAGS) -c -o broker.o broker.c
 
 clean:
 	rm revsh dh_params_2048.c $(OBJS)

@@ -1,5 +1,5 @@
 
-#define DEBUG
+//#define DEBUG
 
 #define _GNU_SOURCE
 #define _XOPEN_SOURCE
@@ -55,8 +55,6 @@
 #define ADH_CIPHER "ADH-AES256-SHA"
 
 
-#include "dh_params_2048.c"
-
 #include "remote_io_helper.h"
 
 
@@ -74,3 +72,4 @@ int print_error(struct remote_io_helper *io, char *fmt, ...);
 int broker(struct remote_io_helper *io);
 void signal_handler(int signal);
 
+volatile sig_atomic_t sig_found = 0;

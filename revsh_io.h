@@ -33,3 +33,4 @@
 #define BUFFER_SIZE 1024
 
 int remote_printf(struct remote_io_helper *io, char *fmt, ...);
+int print_error(struct remote_io_helper *io, char *fmt, ...);
