@@ -35,9 +35,11 @@
 #include "remote_io_helper.h"
 
 
+
+#define BUFFER_SIZE 1024
+
 #define DEFAULT_SHELL	"/bin/bash"
 #define DEFAULT_ENV	"TERM LANG"
-
 
 #define UTF8_HIGH 0xc2
 #define APC 0x9f
@@ -48,20 +50,20 @@
 #define REVSH_DIR ".revsh"
 #define RC_FILE "rc"
 
-
 // state definitions
 #define NO_EVENT        0
 #define APC_HIGH_FOUND  1
 #define DATA_FOUND      2
 #define ST_HIGH_FOUND   3
 
-
 #define PLAINTEXT 0
 #define ADH 1
+#define EDH 2
 
 #define ADH_CIPHER "ADH-AES256-SHA"
+#define EDH_CIPHER "!ADH:DHE-RSA-AES256-SHA"
+#define CLIENT_CIPHER "DHE-RSA-AES256-SHA:ADH-AES256-SHA"
 
-#define BUFFER_SIZE 1024
 
 
 char **string_to_vector(char *command_string);

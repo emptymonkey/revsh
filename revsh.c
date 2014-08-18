@@ -93,15 +93,25 @@ int main(int argc, char **argv){
 
 	struct passwd *passwd_entry;
 
+	char *cipher_list = NULL;
+	
 
 	io.listener = 0;
 	io.encryption = ADH;
 
-	while((opt = getopt(argc, argv, "pls:e:")) != -1){
+	while((opt = getopt(argc, argv, "paels:")) != -1){
 		switch(opt){
 
 			case 'p':
 				io.encryption = PLAINTEXT;
+				break;
+
+			case 'a':
+				io.encryption = ADH;
+				break;
+
+			case 'e':
+				io.encryption = EDH;
 				break;
 
 			case 'l':
@@ -122,6 +132,24 @@ int main(int argc, char **argv){
 		usage();
 	}
 
+	switch(io.encryption){
+	
+		case ADH:
+			cipher_list = ADH_CIPHER;
+			break;
+
+		case EDH:
+			cipher_list = EDH_CIPHER;
+			break;
+	}
+
+	if(io.encryption){
+		if(io.listener){
+			printf("DEBUG: cipher_list: %s\n", cipher_list);
+		}else{
+			printf("DEBUG: CLIENT_CIPHER: %s\n", CLIENT_CIPHER);
+		}
+	}
 
 	buff_len = getpagesize();
 	if((buff_head = (char *) calloc(buff_len, sizeof(char))) == NULL){
@@ -184,9 +212,9 @@ int main(int argc, char **argv){
 				exit(-1);
 			}
 
-			if(SSL_CTX_set_cipher_list(io.ctx, ADH_CIPHER) != 1){
+			if(SSL_CTX_set_cipher_list(io.ctx, cipher_list) != 1){
 				fprintf(stderr, "%s: %d: SSL_CTX_set_cipher_list(%lx, %s): %s\n", \
-						program_invocation_short_name, io.listener, (unsigned long) io.ctx, ADH_CIPHER, strerror(errno));
+						program_invocation_short_name, io.listener, (unsigned long) io.ctx, cipher_list, strerror(errno));
 				ERR_print_errors_fp(stderr);
 				exit(-1);
 			}
@@ -523,10 +551,10 @@ int main(int argc, char **argv){
 				exit(-1);
 			}
 
-			if(SSL_CTX_set_cipher_list(io.ctx, ADH_CIPHER) != 1){
+			if(SSL_CTX_set_cipher_list(io.ctx, CLIENT_CIPHER) != 1){
 #ifndef DEBUG
 				fprintf(stderr, "%s: %d: SSL_CTX_set_cipher_list(%lx, %s): %s\n", \
-						program_invocation_short_name, io.listener, (unsigned long) io.ctx, ADH_CIPHER, strerror(errno));
+						program_invocation_short_name, io.listener, (unsigned long) io.ctx, CLIENT_CIPHER, strerror(errno));
 				ERR_print_errors_fp(stderr);
 #endif
 				exit(-1);
