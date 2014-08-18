@@ -143,6 +143,7 @@ int main(int argc, char **argv){
 			break;
 	}
 
+/*
 	if(io.encryption){
 		if(io.listener){
 			printf("DEBUG: cipher_list: %s\n", cipher_list);
@@ -150,6 +151,7 @@ int main(int argc, char **argv){
 			printf("DEBUG: CLIENT_CIPHER: %s\n", CLIENT_CIPHER);
 		}
 	}
+*/
 
 	buff_len = getpagesize();
 	if((buff_head = (char *) calloc(buff_len, sizeof(char))) == NULL){
