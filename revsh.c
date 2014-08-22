@@ -61,6 +61,10 @@ void usage(){
 }
 
 int dummy_verify_callback(int preverify_ok, X509_STORE_CTX* ctx) {
+
+	preverify_ok += 0;
+	ctx += 0;
+
 	return(1);
 }
 
@@ -103,27 +107,25 @@ int main(int argc, char **argv){
 	int connector_private_key_len = sizeof(connector_private_key);
 
 #include "keys/connector_cert.c"
-	int connector_public_key_len = sizeof(connector_public_key);
 	int connector_certificate_len = sizeof(connector_certificate);
-
-#include "keys/listener_cert.c"
-	int listener_public_key_len = sizeof(listener_public_key);
-	int listener_certificate_len = sizeof(listener_certificate);
 
 	char *listener_cert_path_head = NULL, *listener_cert_path_tail = NULL;
 	char *listener_key_path_head = NULL, *listener_key_path_tail = NULL;
 
-	X509 *remote_cert;
   const EVP_MD *fingerprint_type = NULL;
+	X509 *remote_cert;
   unsigned int remote_fingerprint_len;
   unsigned char remote_fingerprint[EVP_MAX_MD_SIZE];
+	X509 *allowed_cert;
   unsigned int allowed_fingerprint_len;
   unsigned char allowed_fingerprint[EVP_MAX_MD_SIZE];
 
-#include "keys/connector_fingerprint.c"
 #include "keys/listener_fingerprint.c"
 	char *remote_fingerprint_str;
 
+	FILE *connector_fingerprint_fp;
+	
+	char *allowed_cert_path_head, *allowed_cert_path_tail;
 
 	io.listener = 0;
 	io.encryption = EDH;
@@ -400,43 +402,133 @@ int main(int argc, char **argv){
 				exit(-1);
 			}
 
-			printf("Remote fingerprint expected:\n\t%s\n", connector_fingerprint_str);
-			if((remote_cert = SSL_get_peer_certificate(io.ssl)) == NULL){
-				fprintf(stderr, "%s: %d: SSL_get_peer_certificate(%lx): %s\n", \
-						program_invocation_short_name, io.listener, (unsigned long) io.ssl, strerror(errno));
-				ERR_print_errors_fp(stderr);
-				exit(-1);
-			}
+			if(io.encryption == EDH){
+				if((allowed_cert_path_head = (char *) calloc(PATH_MAX, sizeof(char))) == NULL){
+					fprintf(stderr, "%s: %d: calloc(%d, %d): %s\r\n", \
+							program_invocation_short_name, io.listener, PATH_MAX, (int) sizeof(char), \
+							strerror(errno));
+					exit(-1);
+				}
 
-			if(!X509_digest(remote_cert, fingerprint_type, remote_fingerprint, &remote_fingerprint_len)){
-				fprintf(stderr, "%s: %d: X509_digest(%lx, %lx, %lx, %lx): %s\n", \
-						program_invocation_short_name, io.listener, \
-						(unsigned long) remote_cert, \
-						(unsigned long) fingerprint_type, \
-						(unsigned long) remote_fingerprint, \
-						(unsigned long) &remote_fingerprint_len, \
-						strerror(errno));
-				ERR_print_errors_fp(stderr);
-				exit(-1);
-			}
+				if(!keys_dir){
+					memcpy(allowed_cert_path_head, getenv("HOME"), strnlen(getenv("HOME"), PATH_MAX));
 
-			
-			if((remote_fingerprint_str = (char *) calloc(strlen(connector_fingerprint_str) + 1, sizeof(char))) == NULL){
-				fprintf(stderr, "%s: %d: calloc(%d, %d): %s\r\n", \
-						program_invocation_short_name, io.listener, (int) strlen(connector_fingerprint_str) + 1, (int) sizeof(char), \
-						strerror(errno));
-				exit(-1);
-			}
+					allowed_cert_path_tail = index(allowed_cert_path_head, '\0');
+					*(allowed_cert_path_tail++) = '/';
+					sprintf(allowed_cert_path_tail, REVSH_DIR);
+					allowed_cert_path_tail = index(allowed_cert_path_head, '\0');
+					*(allowed_cert_path_tail++) = '/';
+					sprintf(allowed_cert_path_tail, KEYS_DIR);
+				}else{
+					memcpy(allowed_cert_path_head, keys_dir, strnlen(keys_dir, PATH_MAX));
+				}
+				allowed_cert_path_tail = index(allowed_cert_path_head, '\0');
+				*(allowed_cert_path_tail++) = '/';
+				sprintf(allowed_cert_path_tail, CONNECTOR_CERT_FILE);
 
-			for(i = 0; i < (int) remote_fingerprint_len; i++){
-				sprintf(remote_fingerprint_str + (i * 2), "%02x", remote_fingerprint[i]);
-			}
 
-			printf("Remote fingerprint received:\n\t%s\n", remote_fingerprint_str);
-			if(strncmp(connector_fingerprint_str, remote_fingerprint_str, strlen(connector_fingerprint_str))){
-				fprintf(stderr, "%s: %d: Fingerprint mistmatch. Possible mitm. Aborting!\n", \
-						program_invocation_short_name, io.listener);
-				exit(-1);
+				if((allowed_cert_path_head - allowed_cert_path_tail) > PATH_MAX){
+					fprintf(stderr, "%s: %d: connector fingerprint file: path too long!\n",
+							program_invocation_short_name, io.listener);
+					exit(-1);
+				}
+		
+				if((connector_fingerprint_fp = fopen(allowed_cert_path_head, "r")) == NULL){
+					fprintf(stderr, "%s: %d: fopen(%s, 'r'): %s\n",
+							program_invocation_short_name, io.listener, allowed_cert_path_head, strerror(errno));
+					exit(-1);
+				}
+
+				if((allowed_cert = PEM_read_X509(connector_fingerprint_fp, NULL, NULL, NULL)) == NULL){
+					fprintf(stderr, "%s: %d: PEM_read_X509(%lx, NULL, NULL, NULL): %s\n", \
+							program_invocation_short_name, io.listener, (unsigned long) connector_fingerprint_fp, strerror(errno));
+					ERR_print_errors_fp(stderr);
+					exit(-1);
+				}
+
+				if(fclose(connector_fingerprint_fp)){
+					fprintf(stderr, "%s: %d: fclose(%lx): %s\n",
+							program_invocation_short_name, io.listener, (unsigned long) connector_fingerprint_fp, strerror(errno));
+					exit(-1);
+				}
+
+				if(!X509_digest(allowed_cert, fingerprint_type, allowed_fingerprint, &allowed_fingerprint_len)){
+					fprintf(stderr, "%s: %d: X509_digest(%lx, %lx, %lx, %lx): %s\n", \
+							program_invocation_short_name, io.listener, \
+							(unsigned long) allowed_cert, \
+							(unsigned long) fingerprint_type, \
+							(unsigned long) allowed_fingerprint, \
+							(unsigned long) &allowed_fingerprint_len, \
+							strerror(errno));
+					ERR_print_errors_fp(stderr);
+					exit(-1);
+				}
+
+				//printf("Remote fingerprint expected:\n\t%s\n", connector_fingerprint_str);
+
+				if((remote_cert = SSL_get_peer_certificate(io.ssl)) == NULL){
+					fprintf(stderr, "%s: %d: SSL_get_peer_certificate(%lx): %s\n", \
+							program_invocation_short_name, io.listener, (unsigned long) io.ssl, strerror(errno));
+					ERR_print_errors_fp(stderr);
+					exit(-1);
+				}
+
+				printf("Remote fingerprint expected:\n\t");
+				for(i = 0; i < (int) allowed_fingerprint_len; i++){
+					printf("%02x", allowed_fingerprint[i]);
+				}
+				printf("\n");
+
+				if(!X509_digest(remote_cert, fingerprint_type, remote_fingerprint, &remote_fingerprint_len)){
+					fprintf(stderr, "%s: %d: X509_digest(%lx, %lx, %lx, %lx): %s\n", \
+							program_invocation_short_name, io.listener, \
+							(unsigned long) remote_cert, \
+							(unsigned long) fingerprint_type, \
+							(unsigned long) remote_fingerprint, \
+							(unsigned long) &remote_fingerprint_len, \
+							strerror(errno));
+					ERR_print_errors_fp(stderr);
+					exit(-1);
+				}
+
+				printf("Remote fingerprint recieved:\n\t");
+				for(i = 0; i < (int) remote_fingerprint_len; i++){
+					printf("%02x", remote_fingerprint[i]);
+				}
+				printf("\n");
+
+				if(allowed_fingerprint_len != remote_fingerprint_len){
+					fprintf(stderr, "%s: %d: Fingerprint mistmatch. Possible mitm. Aborting!\n", \
+							program_invocation_short_name, io.listener);
+					exit(-1);
+				}
+
+				for(i = 0; i < (int) allowed_fingerprint_len; i++){
+					if(allowed_fingerprint[i] != remote_fingerprint[i]){
+						fprintf(stderr, "%s: %d: Fingerprint mistmatch. Possible mitm. Aborting!\n", \
+								program_invocation_short_name, io.listener);
+						exit(-1);
+					}
+				}
+				/*
+					 if((remote_fingerprint_str = (char *) calloc(strlen(connector_fingerprint_str) + 1, sizeof(char))) == NULL){
+					 fprintf(stderr, "%s: %d: calloc(%d, %d): %s\r\n", \
+					 program_invocation_short_name, io.listener, (int) strlen(connector_fingerprint_str) + 1, (int) sizeof(char), \
+					 strerror(errno));
+					 exit(-1);
+					 }
+
+					 for(i = 0; i < (int) remote_fingerprint_len; i++){
+					 sprintf(remote_fingerprint_str + (i * 2), "%02x", remote_fingerprint[i]);
+					 }
+
+					 printf("Remote fingerprint received:\n\t%s\n", remote_fingerprint_str);
+					 if(strncmp(connector_fingerprint_str, remote_fingerprint_str, strlen(connector_fingerprint_str))){
+					 fprintf(stderr, "%s: %d: Fingerprint mistmatch. Possible mitm. Aborting!\n", \
+					 program_invocation_short_name, io.listener);
+					 exit(-1);
+					 }
+				 */
 			}
 		}
 
@@ -832,9 +924,9 @@ int main(int argc, char **argv){
 				sprintf(remote_fingerprint_str + (i * 2), "%02x", remote_fingerprint[i]);
 			}
 
-			if(strncmp(listener_fingerprint_str, remote_fingerprint_str, strlen(connector_fingerprint_str))){
+			if(strncmp(listener_fingerprint_str, remote_fingerprint_str, strlen(listener_fingerprint_str))){
 #ifndef DEBUG
-				fprintf(stderr, "Remote fingerprint expected:\n\t%s\n", connector_fingerprint_str);
+				fprintf(stderr, "Remote fingerprint expected:\n\t%s\n", listener_fingerprint_str);
 				fprintf(stderr, "Remote fingerprint received:\n\t%s\n", remote_fingerprint_str);
 				fprintf(stderr, "%s: %d: Fingerprint mistmatch. Possible mitm. Aborting!\n", \
 						program_invocation_short_name, io.listener);

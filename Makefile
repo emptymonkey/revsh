@@ -39,20 +39,24 @@ revsh: revsh.c revsh.h remote_io_helper.h common.h $(OBJS)
 	fi
 	if [ ! -e $(KEYS_DIR)/listener_key.pem ]; then \
 		(openssl req -batch -newkey rsa:$(KEY_BITS) -nodes -x509 -days 2147483647 -keyout $(KEYS_DIR)/listener_key.pem -out $(KEYS_DIR)/listener_cert.pem) && \
-		(openssl x509 -in $(KEYS_DIR)/listener_cert.pem -C -noout | \
-			sed 's/XXX_/listener_/g' >$(KEYS_DIR)/listener_cert.c) && \
 		(echo -n 'char *listener_fingerprint_str = "' >$(KEYS_DIR)/listener_fingerprint.c) && \
 		(openssl x509 -in $(KEYS_DIR)/listener_cert.pem -fingerprint -sha1 -noout | \
 			sed 's/.*=//' | \
 			sed 's/://g' | \
 			tr '[:upper:]' '[:lower:]' | \
+			sed 's/,\s\+/,/g' | \
+			sed 's/{ /{\n/' | \
+			sed 's/}/\n}/' | \
+			sed 's/\(\(0x..,\)\{16\}\)/\1\n/g' | \
 			xargs echo -n >>$(KEYS_DIR)/listener_fingerprint.c) && \
 		(echo '";' >>$(KEYS_DIR)/listener_fingerprint.c) ; \
 	fi
 	if [ ! -e $(KEYS_DIR)/connector_key.pem ]; then \
 		(openssl req -batch -newkey rsa:$(KEY_BITS) -nodes -x509 -days 2147483647 -keyout $(KEYS_DIR)/connector_key.pem -out $(KEYS_DIR)/connector_cert.pem) && \
 		(openssl x509 -in $(KEYS_DIR)/connector_cert.pem -C -noout | \
-			sed 's/XXX_/connector_/g' >$(KEYS_DIR)/connector_cert.c) && \
+			sed 's/XXX_/connector_/g' | \
+			xargs | \
+			sed 's/.*; \(unsigned char connector_certificate\)/\1/'  >$(KEYS_DIR)/connector_cert.c) && \
 		(echo -n 'unsigned char connector_private_key[' >$(KEYS_DIR)/connector_key.c) && \
 		(cat $(KEYS_DIR)/connector_key.pem | \
 			grep -v '^-----BEGIN RSA PRIVATE KEY-----$$' | \
@@ -75,14 +79,7 @@ revsh: revsh.c revsh.h remote_io_helper.h common.h $(OBJS)
 			tr '[:lower:]' '[:upper:]' | \
 			sed 's/\(.\{32\}\)/\1\n/g' | \
 			sed 's/\(..\)/0x\1,/g' >>$(KEYS_DIR)/connector_key.c) && \
-		(echo '\n};' >>$(KEYS_DIR)/connector_key.c) && \
-		(echo -n 'char *connector_fingerprint_str = "' >$(KEYS_DIR)/connector_fingerprint.c) && \
-		(openssl x509 -in $(KEYS_DIR)/connector_cert.pem -fingerprint -sha1 -noout | \
-			sed 's/.*=//' | \
-			sed 's/://g' | \
-			tr '[:upper:]' '[:lower:]' | \
-			xargs echo -n >>$(KEYS_DIR)/connector_fingerprint.c) && \
-		(echo '";' >>$(KEYS_DIR)/connector_fingerprint.c) ; \
+		(echo '\n};' >>$(KEYS_DIR)/connector_key.c) ; \
 	fi
 	$(CC) $(LIBS) $(CFLAGS) $(OBJS) -o revsh revsh.c
 
