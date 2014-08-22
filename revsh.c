@@ -3,14 +3,10 @@
 	XXX
 
 	Fixes:
-		* Move the rc file code out of broker into the main revsh listener area.
-		* Add support for a switch to point to a different rc file.
 		* redo comments. Everything there is from the previous incarnation.
-
 		* Fucking meditate on this shit!
 
 	And don't forget to update toolbin. :D
-
 
 	XXX
 */
@@ -22,7 +18,8 @@
  *
  * emptymonkey's reverse shell tool with terminal support
  *
- * 2013-07-17
+ * 2013-07-17: Original release.
+ * 2014-08-22: Complete overhaul w/SSL support.
  *
  *
  * The revsh tool is intended to be used as both a listener and remote client
@@ -45,20 +42,23 @@
  * Output: None.
  *
  * Purpose: Educate the user as to the error of their ways.
- *
  ******************************************************************************/
 void usage(){
-	fprintf(stderr, "\nusage: %s [-l [-s SHELL]] ADDRESS PORT\n", \
+	fprintf(stderr, "\nusage: %s [-l [-a] [-s SHELL] [-k KEYS_DIR] [-r RC_FILE]] ADDRESS PORT\n", \
 			program_invocation_short_name);
-	fprintf(stderr, "\n\t-l: Setup a listener.\n");
-	fprintf(stderr, "\t-s SHELL: Invoke SHELL as the remote shell. (Default is /bin/bash.)\n");
-	fprintf(stderr, "\n\tNote: The '-s' switch only works with a listener.\n\n");
+	fprintf(stderr, "\n\t-l\t\tSetup a listener.\n");
+	fprintf(stderr, "\t-a\t\tEnable Anonymous Diffie-Hellman mode.\t\t(Default is Ephemeral Diffie-Hellman w/cert pinning.)\n");
+	fprintf(stderr, "\t-s SHELL\tInvoke SHELL as the remote shell.\t\t(Default is \"/bin/bash\".)\n");
+	fprintf(stderr, "\t-k KEYS_DIR\tReference the keys in an alternate directory.\t(Default is \"~/.revsh/keys\".)\n");
+	fprintf(stderr, "\t-r RC_FILE\tReference an alternate rc file.\t\t\t(Default is \"~/.revsh/rc\".)\n");
 
 	exit(-1);
 }
 
 int dummy_verify_callback(int preverify_ok, X509_STORE_CTX* ctx) {
 
+	// The point of a dummy function is that it's components won't be used. 
+	// We will nop reference them however to silence the noise from the compiler.
 	preverify_ok += 0;
 	ctx += 0;
 
@@ -134,19 +134,18 @@ int main(int argc, char **argv){
 	io.listener = 0;
 	io.encryption = EDH;
 
-	while((opt = getopt(argc, argv, "paels:k:r:")) != -1){
+	while((opt = getopt(argc, argv, "pals:k:r:")) != -1){
 		switch(opt){
 
+			// The plaintext case is an undocumented "feature" which should be difficult to use.
+			// You will need to pass the -p switch from both ends in order for it to work.
+			// This is provided for debugging purposes only.
 			case 'p':
 				io.encryption = PLAINTEXT;
 				break;
 
 			case 'a':
 				io.encryption = ADH;
-				break;
-
-			case 'e':
-				io.encryption = EDH;
 				break;
 
 			case 'l':
@@ -330,12 +329,16 @@ int main(int argc, char **argv){
 					exit(-1);
 				}
 
+				free(listener_cert_path_head);
+
 				if((retval = SSL_CTX_use_PrivateKey_file(io.ctx, listener_key_path_head, SSL_FILETYPE_PEM)) != 1){
 					fprintf(stderr, "%s: %d: SSL_CTX_use_PrivateKey_file(%lx, %s, SSL_FILETYPE_PEM): %s\n", \
 							program_invocation_short_name, io.listener, (unsigned long) io.ctx, listener_key_path_head, strerror(errno));
 					ERR_print_errors_fp(stderr);
 					exit(-1);
 				}
+
+				free(listener_key_path_head);
 
 				if((retval = SSL_CTX_check_private_key(io.ctx)) != 1){
 					fprintf(stderr, "%s: %d: SSL_CTX_check_private_key(%lx): %s\n", \
@@ -444,6 +447,8 @@ int main(int argc, char **argv){
 							program_invocation_short_name, io.listener, allowed_cert_path_head, strerror(errno));
 					exit(-1);
 				}
+
+				free(allowed_cert_path_head);
 
 				if((allowed_cert = PEM_read_X509(connector_fingerprint_fp, NULL, NULL, NULL)) == NULL){
 					fprintf(stderr, "%s: %d: PEM_read_X509(%lx, NULL, NULL, NULL): %s\n", \
@@ -574,6 +579,8 @@ int main(int argc, char **argv){
 					env_string, strerror(errno));
 			exit(-1);
 		}
+
+		free(env_string);
 
 		buff_tail = buff_head;
 		*(buff_tail++) = (char) APC;
@@ -752,6 +759,7 @@ int main(int argc, char **argv){
 					}
 				}
 
+				free(rc_path_head);
 				close(rc_fd);
 			}
 		}
@@ -788,7 +796,8 @@ int main(int argc, char **argv){
 		}else{
 			BIO_free(io.connect);
 		}
-
+	
+		free(buff_head);
 		return(0);
 
 	}else{
@@ -989,6 +998,8 @@ int main(int argc, char **argv){
 #endif
 					exit(-1);
 				}
+
+				free(remote_fingerprint_str);
 			}
 		}
 
@@ -1257,6 +1268,7 @@ int main(int argc, char **argv){
 
 		remote_printf(&io, "################################\r\n");
 
+		free(buff_head);
 
 		if((retval = close(STDIN_FILENO)) == -1){
 			print_error(&io, "%s: %d: close(STDIN_FILENO): %s\r\n", \
@@ -1375,6 +1387,8 @@ int main(int argc, char **argv){
 		if((exec_argv = string_to_vector(shell)) == NULL){
 			error(-1, errno, "string_to_vector(%s)", shell);
 		}
+
+		free(shell);
 
 		execve(exec_argv[0], exec_argv, exec_envp);
 		error(-1, errno, "execve(%s, %lx, NULL): shouldn't be here.", \

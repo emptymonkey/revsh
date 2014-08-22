@@ -546,6 +546,7 @@ int broker(struct remote_io_helper *io){
 CLEAN_UP:
 	free(local_buff_head);
 	free(remote_buff_head);
+	free(winsize_buff_head);
 	return(retval);
 }
 
