@@ -51,7 +51,6 @@
 #define RC_FILE "rc"
 #define KEYS_DIR "keys"
 #define CONNECTOR_CERT_FILE "connector_cert.pem"
-//#define CONNECTOR_KEY_FILE "connector_key.pem"
 #define LISTENER_CERT_FILE "listener_cert.pem"
 #define LISTENER_KEY_FILE "listener_key.pem"
 
@@ -66,7 +65,8 @@
 #define EDH 2
 
 #define ADH_CIPHER "ADH-AES256-SHA"
-#define EDH_CIPHER "!ADH:DHE-RSA-AES256-SHA"
+#define EDH_CIPHER "DHE-RSA-AES256-SHA"
+#define SERVER_CIPHER "!ADH:" EDH_CIPHER
 #define CLIENT_CIPHER "DHE-RSA-AES256-SHA:ADH-AES256-SHA"
 
 

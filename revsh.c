@@ -127,6 +127,9 @@ int main(int argc, char **argv){
 	
 	char *allowed_cert_path_head, *allowed_cert_path_tail;
 
+	SSL_CIPHER *current_cipher;
+
+
 	io.listener = 0;
 	io.encryption = EDH;
 
@@ -162,7 +165,6 @@ int main(int argc, char **argv){
 		}
 	}
 
-
 	if((argc - optind) != 2){
 		usage();
 	}
@@ -174,7 +176,7 @@ int main(int argc, char **argv){
 			break;
 
 		case EDH:
-			cipher_list = EDH_CIPHER;
+			cipher_list = SERVER_CIPHER;
 			break;
 	}
 
@@ -890,48 +892,60 @@ int main(int argc, char **argv){
 				exit(-1);
 			}
 
-			if((remote_cert = SSL_get_peer_certificate(io.ssl)) == NULL){
+			if((current_cipher = SSL_get_current_cipher(io.ssl)) == NULL){
 #ifndef DEBUG
-				fprintf(stderr, "%s: %d: SSL_get_peer_certificate(%lx): %s\n", \
-						program_invocation_short_name, io.listener, (unsigned long) io.ssl, strerror(errno));
+				fprintf(stderr, "%s: %d: SSL_get_current_cipher(%lx): No cipher set!\n", \
+						program_invocation_short_name, io.listener, (unsigned long) io.ssl);
 				ERR_print_errors_fp(stderr);
 #endif
 				exit(-1);
 			}
 
-			if(!X509_digest(remote_cert, fingerprint_type, remote_fingerprint, &remote_fingerprint_len)){
+			if(!strcmp(current_cipher->name, EDH_CIPHER)){
+
+				if((remote_cert = SSL_get_peer_certificate(io.ssl)) == NULL){
 #ifndef DEBUG
-				fprintf(stderr, "%s: %d: X509_digest(%lx, %lx, %lx, %lx): %s\n", \
-						program_invocation_short_name, io.listener, \
-						(unsigned long) remote_cert, \
-						(unsigned long) fingerprint_type, \
-						(unsigned long) remote_fingerprint, \
-						(unsigned long) &remote_fingerprint_len, \
-						strerror(errno));
-				ERR_print_errors_fp(stderr);
+					fprintf(stderr, "%s: %d: SSL_get_peer_certificate(%lx): %s\n", \
+							program_invocation_short_name, io.listener, (unsigned long) io.ssl, strerror(errno));
+					ERR_print_errors_fp(stderr);
 #endif
-				exit(-1);
-			}
+					exit(-1);
+				}
 
-			if((remote_fingerprint_str = (char *) calloc(strlen(listener_fingerprint_str) + 1, sizeof(char))) == NULL){
-				fprintf(stderr, "%s: %d: calloc(%d, %d): %s\r\n", \
-						program_invocation_short_name, io.listener, (int) strlen(listener_fingerprint_str) + 1, (int) sizeof(char), \
-						strerror(errno));
-				exit(-1);
-			}
-
-			for(i = 0; i < (int) remote_fingerprint_len; i++){
-				sprintf(remote_fingerprint_str + (i * 2), "%02x", remote_fingerprint[i]);
-			}
-
-			if(strncmp(listener_fingerprint_str, remote_fingerprint_str, strlen(listener_fingerprint_str))){
+				if(!X509_digest(remote_cert, fingerprint_type, remote_fingerprint, &remote_fingerprint_len)){
 #ifndef DEBUG
-				fprintf(stderr, "Remote fingerprint expected:\n\t%s\n", listener_fingerprint_str);
-				fprintf(stderr, "Remote fingerprint received:\n\t%s\n", remote_fingerprint_str);
-				fprintf(stderr, "%s: %d: Fingerprint mistmatch. Possible mitm. Aborting!\n", \
-						program_invocation_short_name, io.listener);
+					fprintf(stderr, "%s: %d: X509_digest(%lx, %lx, %lx, %lx): %s\n", \
+							program_invocation_short_name, io.listener, \
+							(unsigned long) remote_cert, \
+							(unsigned long) fingerprint_type, \
+							(unsigned long) remote_fingerprint, \
+							(unsigned long) &remote_fingerprint_len, \
+							strerror(errno));
+					ERR_print_errors_fp(stderr);
 #endif
-				exit(-1);
+					exit(-1);
+				}
+
+				if((remote_fingerprint_str = (char *) calloc(strlen(listener_fingerprint_str) + 1, sizeof(char))) == NULL){
+					fprintf(stderr, "%s: %d: calloc(%d, %d): %s\r\n", \
+							program_invocation_short_name, io.listener, (int) strlen(listener_fingerprint_str) + 1, (int) sizeof(char), \
+							strerror(errno));
+					exit(-1);
+				}
+
+				for(i = 0; i < (int) remote_fingerprint_len; i++){
+					sprintf(remote_fingerprint_str + (i * 2), "%02x", remote_fingerprint[i]);
+				}
+
+				if(strncmp(listener_fingerprint_str, remote_fingerprint_str, strlen(listener_fingerprint_str))){
+#ifndef DEBUG
+					fprintf(stderr, "Remote fingerprint expected:\n\t%s\n", listener_fingerprint_str);
+					fprintf(stderr, "Remote fingerprint received:\n\t%s\n", remote_fingerprint_str);
+					fprintf(stderr, "%s: %d: Fingerprint mistmatch. Possible mitm. Aborting!\n", \
+							program_invocation_short_name, io.listener);
+#endif
+					exit(-1);
+				}
 			}
 		}
 

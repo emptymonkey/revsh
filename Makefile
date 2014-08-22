@@ -1,10 +1,8 @@
 # This Makefile assumes the following command line utilities are in its PATH:
-#		grep
 #		openssl
+#		grep
 #		sed
 #		xargs
-#
-# These utilities are also needed, but are all members of coreutils:
 #		base64
 #		echo
 #		tr
@@ -27,9 +25,9 @@ OBJS = revsh_io.o string_to_vector.o broker.o
 
 KEYS_DIR = ./keys
 
+
 all: revsh
 
-# XXX Fix this so that the x509 -C output only contains the data we will use!
 revsh: revsh.c revsh.h remote_io_helper.h common.h $(OBJS)
 	if [ ! -e $(KEYS_DIR) ]; then \
 		mkdir $(KEYS_DIR) ; \
