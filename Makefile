@@ -28,7 +28,7 @@ KEYS_DIR = ./keys
 
 all: revsh
 
-revsh: revsh.c revsh.h remote_io_helper.h common.h $(OBJS)
+revsh: revsh.c remote_io_helper.h common.h $(OBJS)
 	if [ ! -e $(KEYS_DIR) ]; then \
 		mkdir $(KEYS_DIR) ; \
 	fi
@@ -87,7 +87,7 @@ revsh_io: revsh_io.c revsh_io.h remote_io_helper.h common.h
 string_to_vector: string_to_vector.c string_to_vector.h common.h
 	$(CC) $(CFLAGS) -c -o string_to_vector.o string_to_vector.c
 
-broker: broker.c broker.h common.h
+broker: broker.c common.h
 	$(CC) $(CFLAGS) -c -o broker.o broker.c
 
 install:

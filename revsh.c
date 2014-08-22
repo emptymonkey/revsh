@@ -3,14 +3,11 @@
 	XXX
 
 	Fixes:
+		* Move the rc file code out of broker into the main revsh listener area.
+		* Add support for a switch to point to a different rc file.
 		* redo comments. Everything there is from the previous incarnation.
 
-	Features:
-		* Add support for cert checking.
-		* Add support for a switch to point to a different rc file.
-		* Add known good / tested architectures to the README.
-
-	* Go through with a fine fucking tooth comb. Fucking meditate on this shit!
+		* Fucking meditate on this shit!
 
 	And don't forget to update toolbin. :D
 
@@ -36,8 +33,8 @@
  *******************************************************************************/
 
 
-#include "revsh.h"
-
+#include "common.h"
+#include "keys/dh_params_2048.c"
 
 
 /*******************************************************************************
@@ -133,7 +130,7 @@ int main(int argc, char **argv){
 	io.listener = 0;
 	io.encryption = EDH;
 
-	while((opt = getopt(argc, argv, "paels:k:")) != -1){
+	while((opt = getopt(argc, argv, "paels:k:r:")) != -1){
 		switch(opt){
 
 			case 'p':
@@ -159,6 +156,11 @@ int main(int argc, char **argv){
 			case 'k':
 				keys_dir = optarg;
 				break;
+/*		
+			case 'r':
+				rc_file = optarg;
+				break;
+*/
 
 			default:
 				usage();
