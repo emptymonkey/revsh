@@ -56,9 +56,6 @@ int broker(struct remote_io_helper *io){
 
 	int state_counter;
 
-	char *rc_file_head, *rc_file_tail;
-	int rc_file_fd;
-
 	int fcntl_flags;
 
 	int ssl_bytes_pending = 0;
@@ -109,63 +106,6 @@ int broker(struct remote_io_helper *io){
 				winsize_buff_len, (int) sizeof(char));
 		retval = -1;
 		goto CLEAN_UP;
-	}
-
-
-	// Let's add support for .revsh/rc files here! :D
-	if(io->listener){
-
-		if((rc_file_head = (char *) calloc(PATH_MAX, sizeof(char))) == NULL){
-			print_error(io, "%s: %d: calloc(%d, %d): %s\r\n", \
-					program_invocation_short_name, io->listener, PATH_MAX, (int) sizeof(char), \
-					strerror(errno));
-			retval = -1;
-			goto CLEAN_UP;
-		}
-    memcpy(rc_file_head, getenv("HOME"), strnlen(getenv("HOME"), PATH_MAX));
-
-		rc_file_tail = index(rc_file_head, '\0');
-		*(rc_file_tail++) = '/';	
-		sprintf(rc_file_tail, REVSH_DIR);
-		rc_file_tail = index(rc_file_head, '\0');
-		*(rc_file_tail++) = '/';	
-		sprintf(rc_file_tail, RC_FILE);
-	
-		if((rc_file_head - rc_file_tail) > PATH_MAX){
-			print_error(io, "%s: %d: broker(): rc file: path too long!\n",
-					program_invocation_short_name, io->listener);
-			retval = -1;
-			goto CLEAN_UP;
-		}
-
-		if((rc_file_fd = open(rc_file_head, O_RDONLY)) != -1){
-
-			local_buff_tail = local_buff_head;
-			local_buff_ptr = local_buff_head;
-
-			while((io_bytes = read(rc_file_fd, local_buff_head, buff_len))){
-				if(io_bytes == -1){
-					print_error(io, "%s: %d: broker(): read(%d, %lx, %d): %s\r\n", \
-							program_invocation_short_name, io->listener, \
-							rc_file_fd, (unsigned long) local_buff_head, buff_len, strerror(errno));
-					retval = -1;
-					goto CLEAN_UP;
-				}
-				local_buff_tail = local_buff_head + io_bytes;
-
-				while(local_buff_ptr != local_buff_tail){
-					if((retval = io->remote_write(io, local_buff_ptr, (local_buff_tail - local_buff_ptr))) == -1){
-						print_error(io, "%s: %d: broker(): io->remote_write(%lx, %lx, %d): %s\r\n", \
-								program_invocation_short_name, io->listener, \
-								(unsigned long) io, (unsigned long) local_buff_ptr, (local_buff_tail - local_buff_ptr), strerror(errno));
-						goto CLEAN_UP;
-					}
-					local_buff_ptr += retval;
-				}
-			}
-
-			close(rc_file_fd);
-		}
 	}
 
 

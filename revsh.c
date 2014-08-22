@@ -84,7 +84,7 @@ int main(int argc, char **argv){
 
 	int buff_len, tmp_len;
 	char *buff_head, *buff_tail;
-	char *tmp_ptr;
+	char *buff_ptr;
 
 	int io_bytes;
 
@@ -126,6 +126,10 @@ int main(int argc, char **argv){
 
 	SSL_CIPHER *current_cipher;
 
+	char *rc_path_head, *rc_path_tail;
+	int rc_fd;
+	char *rc_file = NULL;
+
 
 	io.listener = 0;
 	io.encryption = EDH;
@@ -156,11 +160,9 @@ int main(int argc, char **argv){
 			case 'k':
 				keys_dir = optarg;
 				break;
-/*		
 			case 'r':
 				rc_file = optarg;
 				break;
-*/
 
 			default:
 				usage();
@@ -514,25 +516,6 @@ int main(int argc, char **argv){
 						exit(-1);
 					}
 				}
-				/*
-					 if((remote_fingerprint_str = (char *) calloc(strlen(connector_fingerprint_str) + 1, sizeof(char))) == NULL){
-					 fprintf(stderr, "%s: %d: calloc(%d, %d): %s\r\n", \
-					 program_invocation_short_name, io.listener, (int) strlen(connector_fingerprint_str) + 1, (int) sizeof(char), \
-					 strerror(errno));
-					 exit(-1);
-					 }
-
-					 for(i = 0; i < (int) remote_fingerprint_len; i++){
-					 sprintf(remote_fingerprint_str + (i * 2), "%02x", remote_fingerprint[i]);
-					 }
-
-					 printf("Remote fingerprint received:\n\t%s\n", remote_fingerprint_str);
-					 if(strncmp(connector_fingerprint_str, remote_fingerprint_str, strlen(connector_fingerprint_str))){
-					 fprintf(stderr, "%s: %d: Fingerprint mistmatch. Possible mitm. Aborting!\n", \
-					 program_invocation_short_name, io.listener);
-					 exit(-1);
-					 }
-				 */
 			}
 		}
 
@@ -612,12 +595,12 @@ int main(int argc, char **argv){
 
 			*(buff_tail++) = '=';
 
-			if((tmp_ptr = getenv(exec_envp[i])) == NULL){
+			if((buff_ptr = getenv(exec_envp[i])) == NULL){
 				fprintf(stderr, "%s: No such environment variable \"%s\". Ignoring.\n", \
 						program_invocation_short_name, exec_envp[i]);
 			}else{
-				tmp_len = strlen(tmp_ptr);
-				memcpy(buff_tail, tmp_ptr, tmp_len);
+				tmp_len = strlen(buff_ptr);
+				memcpy(buff_tail, buff_ptr, tmp_len);
 				buff_tail += tmp_len;
 			}
 		}
@@ -714,6 +697,64 @@ int main(int argc, char **argv){
 		fflush(stdout);
 
 		io.local_fd = STDIN_FILENO;
+
+		// Let's add support for .revsh/rc files here! :D
+		if(io.listener){
+
+			if((rc_path_head = (char *) calloc(PATH_MAX, sizeof(char))) == NULL){
+				print_error(&io, "%s: %d: calloc(%d, %d): %s\r\n", \
+						program_invocation_short_name, io.listener, PATH_MAX, (int) sizeof(char), \
+						strerror(errno));
+				exit(-1);
+			}
+
+			if(rc_file){
+				memcpy(rc_path_head, rc_file, strlen(rc_file));
+			}else{
+				memcpy(rc_path_head, getenv("HOME"), strnlen(getenv("HOME"), PATH_MAX));
+
+				rc_path_tail = index(rc_path_head, '\0');
+				*(rc_path_tail++) = '/';
+				sprintf(rc_path_tail, REVSH_DIR);
+				rc_path_tail = index(rc_path_head, '\0');
+				*(rc_path_tail++) = '/';
+				sprintf(rc_path_tail, RC_FILE);
+
+				if((rc_path_head - rc_path_tail) > PATH_MAX){
+					print_error(&io, "%s: %d: rc file: path too long!\n",
+							program_invocation_short_name, io.listener);
+					exit(-1);
+				}
+			}
+
+			if((rc_fd = open(rc_path_head, O_RDONLY)) != -1){
+
+				buff_tail = buff_head;
+				buff_ptr = buff_head;
+
+				while((io_bytes = read(rc_fd, buff_head, buff_len))){
+					if(io_bytes == -1){
+						print_error(&io, "%s: %d: broker(): read(%d, %lx, %d): %s\r\n", \
+								program_invocation_short_name, io.listener, \
+								rc_fd, (unsigned long) buff_head, buff_len, strerror(errno));
+						exit(-1);
+					}
+					buff_tail = buff_head + io_bytes;
+
+					while(buff_ptr != buff_tail){
+						if((retval = io.remote_write(&io, buff_ptr, (buff_tail - buff_ptr))) == -1){
+							print_error(&io, "%s: %d: broker(): io.remote_write(%lx, %lx, %d): %s\r\n", \
+									program_invocation_short_name, io.listener, \
+									(unsigned long) &io, (unsigned long) buff_ptr, (buff_tail - buff_ptr), strerror(errno));
+							exit(-1);
+						}
+						buff_ptr += retval;
+					}
+				}
+
+				close(rc_fd);
+			}
+		}
 
 		errno = 0;
 		// - Enter broker() for data brokering.
