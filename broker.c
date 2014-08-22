@@ -120,8 +120,7 @@ int broker(struct remote_io_helper *io){
 			retval = -1;
 			goto CLEAN_UP;
 		}
-
-		rc_file_head = getenv("HOME");
+    memcpy(rc_file_head, getenv("HOME"), strnlen(getenv("HOME"), PATH_MAX));
 
 		rc_file_tail = index(rc_file_head, '\0');
 		*(rc_file_tail++) = '/';	
@@ -129,7 +128,13 @@ int broker(struct remote_io_helper *io){
 		rc_file_tail = index(rc_file_head, '\0');
 		*(rc_file_tail++) = '/';	
 		sprintf(rc_file_tail, RC_FILE);
-
+	
+		if((rc_file_head - rc_file_tail) > PATH_MAX){
+			print_error(io, "%s: %d: broker(): rc file: path too long!\n",
+					program_invocation_short_name, io->listener);
+			retval = -1;
+			goto CLEAN_UP;
+		}
 
 		if((rc_file_fd = open(rc_file_head, O_RDONLY)) != -1){
 

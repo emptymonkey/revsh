@@ -6,7 +6,7 @@
 		* redo comments. Everything there is from the previous incarnation.
 
 	Features:
-		* Add support for DHE w/RSA certs
+		* Add support for cert checking.
 		* Add support for a switch to point to a different rc file.
 		* Add known good / tested architectures to the README.
 
@@ -39,6 +39,7 @@
 #include "revsh.h"
 
 
+
 /*******************************************************************************
  *
  * usage()
@@ -59,7 +60,9 @@ void usage(){
 	exit(-1);
 }
 
-
+int dummy_verify_callback(int preverify_ok, X509_STORE_CTX* ctx) {
+	return(1);
+}
 
 int main(int argc, char **argv){
 
@@ -67,6 +70,7 @@ int main(int argc, char **argv){
 
 	int opt;
 	char *shell = NULL;
+	char *keys_dir = NULL;
 	char *env_string = NULL;
 
 	char *pty_name;
@@ -89,17 +93,42 @@ int main(int argc, char **argv){
 
 	struct remote_io_helper io;
 
-  BIO *accept;
+	BIO *accept;
 
 	struct passwd *passwd_entry;
 
 	char *cipher_list = NULL;
-	
+
+#include "keys/connector_key.c"
+	int connector_private_key_len = sizeof(connector_private_key);
+
+#include "keys/connector_cert.c"
+	int connector_public_key_len = sizeof(connector_public_key);
+	int connector_certificate_len = sizeof(connector_certificate);
+
+#include "keys/listener_cert.c"
+	int listener_public_key_len = sizeof(listener_public_key);
+	int listener_certificate_len = sizeof(listener_certificate);
+
+	char *listener_cert_path_head = NULL, *listener_cert_path_tail = NULL;
+	char *listener_key_path_head = NULL, *listener_key_path_tail = NULL;
+
+	X509 *remote_cert;
+  const EVP_MD *fingerprint_type = NULL;
+  unsigned int remote_fingerprint_len;
+  unsigned char remote_fingerprint[EVP_MAX_MD_SIZE];
+  unsigned int allowed_fingerprint_len;
+  unsigned char allowed_fingerprint[EVP_MAX_MD_SIZE];
+
+#include "keys/connector_fingerprint.c"
+#include "keys/listener_fingerprint.c"
+	char *remote_fingerprint_str;
+
 
 	io.listener = 0;
-	io.encryption = ADH;
+	io.encryption = EDH;
 
-	while((opt = getopt(argc, argv, "paels:")) != -1){
+	while((opt = getopt(argc, argv, "paels:k:")) != -1){
 		switch(opt){
 
 			case 'p':
@@ -122,6 +151,10 @@ int main(int argc, char **argv){
 				shell = optarg;
 				break;
 
+			case 'k':
+				keys_dir = optarg;
+				break;
+
 			default:
 				usage();
 		}
@@ -133,7 +166,7 @@ int main(int argc, char **argv){
 	}
 
 	switch(io.encryption){
-	
+
 		case ADH:
 			cipher_list = ADH_CIPHER;
 			break;
@@ -143,15 +176,6 @@ int main(int argc, char **argv){
 			break;
 	}
 
-/*
-	if(io.encryption){
-		if(io.listener){
-			printf("DEBUG: cipher_list: %s\n", cipher_list);
-		}else{
-			printf("DEBUG: CLIENT_CIPHER: %s\n", CLIENT_CIPHER);
-		}
-	}
-*/
 
 	buff_len = getpagesize();
 	if((buff_head = (char *) calloc(buff_len, sizeof(char))) == NULL){
@@ -164,7 +188,7 @@ int main(int argc, char **argv){
 	strcat(buff_head, argv[optind + 1]);
 
 	SSL_library_init();
-  SSL_load_error_strings();
+	SSL_load_error_strings();
 
 	if(io.encryption){
 		io.remote_read = &remote_read_encrypted;
@@ -172,6 +196,10 @@ int main(int argc, char **argv){
 	}else{
 		io.remote_read = &remote_read_plaintext;
 		io.remote_write = &remote_write_plaintext;
+	}
+
+	if(io.encryption){
+		fingerprint_type = EVP_sha1();
 	}
 
 	/*
@@ -188,7 +216,70 @@ int main(int argc, char **argv){
 	 */
 	if(io.listener){
 
-		printf("Listening...");
+		if(io.encryption == EDH){
+			if((listener_cert_path_head = (char *) calloc(PATH_MAX, sizeof(char))) == NULL){
+				fprintf(stderr, "%s: %d: calloc(%d, %d): %s\r\n", \
+						program_invocation_short_name, io.listener, PATH_MAX, (int) sizeof(char), \
+						strerror(errno));
+				exit(-1);
+			}
+
+			if(!keys_dir){
+				memcpy(listener_cert_path_head, getenv("HOME"), strnlen(getenv("HOME"), PATH_MAX));
+
+				listener_cert_path_tail = index(listener_cert_path_head, '\0');
+				*(listener_cert_path_tail++) = '/';
+				sprintf(listener_cert_path_tail, REVSH_DIR);
+				listener_cert_path_tail = index(listener_cert_path_head, '\0');
+				*(listener_cert_path_tail++) = '/';
+				sprintf(listener_cert_path_tail, KEYS_DIR);
+			}else{
+				memcpy(listener_cert_path_head, keys_dir, strnlen(keys_dir, PATH_MAX));
+			}
+			listener_cert_path_tail = index(listener_cert_path_head, '\0');
+			*(listener_cert_path_tail++) = '/';
+			sprintf(listener_cert_path_tail, LISTENER_CERT_FILE);
+
+
+			if((listener_cert_path_head - listener_cert_path_tail) > PATH_MAX){
+				fprintf(stderr, "%s: %d: listener cert file: path too long!\n",
+						program_invocation_short_name, io.listener);
+				exit(-1);
+			}
+
+			if((listener_key_path_head = (char *) calloc(PATH_MAX, sizeof(char))) == NULL){
+				fprintf(stderr, "%s: %d: calloc(%d, %d): %s\r\n", \
+						program_invocation_short_name, io.listener, PATH_MAX, (int) sizeof(char), \
+						strerror(errno));
+				exit(-1);
+			}
+
+			if(!keys_dir){
+				memcpy(listener_key_path_head, getenv("HOME"), strnlen(getenv("HOME"), PATH_MAX));
+
+				listener_key_path_tail = index(listener_key_path_head, '\0');
+				*(listener_key_path_tail++) = '/';
+				sprintf(listener_key_path_tail, REVSH_DIR);
+				listener_key_path_tail = index(listener_key_path_head, '\0');
+				*(listener_key_path_tail++) = '/';
+				sprintf(listener_key_path_tail, KEYS_DIR);
+			}else{
+				memcpy(listener_key_path_head, keys_dir, strnlen(keys_dir, PATH_MAX));
+			}
+			listener_key_path_tail = index(listener_key_path_head, '\0');
+			*(listener_key_path_tail++) = '/';
+			sprintf(listener_key_path_tail, LISTENER_KEY_FILE);
+
+
+			if((listener_key_path_head - listener_key_path_tail) > PATH_MAX){
+				fprintf(stderr, "%s: %d: listener key file: path too long!\n",
+						program_invocation_short_name, io.listener);
+				exit(-1);
+			}
+		}
+
+
+		printf("Listening...\n");
 		fflush(stdout);
 
 		if(io.encryption){
@@ -220,39 +311,65 @@ int main(int argc, char **argv){
 				ERR_print_errors_fp(stderr);
 				exit(-1);
 			}
+
+			if(io.encryption == EDH){
+				SSL_CTX_set_verify(io.ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, dummy_verify_callback);
+
+				if((retval = SSL_CTX_use_certificate_file(io.ctx, listener_cert_path_head, SSL_FILETYPE_PEM)) != 1){
+					fprintf(stderr, "%s: %d: SSL_CTX_use_certificate_file(%lx, %s, SSL_FILETYPE_PEM): %s\n", \
+							program_invocation_short_name, io.listener, (unsigned long) io.ctx, listener_cert_path_head, strerror(errno));
+					ERR_print_errors_fp(stderr);
+					exit(-1);
+				}
+
+				if((retval = SSL_CTX_use_PrivateKey_file(io.ctx, listener_key_path_head, SSL_FILETYPE_PEM)) != 1){
+					fprintf(stderr, "%s: %d: SSL_CTX_use_PrivateKey_file(%lx, %s, SSL_FILETYPE_PEM): %s\n", \
+							program_invocation_short_name, io.listener, (unsigned long) io.ctx, listener_key_path_head, strerror(errno));
+					ERR_print_errors_fp(stderr);
+					exit(-1);
+				}
+
+				if((retval = SSL_CTX_check_private_key(io.ctx)) != 1){
+					fprintf(stderr, "%s: %d: SSL_CTX_check_private_key(%lx): %s\n", \
+							program_invocation_short_name, io.listener, (unsigned long) io.ctx, strerror(errno));
+					ERR_print_errors_fp(stderr);
+					exit(-1);
+				}
+			}
+
 		}
 
 		if((accept = BIO_new_accept(buff_head)) == NULL){
 			fprintf(stderr, "%s: %d: BIO_new_accept(%s): %s\n", \
-						program_invocation_short_name, io.listener, buff_head, strerror(errno));
+					program_invocation_short_name, io.listener, buff_head, strerror(errno));
 			ERR_print_errors_fp(stderr);
 			exit(-1);
 		}
 
 		if(BIO_set_bind_mode(accept, BIO_BIND_REUSEADDR) <= 0){
 			fprintf(stderr, "%s: %d: BIO_set_bind_mode(%lx, BIO_BIND_REUSEADDR): %s\n", \
-						program_invocation_short_name, io.listener, (unsigned long) accept, strerror(errno));
+					program_invocation_short_name, io.listener, (unsigned long) accept, strerror(errno));
 			ERR_print_errors_fp(stderr);
 			exit(-1);
 		}
 
 		if(BIO_do_accept(accept) <= 0){
 			fprintf(stderr, "%s: %d: BIO_do_accept(%lx): %s\n", \
-						program_invocation_short_name, io.listener, (unsigned long) accept, strerror(errno));
+					program_invocation_short_name, io.listener, (unsigned long) accept, strerror(errno));
 			ERR_print_errors_fp(stderr);
 			exit(-1);
 		}
 
 		if(BIO_do_accept(accept) <= 0){
 			fprintf(stderr, "%s: %d: BIO_do_accept(%lx): %s\n", \
-						program_invocation_short_name, io.listener, (unsigned long) accept, strerror(errno));
+					program_invocation_short_name, io.listener, (unsigned long) accept, strerror(errno));
 			ERR_print_errors_fp(stderr);
 			exit(-1);
 		}
 
 		if((io.connect = BIO_pop(accept)) == NULL){
 			fprintf(stderr, "%s: %d: BIO_pop(%lx): %s\n", \
-						program_invocation_short_name, io.listener, (unsigned long) accept, strerror(errno));
+					program_invocation_short_name, io.listener, (unsigned long) accept, strerror(errno));
 			ERR_print_errors_fp(stderr);
 			exit(-1);
 		}
@@ -261,7 +378,7 @@ int main(int argc, char **argv){
 
 		if(BIO_get_fd(io.connect, &(io.remote_fd)) < 0){
 			fprintf(stderr, "%s: %d: BIO_get_fd(%lx, %lx): %s\n", \
-						program_invocation_short_name, io.listener, (unsigned long) io.connect, (unsigned long) &(io.remote_fd), strerror(errno));
+					program_invocation_short_name, io.listener, (unsigned long) io.connect, (unsigned long) &(io.remote_fd), strerror(errno));
 			ERR_print_errors_fp(stderr);
 			exit(-1);
 		}
@@ -280,6 +397,45 @@ int main(int argc, char **argv){
 				fprintf(stderr, "%s: %d: SSL_accept(%lx): %s\n", \
 						program_invocation_short_name, io.listener, (unsigned long) io.ssl, strerror(errno));
 				ERR_print_errors_fp(stderr);
+				exit(-1);
+			}
+
+			printf("Remote fingerprint expected:\n\t%s\n", connector_fingerprint_str);
+			if((remote_cert = SSL_get_peer_certificate(io.ssl)) == NULL){
+				fprintf(stderr, "%s: %d: SSL_get_peer_certificate(%lx): %s\n", \
+						program_invocation_short_name, io.listener, (unsigned long) io.ssl, strerror(errno));
+				ERR_print_errors_fp(stderr);
+				exit(-1);
+			}
+
+			if(!X509_digest(remote_cert, fingerprint_type, remote_fingerprint, &remote_fingerprint_len)){
+				fprintf(stderr, "%s: %d: X509_digest(%lx, %lx, %lx, %lx): %s\n", \
+						program_invocation_short_name, io.listener, \
+						(unsigned long) remote_cert, \
+						(unsigned long) fingerprint_type, \
+						(unsigned long) remote_fingerprint, \
+						(unsigned long) &remote_fingerprint_len, \
+						strerror(errno));
+				ERR_print_errors_fp(stderr);
+				exit(-1);
+			}
+
+			
+			if((remote_fingerprint_str = (char *) calloc(strlen(connector_fingerprint_str) + 1, sizeof(char))) == NULL){
+				fprintf(stderr, "%s: %d: calloc(%d, %d): %s\r\n", \
+						program_invocation_short_name, io.listener, (int) strlen(connector_fingerprint_str) + 1, (int) sizeof(char), \
+						strerror(errno));
+				exit(-1);
+			}
+
+			for(i = 0; i < (int) remote_fingerprint_len; i++){
+				sprintf(remote_fingerprint_str + (i * 2), "%02x", remote_fingerprint[i]);
+			}
+
+			printf("Remote fingerprint received:\n\t%s\n", remote_fingerprint_str);
+			if(strncmp(connector_fingerprint_str, remote_fingerprint_str, strlen(connector_fingerprint_str))){
+				fprintf(stderr, "%s: %d: Fingerprint mistmatch. Possible mitm. Aborting!\n", \
+						program_invocation_short_name, io.listener);
 				exit(-1);
 			}
 		}
@@ -561,6 +717,35 @@ int main(int argc, char **argv){
 #endif
 				exit(-1);
 			}
+
+			SSL_CTX_set_verify(io.ctx, SSL_VERIFY_PEER, dummy_verify_callback);
+
+			if((retval = SSL_CTX_use_certificate_ASN1(io.ctx, connector_certificate_len, connector_certificate)) != 1){
+#ifndef DEBUG
+				fprintf(stderr, "%s: %d: SSL_CTX_use_certificate_ASN1(%lx, %d, %lx): %s\n", \
+						program_invocation_short_name, io.listener, (unsigned long) io.ctx, connector_certificate_len, (unsigned long) connector_certificate, strerror(errno));
+				ERR_print_errors_fp(stderr);
+#endif
+				exit(-1);
+			}
+
+			if((retval = SSL_CTX_use_RSAPrivateKey_ASN1(io.ctx, connector_private_key, connector_private_key_len)) != 1){
+#ifndef DEBUG
+				fprintf(stderr, "%s: %d: SSL_CTX_use_RSAPrivateKey_ASN1(%lx, %lx, %d): %s\n", \
+						program_invocation_short_name, io.listener, (unsigned long) io.ctx, (unsigned long) connector_private_key, connector_private_key_len, strerror(errno));
+				ERR_print_errors_fp(stderr);
+#endif
+				exit(-1);
+			}
+
+			if((retval = SSL_CTX_check_private_key(io.ctx)) != 1){
+#ifndef DEBUG
+				fprintf(stderr, "%s: %d: SSL_CTX_check_private_key(%lx): %s\n", \
+						program_invocation_short_name, io.listener, (unsigned long) io.ctx, strerror(errno));
+				ERR_print_errors_fp(stderr);
+#endif
+				exit(-1);
+			}
 		}
 
 		if((io.connect = BIO_new_connect(buff_head)) == NULL){
@@ -609,6 +794,50 @@ int main(int argc, char **argv){
 				fprintf(stderr, "%s: %d: SSL_connect(%lx): %s\n", \
 						program_invocation_short_name, io.listener, (unsigned long) io.ssl, strerror(errno));
 				ERR_print_errors_fp(stderr);
+#endif
+				exit(-1);
+			}
+
+			if((remote_cert = SSL_get_peer_certificate(io.ssl)) == NULL){
+#ifndef DEBUG
+				fprintf(stderr, "%s: %d: SSL_get_peer_certificate(%lx): %s\n", \
+						program_invocation_short_name, io.listener, (unsigned long) io.ssl, strerror(errno));
+				ERR_print_errors_fp(stderr);
+#endif
+				exit(-1);
+			}
+
+			if(!X509_digest(remote_cert, fingerprint_type, remote_fingerprint, &remote_fingerprint_len)){
+#ifndef DEBUG
+				fprintf(stderr, "%s: %d: X509_digest(%lx, %lx, %lx, %lx): %s\n", \
+						program_invocation_short_name, io.listener, \
+						(unsigned long) remote_cert, \
+						(unsigned long) fingerprint_type, \
+						(unsigned long) remote_fingerprint, \
+						(unsigned long) &remote_fingerprint_len, \
+						strerror(errno));
+				ERR_print_errors_fp(stderr);
+#endif
+				exit(-1);
+			}
+
+			if((remote_fingerprint_str = (char *) calloc(strlen(listener_fingerprint_str) + 1, sizeof(char))) == NULL){
+				fprintf(stderr, "%s: %d: calloc(%d, %d): %s\r\n", \
+						program_invocation_short_name, io.listener, (int) strlen(listener_fingerprint_str) + 1, (int) sizeof(char), \
+						strerror(errno));
+				exit(-1);
+			}
+
+			for(i = 0; i < (int) remote_fingerprint_len; i++){
+				sprintf(remote_fingerprint_str + (i * 2), "%02x", remote_fingerprint[i]);
+			}
+
+			if(strncmp(listener_fingerprint_str, remote_fingerprint_str, strlen(connector_fingerprint_str))){
+#ifndef DEBUG
+				fprintf(stderr, "Remote fingerprint expected:\n\t%s\n", connector_fingerprint_str);
+				fprintf(stderr, "Remote fingerprint received:\n\t%s\n", remote_fingerprint_str);
+				fprintf(stderr, "%s: %d: Fingerprint mistmatch. Possible mitm. Aborting!\n", \
+						program_invocation_short_name, io.listener);
 #endif
 				exit(-1);
 			}
@@ -902,7 +1131,6 @@ int main(int argc, char **argv){
 					strerror(errno));
 			exit(-1);
 		}
-
 #endif
 
 		// - Fork a child to run the shell.
