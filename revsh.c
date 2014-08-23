@@ -347,7 +347,6 @@ int main(int argc, char **argv){
 					exit(-1);
 				}
 			}
-
 		}
 
 		if((accept = BIO_new_accept(buff_head)) == NULL){
@@ -474,8 +473,6 @@ int main(int argc, char **argv){
 					ERR_print_errors_fp(stderr);
 					exit(-1);
 				}
-
-				//printf("Remote fingerprint expected:\n\t%s\n", connector_fingerprint_str);
 
 				if((remote_cert = SSL_get_peer_certificate(io.ssl)) == NULL){
 					fprintf(stderr, "%s: %d: SSL_get_peer_certificate(%lx): %s\n", \
