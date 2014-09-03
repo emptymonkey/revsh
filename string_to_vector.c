@@ -4,14 +4,13 @@
 
 /**********************************************************************************************************************
  *
- * char **string_to_vector(char *command_string)
+ * string_to_vector()
  *
- *	Input: A string of tokens, whitespace delimited, null terminated.
+ * Input: A string of tokens, whitespace delimited, null terminated.
+ * Output: An array of strings containing the tokens. The array itself is also null terminated. NULL will be returned
+ *	on error.
  *
- *	Output: An array of strings containing the tokens. The array itself is also null terminated. NULL will be returned
- *		on error.
- *
- *	Purpose: Tokenize a string for later consumption. 
+ * Purpose: Tokenize a string for later consumption. 
  *
  **********************************************************************************************************************/
 char **string_to_vector(char *command_string){
