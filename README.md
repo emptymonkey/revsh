@@ -4,7 +4,7 @@ _revsh_ is a tool for establishing a [reverse shell](http://en.wikipedia.org/wik
 
 **What is a "reverse shell"?**
 
-A [reverse shell](http://www.sans.edu/student-files/presentations/LVReverseShell.pdf) is a network connection that grants [shell](http://en.wikipedia.org/wiki/Shell_%28computing%29) access to a remote host. As opposed to other remote login tools such as [telnet](http://en.wikipedia.org/wiki/Telnet) and [ssh](http://en.wikipedia.org/wiki/Secure_Shell), a reverse shell is initiated by the remote host. This technique of connecting outbound from the remote network allows for circumvention of firewalls that are configured to block inbound connections only. 
+A [reverse shell](en.wikipedia.org/wiki/Reverse_shell) is a network connection that grants [shell](http://en.wikipedia.org/wiki/Shell_%28computing%29) access to a remote host. As opposed to other remote login tools such as [telnet](http://en.wikipedia.org/wiki/Telnet) and [ssh](http://en.wikipedia.org/wiki/Secure_Shell), a reverse shell is initiated by the remote host. This technique of connecting outbound from the remote network allows for circumvention of firewalls that are configured to block inbound connections only. 
 
 **Can't I just use [netcat](http://en.wikipedia.org/wiki/Netcat)?**
 
