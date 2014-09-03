@@ -8,12 +8,11 @@ volatile sig_atomic_t sig_found = 0;
  *
  * broker()
  *
- * Input: Two file descriptors. Also, an indication of whether or not we are a
- *  listener.
+ * Input: A pointer to our remote_io_helper object.
  * Output: 0 for EOF, -1 for errors.
  *
- * Purpose: Broker data between the two file descriptors. Also, handle some 
- *  signal events (e.g. SIGWINCH) with in-band signalling.
+ * Purpose: Broker data between the terminal and the network socket. Do the 
+ *	right thing when encountering a window resize event.
  *
  ******************************************************************************/
 int broker(struct remote_io_helper *io){
@@ -24,23 +23,26 @@ int broker(struct remote_io_helper *io){
 
 	int buff_len;
 
+	// A buffer to hold what comes in from the terminal.
 	char *local_buff_head = NULL;
 	char *local_buff_ptr = NULL;
 	char *local_buff_tail = NULL;
 
+	// A buffer to hold what comes in from the socket.
 	char *remote_buff_head = NULL;
 	char *remote_buff_ptr = NULL;
 	char *remote_buff_tail = NULL;
 
 
-	// APC (0x9f) and ST (0x9c) are 8 bit control characters. These pointers will
-	// point to their location in a string, if found.
-	// Using APC here as start of an in-band signalling event, and ST to mark
-	// the end.
+	// APC (0x9f) and ST (0x9c) are 8 bit control characters.
+	// We will be using APC here as the start of an in-band signalling event,
+	// and ST to mark it's end. We will do this in a UTF-8 friendly way. As such,
+	// The opening sequence will be '0xc2 0x9f'. The closing sequence will be
+	// '0xc2 0x9c'. 
 	// 
-	// EDIT: Added UTF8_HIGH to the APC and ST characters to ensure the in-band signalling can coexist with utf8 data.
-	//	We don't bother with the UTF8_HIGH parts before the broker() because they don't intermingle with user 
-	//	generated data until now.
+	// Note: We don't bother with the UTF8_HIGH character for the signalling done
+	// before entering the broker() function because there is no user generated
+	// data until now.
 	char *event_ptr = NULL;
 
 	struct sigaction act;
@@ -61,6 +63,7 @@ int broker(struct remote_io_helper *io){
 	int ssl_bytes_pending = 0;
 
 
+	// Prepare our signal handler.
 	if(io->listener){
 		memset(&act, 0, sizeof(act));
 		act.sa_handler = signal_handler;
@@ -73,9 +76,10 @@ int broker(struct remote_io_helper *io){
 		}
 	}
 
+
+	// Prepare our buffers.
 	buff_len = getpagesize();
 
-	// One buffer for reading from local_fd
 	if((local_buff_head = (char *) calloc(buff_len, sizeof(char))) == NULL){
 		print_error(io, "%s: %d: calloc(%d, %d): %s\r\n", \
 				program_invocation_short_name, io->listener, \
@@ -84,7 +88,6 @@ int broker(struct remote_io_helper *io){
 		goto CLEAN_UP;
 	}
 
-	// One buffer for reading from remote_fd
 	if((remote_buff_head = (char *) calloc(buff_len, sizeof(char))) == NULL){
 		print_error(io, "%s: %d: calloc(%d, %d): %s\r\n", \
 				program_invocation_short_name, io->listener, \
@@ -94,11 +97,8 @@ int broker(struct remote_io_helper *io){
 	}
 
 
-	// And one buffer for dealing with serialization and transmission / receipt
-	// of a struct winsize. This probably only needs to be 14 chars long.
-	// 2 control chars + 1 space + (2 * string length of winsize members).
-	// winsize members are unsigned shorts on my dev platform.
-	// There are four members total, but the second two are ignored.
+	// Also prepare one buffer specifically for dealing with serialization
+	// and transmission / receipt of a struct winsize.
 	winsize_buff_len = WINSIZE_BUFF_LEN;
 	if((winsize_buff_head = (char *) calloc(winsize_buff_len, sizeof(char))) == NULL){
 		print_error(io, "%s: %d: calloc(%d, %d): %s\r\n", \
@@ -109,6 +109,7 @@ int broker(struct remote_io_helper *io){
 	}
 
 
+	// Time to set our socket non-blocking.
 	if((fcntl_flags = fcntl(io->remote_fd, F_GETFL, 0)) == -1){
 		print_error(io, "%s: %d: fcntl(%d, FGETFL, 0): %s\r\n", \
 				program_invocation_short_name, io->listener, \
@@ -127,16 +128,20 @@ int broker(struct remote_io_helper *io){
 	}
 
 
+	// Set the proper initial state of our buffer pointers.
 	local_buff_tail = local_buff_head;
 	local_buff_ptr = local_buff_head;
 	remote_buff_tail = remote_buff_head;
 	remote_buff_ptr = remote_buff_head;
 
+
+	// Start the broker() loop.
 	while(1){
 
-		// Empty the local buffer.
-		// The remote buffer isn't a concern. It will be emptied at the time its filled,
-		// in a short loop, because it is a blocking fd.
+		// Attempt to empty the local buffer into the socket. We don't need
+		// to empty the remote buffer. It isn't a concern because it will be
+		// emptied when it is filled. (Keep in min that the remote buffer is
+		// being emptied into a blocking fd, and is a much simpler case.)
 		if(local_buff_ptr != local_buff_tail){
 
 			FD_ZERO(&fd_select);
@@ -161,7 +166,7 @@ int broker(struct remote_io_helper *io){
 				local_buff_ptr += retval;
 			}
 
-			// fill the buffers
+			// If the local buffer is empty, then we should try to fill the buffers.
 		}else{
 
 			if(io->encryption){
@@ -194,7 +199,7 @@ int broker(struct remote_io_helper *io){
 				current_sig = sig_found;
 				sig_found = 0;
 
-				// leaving this as a switch() statement in case I decide to
+				// I am leaving this as a switch() statement in case I decide to
 				// handle more signals later on.
 				switch(current_sig){
 
@@ -218,8 +223,6 @@ int broker(struct remote_io_helper *io){
 						}
 
 						local_buff_tail = local_buff_head + io_bytes;
-
-
 						break;
 
 					default:
@@ -229,6 +232,7 @@ int broker(struct remote_io_helper *io){
 						goto CLEAN_UP;
 				}
 				current_sig = 0;
+
 
 				// Case 2: Data is ready on the local fd.
 			}else if(FD_ISSET(io->local_fd, &fd_select)){
@@ -251,6 +255,7 @@ int broker(struct remote_io_helper *io){
 					goto CLEAN_UP;
 				}
 				local_buff_tail = local_buff_head + io_bytes;
+
 
 				// Case 3: Data is ready on the remote fd.
 			}else if(FD_ISSET(io->remote_fd, &fd_select) || ssl_bytes_pending){
@@ -286,10 +291,10 @@ int broker(struct remote_io_helper *io){
 					remote_buff_ptr = remote_buff_head;
 				}
 
+				// We may have found the begining of a signalling event.
 				if(!io->listener && event_ptr){
 
-					// First, clear out any data not part of the in-band signalling
-					// that may be at the front of our buffer.
+					// First, clear out any data that preceeds the possible event.
 					while(remote_buff_ptr != event_ptr){
 						if((retval = write(io->local_fd, remote_buff_ptr, (event_ptr - remote_buff_ptr))) == -1){
 							print_error(io, "%s: %d: broker(): write(%d, %lx, %d): %s\r\n", \
@@ -304,22 +309,25 @@ int broker(struct remote_io_helper *io){
 					// Either way, lets put UTF8_HIGH in at buff_head[0] so we can reference it later.
 					*remote_buff_head = (char) UTF8_HIGH;
 
-					// setup a state counter. Then retrieve next char from the appropriate place.
+					// Setup the state counter.
 					state_counter = APC_HIGH_FOUND;
 
-					// Get winsize data structures ready
+					// Get the winsize data structures ready.
 					memset(winsize_buff_head, 0, winsize_buff_len);
 					winsize_buff_tail = winsize_buff_head;
 
+					// Now we will enter an event handler loop. It's a state machine that
+					// keeps track of our progress throught the event.
 					event_ptr++;
 					while(state_counter || (event_ptr != remote_buff_tail)){
 
+
+						// Grab the next character by whatever means are appropriate.
 						if(event_ptr != remote_buff_tail){
 							tmp_char = *(event_ptr++);
 						}else{
 
-							// read() a char, remember to select() first to ensure there's data there!
-
+							// Our buffer is empty, so read() the next char.
 							FD_ZERO(&fd_select);
 							FD_SET(io->remote_fd, &fd_select);
 
@@ -352,11 +360,13 @@ int broker(struct remote_io_helper *io){
 							}
 						}
 
-						// now we have a char, go into the state handler
+						// Examine the new char and change state as appropriate.
 						switch(state_counter){
 
-							// Here, we found the opening APC_HIGH, but it wasn't related to an event. Further, the buffer isn't empty.
-							// Consume the data, one char at a time, and make sure we don't find another event start.     
+
+							// In this case we have found the opening APC_HIGH, but it wasn't related to an event.
+							// Further, the buffer isn't empty. Consume the data, one char at a time, and make sure
+							// we don't find another event.
 							case NO_EVENT:
 
 								if(tmp_char == (char) UTF8_HIGH){
@@ -375,17 +385,19 @@ int broker(struct remote_io_helper *io){
 
 								break;
 
-								// check that we are actually in an event.
+
+								// In this case we are checking to ensure that this actually is in an event.
 							case APC_HIGH_FOUND:
 
 								if(tmp_char == (char) APC){
 									state_counter = DATA_FOUND;
-
 								}else{
-									// damn you unicode!!!
+
+									// Damn you unicode!!! This isn't really an event.
 									state_counter = NO_EVENT;
 
-									// remember that UTF8_HIGH we stored at buff_head[0] earlier?  Yeah. :)
+									// Remember that UTF8_HIGH we stored at buff_head[0] earlier?
+									// This is where we'll use it.
 									while((retval = write(io->local_fd, &tmp_char, 1)) < 1){
 										if(retval == -1){
 											print_error(io, "%s: %d: broker(): write(%d, %lx, %d): %s\r\n", \
@@ -395,6 +407,7 @@ int broker(struct remote_io_helper *io){
 										}
 									}
 
+									// Flush the buffer before returning to the normal loop.
 									while((retval = write(io->local_fd, &tmp_char, 1)) < 1){
 										if(retval == -1){
 											print_error(io, "%s: %d: broker(): write(%d, %lx, %d): %s\r\n", \
@@ -407,6 +420,8 @@ int broker(struct remote_io_helper *io){
 
 								break;
 
+							// In this case, we will process the event data, adding it to the winsize 
+							// data structure.
 							case DATA_FOUND:
 
 								if(tmp_char == (char) UTF8_HIGH){
@@ -423,8 +438,12 @@ int broker(struct remote_io_helper *io){
 										goto CLEAN_UP;
 									}
 								}
+
 								break;
 
+
+								// In this case we will close out the event and send the signal to the local 
+								// terminal.
 							case ST_HIGH_FOUND:
 
 								if(tmp_char == (char) ST){
@@ -501,8 +520,9 @@ int broker(struct remote_io_helper *io){
 									}
 
 								}else{
-									// The winsize data is encoded as ascii. It should never come across at UTF8_HIGH.
-									// So this case will always be an error. Handle as such.
+
+									// The winsize data is encoded as ascii. It should never come across as UTF8_HIGH.
+									// As such, this case will always be an error.
 									print_error(io, \
 											"%s: %d: broker(): switch(%d): high closing byte found w/out low closing byte. Should not be here!\r\n", \
 											program_invocation_short_name, io->listener, state_counter);
@@ -512,9 +532,10 @@ int broker(struct remote_io_helper *io){
 
 								break;
 
+
+							// The case of no case. This should be unreachable.
 							default:
 
-								// Handle error case.
 								print_error(io, \
 										"%s: %d: broker(): switch(%d): unknown state. Should not be here!\r\n", \
 										program_invocation_short_name, io->listener, state_counter);
@@ -525,6 +546,8 @@ int broker(struct remote_io_helper *io){
 					}
 
 				}else{
+
+					// Flush the remote buffer to the terminal.
 					while(remote_buff_ptr != remote_buff_tail){
 						if((retval = write(io->local_fd, remote_buff_head, (remote_buff_tail - remote_buff_ptr))) == -1){
 							print_error(io, "%s: %d: broker(): write(%d, %lx, %d): %s\r\n", \

@@ -34,17 +34,28 @@
 
 #include "remote_io_helper.h"
 
-
-
+// No good reason for 1024. Pick your favorite power of two.
 #define BUFFER_SIZE 1024
 
+// I had this as "/bin/sh". Hacker's don't care for that backward compatability shit.
+// They just want it to work with as little fuss as possible.
 #define DEFAULT_SHELL	"/bin/bash"
+
+// These two environement variables are important enough in allowing the tool to provide a sane
+// feeling terminal that we bake them into the binary. They will be passed automatically. Feel
+// free to bake more in here by adding them to the DEFAULT_ENV string (space delimited). Otherwise,
+// just set the environment on the fly using your rc file.
 #define DEFAULT_ENV	"TERM LANG"
 
+// These define the actual values to be used for controlling the in-band signalling.
 #define UTF8_HIGH 0xc2
 #define APC 0x9f
 #define ST  0x9c
 
+// This should only need to be 16 chars long.
+// 4 control chars + 1 space + (2 * string length of winsize members).
+// winsize members are unsigned shorts on my dev platform.
+// There are four members total in a winsize object, but the second two are ignored.
 #define WINSIZE_BUFF_LEN  16
 
 #define REVSH_DIR ".revsh"
@@ -54,16 +65,18 @@
 #define LISTENER_CERT_FILE "listener_cert.pem"
 #define LISTENER_KEY_FILE "listener_key.pem"
 
-// state definitions
+// State definitions.
 #define NO_EVENT        0
 #define APC_HIGH_FOUND  1
 #define DATA_FOUND      2
 #define ST_HIGH_FOUND   3
 
+// Encryption definitions.
 #define PLAINTEXT 0
 #define ADH 1
 #define EDH 2
 
+// Cipher definitions.
 #define ADH_CIPHER "ADH-AES256-SHA"
 #define EDH_CIPHER "DHE-RSA-AES256-SHA"
 #define SERVER_CIPHER "!ADH:" EDH_CIPHER
