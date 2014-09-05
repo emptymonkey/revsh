@@ -21,6 +21,7 @@
  *		* Bind Shell.
  *		* Terminal support.
  *		* Handle window resize events.
+ *		* Circumvent utmp / wtmp. (No login recorded.)
  *		* Process rc file commands upon login.
  *		* Anonymous Diffie-Hellman encryption upon request.
  *		* Ephemeral Diffie-Hellman encryption as default.
@@ -46,18 +47,18 @@
 void usage(){
 	fprintf(stderr, "\nusage: %s [-c [-a] [-s SHELL] [-d KEYS_DIR] [-r RC_FILE]] [-b [-k]] ADDRESS:PORT\n", \
 			program_invocation_short_name);
-	fprintf(stderr, "\n\t-c\t\tRun in \"control\" mode. (Default is \"target\" mode.)\n");
+	fprintf(stderr, "\n\t-c\t\tRun in \"control\" mode.\t\t\t\t(Default is \"target\" mode.)\n");
 	fprintf(stderr, "\t-a\t\tEnable Anonymous Diffie-Hellman mode.\t\t(Default is Ephemeral Diffie-Hellman w/cert pinning.)\n");
 	fprintf(stderr, "\t-s SHELL\tInvoke SHELL as the remote shell.\t\t(Default is \"/bin/bash\".)\n");
 	fprintf(stderr, "\t-d KEYS_DIR\tReference the keys in an alternate directory.\t(Default is \"~/.revsh/keys\".)\n");
 	fprintf(stderr, "\t-r RC_FILE\tReference an alternate rc file.\t\t\t(Default is \"~/.revsh/rc\".)\n");
 	fprintf(stderr, "\t-b\t\tStart in \"bind shell\" mode.\t\t\t(Default is \"reverse shell\" mode.)\n");
-	fprintf(stderr, "\t\t\t\tNote:  * The -b flag will need to be given on both the control and target hosts.\n");
-	fprintf(stderr, "\t\t\t\t       * Bind shell mode can also be enabled by invoking the binary as \"bindsh\" instead of \"revsh\".\n");
-	fprintf(stderr, "\t-k\t\tStart the bind shell in \"keep-alive\" mode.\n");
+	fprintf(stderr, "\t\t\tNote:  * The -b flag will need to be given on both the control and target hosts.\n");
+	fprintf(stderr, "\t\t\t       * Bind shell mode can also be enabled by invoking the binary as \"bindsh\" instead of \"revsh\".\n");
+	fprintf(stderr, "\t-k\t\tStart the bind shell in \"keep-alive\" mode.\t(Ignored in reverse shell mode.)\n");
 	fprintf(stderr, "\t-h\t\tPrint this help.\n");
 	fprintf(stderr, "\n\tNote: ADDRESS:PORT is an optional argument and revsh will default to the values built into the binary.\n");
-	fprintf(stderr, "\t      The default ADDRESS:PORT is \"%s\".\n", ADDRESS);
+	fprintf(stderr, "\t      The default ADDRESS:PORT for this build is \"%s\".\n", ADDRESS);
 	fprintf(stderr, "\n\n");
 
 	exit(-1);
