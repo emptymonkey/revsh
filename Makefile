@@ -111,7 +111,10 @@ install:
 		echo "\nERROR: $(HOME)/.revsh/$(KEYS_DIR) already exists! Move it safely out of the way then try again, please." ; \
 	else \
 		cp -r $(KEYS_DIR) $(HOME)/.revsh ; \
-		cp revsh $(HOME)/.revsh ; \
+		cp revsh $(HOME)/.revsh/$(KEYS_DIR) ; \
+		if [ ! -e $(HOME)/.revsh/revsh ]; then \
+			ln -s $(HOME)/.revsh/$(KEYS_DIR)/revsh $(HOME)/.revsh/revsh ; \
+		fi \
 	fi
 
 # make clean will remove everything. Because dh_params_2048.c will take awhile to recreate, I've added

@@ -36,6 +36,13 @@
 
 #include "config.h"
 
+#define TARGET_CERT_FILE "target_cert.pem"
+#define CONTROLLER_CERT_FILE "controller_cert.pem"
+#define CONTROLLER_KEY_FILE "controller_key.pem"
+
+// No good reason for 1024. Pick your favorite power of two.
+#define BUFFER_SIZE 1024
+
 // These define the actual values to be used for controlling the in-band signalling.
 #define UTF8_HIGH 0xc2
 #define APC 0x9f
