@@ -1,5 +1,5 @@
 
-#define DEBUG
+//#define DEBUG
 
 #define _GNU_SOURCE
 #define _XOPEN_SOURCE
@@ -34,20 +34,7 @@
 
 #include "remote_io_helper.h"
 
-#define ADDRESS "127.0.0.1:9999"
-
-// No good reason for 1024. Pick your favorite power of two.
-#define BUFFER_SIZE 1024
-
-// I had this as "/bin/sh". Hacker's don't care for that backward compatability shit.
-// They just want it to work with as little fuss as possible.
-#define DEFAULT_SHELL	"/bin/bash"
-
-// These two environement variables are important enough in allowing the tool to provide a sane
-// feeling terminal that we bake them into the binary. They will be passed automatically. Feel
-// free to bake more in here by adding them to the DEFAULT_ENV string (space delimited). Otherwise,
-// just set the environment on the fly using your rc file.
-#define DEFAULT_ENV	"TERM LANG"
+#include "config.h"
 
 // These define the actual values to be used for controlling the in-band signalling.
 #define UTF8_HIGH 0xc2
@@ -60,13 +47,6 @@
 // There are four members total in a winsize object, but the second two are ignored.
 #define WINSIZE_BUFF_LEN  16
 
-#define REVSH_DIR ".revsh"
-#define RC_FILE "rc"
-#define KEYS_DIR "keys"
-#define TARGET_CERT_FILE "target_cert.pem"
-#define CONTROLLER_CERT_FILE "controller_cert.pem"
-#define CONTROLLER_KEY_FILE "controller_key.pem"
-
 // State definitions.
 #define NO_EVENT        0
 #define APC_HIGH_FOUND  1
@@ -77,12 +57,6 @@
 #define PLAINTEXT 0
 #define ADH 1
 #define EDH 2
-
-// Cipher definitions.
-#define ADH_CIPHER "ADH-AES256-SHA"
-#define EDH_CIPHER "DHE-RSA-AES256-SHA"
-#define TARGET_CIPHER EDH_CIPHER ":" ADH_CIPHER
-#define CONTROLLER_CIPHER "!ADH" ":" EDH_CIPHER
 
 
 char **string_to_vector(char *command_string);

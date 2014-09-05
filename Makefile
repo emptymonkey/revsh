@@ -41,7 +41,7 @@ all: revsh
 #
 # This allows us to generate uniq crypto per build, without too much extra overhead. (e.g. autoconf)
 
-revsh: revsh.c remote_io_helper.h common.h $(OBJS)
+revsh: revsh.c remote_io_helper.h common.h config.h $(OBJS)
 	if [ ! -e $(KEYS_DIR) ]; then \
 		mkdir $(KEYS_DIR) ; \
 	fi
@@ -94,13 +94,13 @@ revsh: revsh.c remote_io_helper.h common.h $(OBJS)
 	fi
 	$(CC) $(LIBS) $(CFLAGS) $(OBJS) -o revsh revsh.c
 
-revsh_io: revsh_io.c remote_io_helper.h common.h
+revsh_io: revsh_io.c remote_io_helper.h common.h config.h
 	$(CC) $(LIBS) $(CFLAGS) -c -o revsh_io.o revsh_io.c
 
-string_to_vector: string_to_vector.c string_to_vector.h common.h
+string_to_vector: string_to_vector.c string_to_vector.h common.h config.h
 	$(CC) $(CFLAGS) -c -o string_to_vector.o string_to_vector.c
 
-broker: broker.c common.h
+broker: broker.c common.h config.h
 	$(CC) $(CFLAGS) -c -o broker.o broker.c
 
 install:

