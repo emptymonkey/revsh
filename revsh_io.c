@@ -67,7 +67,7 @@ int remote_read_encrypted(struct remote_io_helper *io, void *buff, size_t count)
 			if(ssl_error == SSL_ERROR_WANT_READ){
 				if((retval = select(io->remote_fd + 1, &fd_select, NULL, NULL, NULL)) == -1){
 					print_error(io, "%s: %d: select(%d, %lx, NULL, NULL, NULL): %s\n", \
-						program_invocation_short_name, io->listener, \
+						program_invocation_short_name, io->controller, \
 						io->remote_fd + 1, (unsigned long) &fd_select, strerror(errno));
 					return(-1);
 				}
@@ -75,7 +75,7 @@ int remote_read_encrypted(struct remote_io_helper *io, void *buff, size_t count)
 			}else /* if(ssl_error == SSL_ERROR_WANT_WRITE) */ {
 				if((retval = select(io->remote_fd + 1, NULL, &fd_select, NULL, NULL)) == -1){
 					print_error(io, "%s: %d: select(%d, NULL, %lx, NULL, NULL): %s\n", \
-						program_invocation_short_name, io->listener, \
+						program_invocation_short_name, io->controller, \
 						io->remote_fd + 1, (unsigned long) &fd_select, strerror(errno));
 					return(-1);
 				}
@@ -139,7 +139,7 @@ int remote_write_encrypted(struct remote_io_helper *io, void *buff, size_t count
 			if(ssl_error == SSL_ERROR_WANT_READ){
 				if((retval = select(io->remote_fd + 1, &fd_select, NULL, NULL, NULL)) == -1){
 					print_error(io, "%s: %d: select(%d, %lx, NULL, NULL, NULL): %s\n", \
-						program_invocation_short_name, io->listener, \
+						program_invocation_short_name, io->controller, \
 						io->remote_fd + 1, (unsigned long) &fd_select, strerror(errno));
 					return(-1);
 				}
@@ -147,7 +147,7 @@ int remote_write_encrypted(struct remote_io_helper *io, void *buff, size_t count
 			}else /* if(ssl_error == SSL_ERROR_WANT_WRITE) */ {
 				if((retval = select(io->remote_fd + 1, NULL, &fd_select, NULL, NULL)) == -1){
 					print_error(io, "%s: %d: select(%d, NULL, %lx, NULL, NULL): %s\n", \
-						program_invocation_short_name, io->listener, \
+						program_invocation_short_name, io->controller, \
 						io->remote_fd + 1, (unsigned long) &fd_select, strerror(errno));
 					return(-1);
 				}
@@ -203,7 +203,7 @@ int remote_printf(struct remote_io_helper *io, char *fmt, ...){
 	memset(buff, 0, BUFFER_SIZE);
 	if((retval = vsnprintf(buff, BUFFER_SIZE - 1, fmt, list_ptr)) < 0){
 		print_error(io, "%s: %d: vsnprintf(%lx, %d, %lx, %lx): %s\n", \
-				program_invocation_short_name, io->listener, \
+				program_invocation_short_name, io->controller, \
 				(unsigned long) buff, BUFFER_SIZE - 1, (unsigned long) fmt, (unsigned long) list_ptr, \
 				strerror(errno));
 		return(retval);
@@ -225,7 +225,7 @@ int remote_printf(struct remote_io_helper *io, char *fmt, ...){
  * Output: The count of characters succesfully printed.
  *
  * Purpose: Provide a wrapper that allows us to just call print_error() and have the correct thing happen regardless of
- *	being a connector or a listner. This simplifies the error reporting code greatly.
+ *	being a target or a controller. This simplifies the error reporting code greatly.
  *
  **********************************************************************************************************************/
 int print_error(struct remote_io_helper *io, char *fmt, ...){
@@ -236,10 +236,10 @@ int print_error(struct remote_io_helper *io, char *fmt, ...){
 
 	va_start(list_ptr, fmt);
 
-	if(io->listener){
+	if(io->controller){
 		if((retval = vfprintf(stderr, fmt, list_ptr)) < 0){
 			print_error(io, "%s: %d: vfprintf(stderr, %lx, %lx): %s\n", \
-					program_invocation_short_name, io->listener, \
+					program_invocation_short_name, io->controller, \
 					(unsigned long) fmt, (unsigned long) list_ptr, \
 					strerror(errno));
 		}

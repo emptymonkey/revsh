@@ -50,7 +50,7 @@ int broker(struct remote_io_helper *io){
 
 	struct winsize tty_winsize;
 	int winsize_buff_len;
-	char *winsize_buff_head, *winsize_buff_tail;
+	char *winsize_buff_head = NULL, *winsize_buff_tail;
 	char **winsize_vec;
 	int sig_pid;
 
@@ -64,13 +64,13 @@ int broker(struct remote_io_helper *io){
 
 
 	// Prepare our signal handler.
-	if(io->listener){
+	if(io->controller){
 		memset(&act, 0, sizeof(act));
 		act.sa_handler = signal_handler;
 
 		if((retval = sigaction(SIGWINCH, &act, NULL)) == -1){
 			print_error(io, "%s: %d: sigaction(%d, %lx, %p): %s\r\n", \
-					program_invocation_short_name, io->listener, \
+					program_invocation_short_name, io->controller, \
 					SIGWINCH, (unsigned long) &act, NULL, strerror(errno));
 			goto CLEAN_UP;
 		}
@@ -82,7 +82,7 @@ int broker(struct remote_io_helper *io){
 
 	if((local_buff_head = (char *) calloc(buff_len, sizeof(char))) == NULL){
 		print_error(io, "%s: %d: calloc(%d, %d): %s\r\n", \
-				program_invocation_short_name, io->listener, \
+				program_invocation_short_name, io->controller, \
 				buff_len, (int) sizeof(char));
 		retval = -1;
 		goto CLEAN_UP;
@@ -90,7 +90,7 @@ int broker(struct remote_io_helper *io){
 
 	if((remote_buff_head = (char *) calloc(buff_len, sizeof(char))) == NULL){
 		print_error(io, "%s: %d: calloc(%d, %d): %s\r\n", \
-				program_invocation_short_name, io->listener, \
+				program_invocation_short_name, io->controller, \
 				buff_len, (int) sizeof(char));
 		retval = -1;
 		goto CLEAN_UP;
@@ -102,7 +102,7 @@ int broker(struct remote_io_helper *io){
 	winsize_buff_len = WINSIZE_BUFF_LEN;
 	if((winsize_buff_head = (char *) calloc(winsize_buff_len, sizeof(char))) == NULL){
 		print_error(io, "%s: %d: calloc(%d, %d): %s\r\n", \
-				program_invocation_short_name, io->listener, \
+				program_invocation_short_name, io->controller, \
 				winsize_buff_len, (int) sizeof(char));
 		retval = -1;
 		goto CLEAN_UP;
@@ -112,7 +112,7 @@ int broker(struct remote_io_helper *io){
 	// Time to set our socket non-blocking.
 	if((fcntl_flags = fcntl(io->remote_fd, F_GETFL, 0)) == -1){
 		print_error(io, "%s: %d: fcntl(%d, FGETFL, 0): %s\r\n", \
-				program_invocation_short_name, io->listener, \
+				program_invocation_short_name, io->controller, \
 				io->remote_fd, strerror(errno));
 		retval = -1;
 		goto CLEAN_UP;
@@ -121,7 +121,7 @@ int broker(struct remote_io_helper *io){
 	fcntl_flags |= O_NONBLOCK;
 	if((retval = fcntl(io->remote_fd, F_SETFL, fcntl_flags)) == -1){
 		print_error(io, "%s: %d: fcntl(%d, FGETFL, %d): %s\r\n", \
-				program_invocation_short_name, io->listener, \
+				program_invocation_short_name, io->controller, \
 				io->remote_fd, fcntl_flags, strerror(errno));
 		retval = -1;
 		goto CLEAN_UP;
@@ -151,7 +151,7 @@ int broker(struct remote_io_helper *io){
 					&& !sig_found){
 				print_error(io, \
 						"%s: %d: broker(): select(%d, NULL, %lx, NULL, NULL): %s\r\n", \
-						program_invocation_short_name, io->listener, io->remote_fd + 1, \
+						program_invocation_short_name, io->controller, io->remote_fd + 1, \
 						(unsigned long) &fd_select, strerror(errno));
 				goto CLEAN_UP;
 			}
@@ -159,7 +159,7 @@ int broker(struct remote_io_helper *io){
 			if(FD_ISSET(io->remote_fd, &fd_select)){
 				if((retval = io->remote_write(io, local_buff_ptr, (local_buff_tail - local_buff_ptr))) == -1){
 					print_error(io, "%s: %d: broker(): io->remote_write(%lx, %lx, %d): %s\r\n", \
-							program_invocation_short_name, io->listener, \
+							program_invocation_short_name, io->controller, \
 							(unsigned long) io, (unsigned long) local_buff_ptr, (local_buff_tail - local_buff_ptr), strerror(errno));
 					goto CLEAN_UP;
 				}
@@ -184,7 +184,7 @@ int broker(struct remote_io_helper *io){
 						&& !sig_found){
 					print_error(io, \
 							"%s: %d: broker(): select(%d, %lx, NULL, NULL, NULL): %s\r\n", \
-							program_invocation_short_name, io->listener, fd_max + 1, \
+							program_invocation_short_name, io->controller, fd_max + 1, \
 							(unsigned long) &fd_select, strerror(errno));
 					goto CLEAN_UP;
 				}
@@ -206,7 +206,7 @@ int broker(struct remote_io_helper *io){
 					case SIGWINCH:
 						if((retval = ioctl(io->local_fd, TIOCGWINSZ, &tty_winsize)) == -1){
 							print_error(io, "%s: %d: ioctl(%d, TIOCGWINSZ, %lx): %s\r\n", \
-									program_invocation_short_name, io->listener, \
+									program_invocation_short_name, io->controller, \
 									io->local_fd, (unsigned long) &tty_winsize, strerror(errno));
 							goto CLEAN_UP;
 						}
@@ -215,8 +215,9 @@ int broker(struct remote_io_helper *io){
 										"%c%c%hd %hd%c%c", (char) UTF8_HIGH, (char) APC, tty_winsize.ws_row, \
 										tty_winsize.ws_col, (char) UTF8_HIGH, (char) ST)) < 0){
 							print_error(io, \
-									"%s: %d: snprintf(winsize_buff_head, winsize_buff_len, \"%%c%%hd %%hd%%c\", APC, %hd, %hd, ST): %s\r\n", \
-									program_invocation_short_name, io->listener, \
+									"%s: %d: snprintf(%lx, %d, \"%%c%%hd %%hd%%c\", APC, %hd, %hd, ST): %s\r\n", \
+									program_invocation_short_name, io->controller, \
+									(unsigned long) local_buff_head, buff_len, \
 									tty_winsize.ws_row, tty_winsize.ws_col, strerror(errno));
 							retval = -1;
 							goto CLEAN_UP;
@@ -227,7 +228,7 @@ int broker(struct remote_io_helper *io){
 
 					default:
 						print_error(io, "%s: %d: broker(): Undefined signal found: %d\r\n", \
-								program_invocation_short_name, io->listener, current_sig);
+								program_invocation_short_name, io->controller, current_sig);
 						retval = -1;
 						goto CLEAN_UP;
 				}
@@ -240,11 +241,11 @@ int broker(struct remote_io_helper *io){
 				local_buff_ptr = local_buff_head;
 
 				if((io_bytes = read(io->local_fd, local_buff_head, buff_len)) == -1){
-					if(!io->listener && errno == EIO){
+					if(!io->controller && errno == EIO){
 						goto CLEAN_UP;
 					}
 					print_error(io, "%s: %d: broker(): read(%d, %lx, %d): %s\r\n", \
-							program_invocation_short_name, io->listener, \
+							program_invocation_short_name, io->controller, \
 							io->local_fd, (unsigned long) local_buff_head, buff_len, strerror(errno));
 					retval = -1;
 					goto CLEAN_UP;
@@ -267,7 +268,7 @@ int broker(struct remote_io_helper *io){
 
 				if((io_bytes = io->remote_read(io, remote_buff_head, buff_len)) == -1){
 					print_error(io, "%s: %d: broker(): io->remote_read(%lx, %lx, %d): %s\r\n", \
-							program_invocation_short_name, io->listener, \
+							program_invocation_short_name, io->controller, \
 							(unsigned long) io, (unsigned long) remote_buff_head, buff_len, strerror(errno));
 					retval = -1;
 					goto CLEAN_UP;
@@ -279,7 +280,7 @@ int broker(struct remote_io_helper *io){
 				}
 				remote_buff_tail = remote_buff_head + io_bytes;
 
-				if(!io->listener){
+				if(!io->controller){
 					event_ptr = NULL;
 					while(remote_buff_ptr != remote_buff_tail){
 						if(*remote_buff_ptr == (char) UTF8_HIGH){
@@ -292,13 +293,13 @@ int broker(struct remote_io_helper *io){
 				}
 
 				// We may have found the begining of a signalling event.
-				if(!io->listener && event_ptr){
+				if(!io->controller && event_ptr){
 
 					// First, clear out any data that preceeds the possible event.
 					while(remote_buff_ptr != event_ptr){
 						if((retval = write(io->local_fd, remote_buff_ptr, (event_ptr - remote_buff_ptr))) == -1){
 							print_error(io, "%s: %d: broker(): write(%d, %lx, %d): %s\r\n", \
-									program_invocation_short_name, io->listener, \
+									program_invocation_short_name, io->controller, \
 									io->local_fd, (unsigned long) remote_buff_ptr, (event_ptr - remote_buff_ptr), strerror(errno));
 							goto CLEAN_UP;
 						}
@@ -334,7 +335,7 @@ int broker(struct remote_io_helper *io){
 							if(((retval = select(io->remote_fd + 1, &fd_select, NULL, NULL, NULL)) == -1)){
 								print_error(io, \
 										"%s: %d: broker(): select(%d, %lx, NULL, NULL, NULL): %s\r\n", \
-										program_invocation_short_name, io->listener, io->remote_fd + 1, \
+										program_invocation_short_name, io->controller, io->remote_fd + 1, \
 										(unsigned long) &fd_select, strerror(errno));
 								goto CLEAN_UP;
 							}
@@ -342,14 +343,14 @@ int broker(struct remote_io_helper *io){
 							if(!FD_ISSET(io->remote_fd, &fd_select)){
 								print_error(io, \
 										"%s: %d: broker(): FD_ISSET(%d, %lx): select() returned, but no data found.\r\n", \
-										program_invocation_short_name, io->listener, io->remote_fd, \
+										program_invocation_short_name, io->controller, io->remote_fd, \
 										(unsigned long) &fd_select);
 								goto CLEAN_UP;
 							}
 
 							if((retval = io->remote_read(io, &tmp_char, 1)) == -1){
 								print_error(io, "%s: %d: io->remote_read(%lx, %lx, %d): %s\r\n", \
-										program_invocation_short_name, io->listener, \
+										program_invocation_short_name, io->controller, \
 										(unsigned long) io, (unsigned long) &tmp_char, 1, strerror(errno));
 								retval = -1;
 								goto CLEAN_UP;
@@ -376,7 +377,7 @@ int broker(struct remote_io_helper *io){
 									while((retval = write(io->local_fd, &tmp_char, 1)) < 1){
 										if(retval == -1){
 											print_error(io, "%s: %d: broker(): write(%d, %lx, %d): %s\r\n", \
-													program_invocation_short_name, io->listener, \
+													program_invocation_short_name, io->controller, \
 													io->local_fd, (unsigned long) &tmp_char, 1, strerror(errno));
 											goto CLEAN_UP;
 										}
@@ -401,7 +402,7 @@ int broker(struct remote_io_helper *io){
 									while((retval = write(io->local_fd, &tmp_char, 1)) < 1){
 										if(retval == -1){
 											print_error(io, "%s: %d: broker(): write(%d, %lx, %d): %s\r\n", \
-													program_invocation_short_name, io->listener, \
+													program_invocation_short_name, io->controller, \
 													io->local_fd, (unsigned long) UTF8_HIGH, 1, strerror(errno));
 											goto CLEAN_UP;
 										}
@@ -411,7 +412,7 @@ int broker(struct remote_io_helper *io){
 									while((retval = write(io->local_fd, &tmp_char, 1)) < 1){
 										if(retval == -1){
 											print_error(io, "%s: %d: broker(): write(%d, %lx, %d): %s\r\n", \
-													program_invocation_short_name, io->listener, \
+													program_invocation_short_name, io->controller, \
 													io->local_fd, (unsigned long) &tmp_char, 1, strerror(errno));
 											goto CLEAN_UP;
 										}
@@ -433,7 +434,7 @@ int broker(struct remote_io_helper *io){
 
 										print_error(io, \
 												"%s: %d: broker(): switch(%d): winsize_buff overflow.\r\n", \
-												program_invocation_short_name, io->listener, state_counter);
+												program_invocation_short_name, io->controller, state_counter);
 										retval = -1;
 										goto CLEAN_UP;
 									}
@@ -454,7 +455,7 @@ int broker(struct remote_io_helper *io){
 									// signal the foreground process group.
 									if((winsize_vec = string_to_vector(winsize_buff_head)) == NULL){
 										print_error(io, "%s: %d: broker(): string_to_vector(%s): %s\r\n", \
-												program_invocation_short_name, io->listener, \
+												program_invocation_short_name, io->controller, \
 												winsize_buff_head, strerror(errno));
 										retval = -1;
 										goto CLEAN_UP;
@@ -463,7 +464,7 @@ int broker(struct remote_io_helper *io){
 									if(winsize_vec[0] == NULL){
 										print_error(io, \
 												"%s: %d: invalid initialization: tty_winsize.ws_row\r\n", \
-												program_invocation_short_name, io->listener);
+												program_invocation_short_name, io->controller);
 										retval = -1;
 										goto CLEAN_UP;
 									}
@@ -472,7 +473,7 @@ int broker(struct remote_io_helper *io){
 									tty_winsize.ws_row = (short) strtol(winsize_vec[0], NULL, 10);
 									if(errno){
 										print_error(io, "%s: %d: strtol(%s): %s\r\n", \
-												program_invocation_short_name, io->listener, \
+												program_invocation_short_name, io->controller, \
 												winsize_vec[0], strerror(errno));
 										retval = -1;
 										goto CLEAN_UP;
@@ -481,7 +482,7 @@ int broker(struct remote_io_helper *io){
 									if(winsize_vec[1] == NULL){
 										print_error(io, \
 												"%s: %d: invalid initialization: tty_winsize.ws_col\r\n", \
-												program_invocation_short_name, io->listener);
+												program_invocation_short_name, io->controller);
 										retval = -1;
 										goto CLEAN_UP;
 									}
@@ -490,7 +491,7 @@ int broker(struct remote_io_helper *io){
 									tty_winsize.ws_col = (short) strtol(winsize_vec[1], NULL, 10);
 									if(errno){
 										print_error(io, "%s: %d: strtol(%s): %s\r\n", \
-												program_invocation_short_name, io->listener, \
+												program_invocation_short_name, io->controller, \
 												winsize_vec[1], strerror(errno));
 										retval = -1;
 										goto CLEAN_UP;
@@ -498,7 +499,7 @@ int broker(struct remote_io_helper *io){
 
 									if((retval = ioctl(io->local_fd, TIOCSWINSZ, &tty_winsize)) == -1){
 										print_error(io, "%s: %d: ioctl(%d, %d, %lx): %s\r\n", \
-												program_invocation_short_name, io->listener, \
+												program_invocation_short_name, io->controller, \
 												io->local_fd, TIOCGWINSZ, (unsigned long) &tty_winsize, \
 												strerror(errno));
 										goto CLEAN_UP;
@@ -506,7 +507,7 @@ int broker(struct remote_io_helper *io){
 
 									if((sig_pid = tcgetsid(io->local_fd)) == -1){
 										print_error(io, "%s: %d: tcgetsid(%d): %s\r\n", \
-												program_invocation_short_name, io->listener, \
+												program_invocation_short_name, io->controller, \
 												io->local_fd, strerror(errno));
 										retval = -1;
 										goto CLEAN_UP;
@@ -514,7 +515,7 @@ int broker(struct remote_io_helper *io){
 
 									if((retval = kill(-sig_pid, SIGWINCH)) == -1){
 										print_error(io, "%s: %d: kill(%d, %d): %s\r\n", \
-												program_invocation_short_name, io->listener, \
+												program_invocation_short_name, io->controller, \
 												-sig_pid, SIGWINCH, strerror(errno));
 										goto CLEAN_UP;
 									}
@@ -525,7 +526,7 @@ int broker(struct remote_io_helper *io){
 									// As such, this case will always be an error.
 									print_error(io, \
 											"%s: %d: broker(): switch(%d): high closing byte found w/out low closing byte. Should not be here!\r\n", \
-											program_invocation_short_name, io->listener, state_counter);
+											program_invocation_short_name, io->controller, state_counter);
 									retval = -1;
 									goto CLEAN_UP;
 								}
@@ -538,7 +539,7 @@ int broker(struct remote_io_helper *io){
 
 								print_error(io, \
 										"%s: %d: broker(): switch(%d): unknown state. Should not be here!\r\n", \
-										program_invocation_short_name, io->listener, state_counter);
+										program_invocation_short_name, io->controller, state_counter);
 								retval = -1;
 								goto CLEAN_UP;
 						}
@@ -551,7 +552,7 @@ int broker(struct remote_io_helper *io){
 					while(remote_buff_ptr != remote_buff_tail){
 						if((retval = write(io->local_fd, remote_buff_head, (remote_buff_tail - remote_buff_ptr))) == -1){
 							print_error(io, "%s: %d: broker(): write(%d, %lx, %d): %s\r\n", \
-									program_invocation_short_name, io->listener, \
+									program_invocation_short_name, io->controller, \
 									io->local_fd, (unsigned long) remote_buff_head, (remote_buff_tail - remote_buff_ptr), strerror(errno));
 							goto CLEAN_UP;
 						}
@@ -563,7 +564,7 @@ int broker(struct remote_io_helper *io){
 	}
 
 	print_error(io, "%s: %d: broker(): while(1): Should not be here!\r\n", \
-			program_invocation_short_name, io->listener);
+			program_invocation_short_name, io->controller);
 	retval = -1;
 
 CLEAN_UP:

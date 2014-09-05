@@ -34,6 +34,13 @@ KEYS_DIR = keys
 
 all: revsh
 
+# If you're new to Makefiles, I'm pretty much just embedding a shell script inline here.
+# The goal is to call the openssl commandline tool to generate the key / cert pairs we will need,
+# then convert them on the fly into c code. That c code is then #include'ed into the program we are
+# compiling.
+#
+# This allows us to generate uniq crypto per build, without too much extra overhead. (e.g. autoconf)
+
 revsh: revsh.c remote_io_helper.h common.h $(OBJS)
 	if [ ! -e $(KEYS_DIR) ]; then \
 		mkdir $(KEYS_DIR) ; \
@@ -41,10 +48,10 @@ revsh: revsh.c remote_io_helper.h common.h $(OBJS)
 	if [ ! -e $(KEYS_DIR)/dh_params_$(KEY_BITS).c ]; then \
 		openssl dhparam -C $(KEY_BITS) -noout >$(KEYS_DIR)/dh_params_$(KEY_BITS).c ; \
 	fi
-	if [ ! -e $(KEYS_DIR)/listener_key.pem ]; then \
-		(openssl req -batch -newkey rsa:$(KEY_BITS) -nodes -x509 -days 2147483647 -keyout $(KEYS_DIR)/listener_key.pem -out $(KEYS_DIR)/listener_cert.pem) && \
-		(echo -n 'char *listener_fingerprint_str = "' >$(KEYS_DIR)/listener_fingerprint.c) && \
-		(openssl x509 -in $(KEYS_DIR)/listener_cert.pem -fingerprint -sha1 -noout | \
+	if [ ! -e $(KEYS_DIR)/controller_key.pem ]; then \
+		(openssl req -batch -newkey rsa:$(KEY_BITS) -nodes -x509 -days 2147483647 -keyout $(KEYS_DIR)/controller_key.pem -out $(KEYS_DIR)/controller_cert.pem) && \
+		(echo -n 'char *controller_fingerprint_str = "' >$(KEYS_DIR)/controller_fingerprint.c) && \
+		(openssl x509 -in $(KEYS_DIR)/controller_cert.pem -fingerprint -sha1 -noout | \
 			sed 's/.*=//' | \
 			sed 's/://g' | \
 			tr '[:upper:]' '[:lower:]' | \
@@ -52,17 +59,17 @@ revsh: revsh.c remote_io_helper.h common.h $(OBJS)
 			sed 's/{ /{\n/' | \
 			sed 's/}/\n}/' | \
 			sed 's/\(\(0x..,\)\{16\}\)/\1\n/g' | \
-			xargs echo -n >>$(KEYS_DIR)/listener_fingerprint.c) && \
-		(echo '";' >>$(KEYS_DIR)/listener_fingerprint.c) ; \
+			xargs echo -n >>$(KEYS_DIR)/controller_fingerprint.c) && \
+		(echo '";' >>$(KEYS_DIR)/controller_fingerprint.c) ; \
 	fi
-	if [ ! -e $(KEYS_DIR)/connector_key.pem ]; then \
-		(openssl req -batch -newkey rsa:$(KEY_BITS) -nodes -x509 -days 2147483647 -keyout $(KEYS_DIR)/connector_key.pem -out $(KEYS_DIR)/connector_cert.pem) && \
-		(openssl x509 -in $(KEYS_DIR)/connector_cert.pem -C -noout | \
-			sed 's/XXX_/connector_/g' | \
+	if [ ! -e $(KEYS_DIR)/target_key.pem ]; then \
+		(openssl req -batch -newkey rsa:$(KEY_BITS) -nodes -x509 -days 2147483647 -keyout $(KEYS_DIR)/target_key.pem -out $(KEYS_DIR)/target_cert.pem) && \
+		(openssl x509 -in $(KEYS_DIR)/target_cert.pem -C -noout | \
+			sed 's/XXX_/target_/g' | \
 			xargs | \
-			sed 's/.*; \(unsigned char connector_certificate\)/\1/'  >$(KEYS_DIR)/connector_cert.c) && \
-		(echo -n 'unsigned char connector_private_key[' >$(KEYS_DIR)/connector_key.c) && \
-		(cat $(KEYS_DIR)/connector_key.pem | \
+			sed 's/.*; \(unsigned char target_certificate\)/\1/'  >$(KEYS_DIR)/target_cert.c) && \
+		(echo -n 'unsigned char target_private_key[' >$(KEYS_DIR)/target_key.c) && \
+		(cat $(KEYS_DIR)/target_key.pem | \
 			grep -v '^-----BEGIN RSA PRIVATE KEY-----$$' | \
 			grep -v '^-----END RSA PRIVATE KEY-----$$' | \
 			base64 -d | \
@@ -71,9 +78,9 @@ revsh: revsh.c remote_io_helper.h common.h $(OBJS)
 			sed 's/\s//g' | \
 			sed 's/\(..\)/\1\n/g' | \
 			wc -l | \
-			xargs echo -n >>$(KEYS_DIR)/connector_key.c) && \
-		(echo ']={') >>$(KEYS_DIR)/connector_key.c && \
-		(cat $(KEYS_DIR)/connector_key.pem | \
+			xargs echo -n >>$(KEYS_DIR)/target_key.c) && \
+		(echo ']={') >>$(KEYS_DIR)/target_key.c && \
+		(cat $(KEYS_DIR)/target_key.pem | \
 			grep -v '^-----BEGIN RSA PRIVATE KEY-----$$' | \
 			grep -v '^-----END RSA PRIVATE KEY-----$$' | \
 			base64 -d | \
@@ -82,8 +89,8 @@ revsh: revsh.c remote_io_helper.h common.h $(OBJS)
 			sed 's/\s//g' | \
 			tr '[:lower:]' '[:upper:]' | \
 			sed 's/\(.\{32\}\)/\1\n/g' | \
-			sed 's/\(..\)/0x\1,/g' >>$(KEYS_DIR)/connector_key.c) && \
-		(echo '\n};' >>$(KEYS_DIR)/connector_key.c) ; \
+			sed 's/\(..\)/0x\1,/g' >>$(KEYS_DIR)/target_key.c) && \
+		(echo '\n};' >>$(KEYS_DIR)/target_key.c) ; \
 	fi
 	$(CC) $(LIBS) $(CFLAGS) $(OBJS) -o revsh revsh.c
 
@@ -107,8 +114,11 @@ install:
 		cp revsh $(HOME)/.revsh ; \
 	fi
 
+# make clean will remove everything. Because dh_params_2048.c will take awhile to recreate, I've added
+# a make dirty line which will remove everything except the dh_params_2048.c file. This was quite useful
+# during dev. This makes a rebuild with new key / cert pairs go pretty quick.
 dirty:
-	rm revsh $(KEYS_DIR)/connector* $(KEYS_DIR)/listener* $(OBJS)
+	rm revsh $(KEYS_DIR)/target* $(KEYS_DIR)/controller* $(OBJS)
 
 clean:
 	rm revsh $(KEYS_DIR)/* $(OBJS)

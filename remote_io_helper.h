@@ -3,7 +3,8 @@
 
 struct remote_io_helper {
 
-	int listener;
+	// Denote whether this instance is on the control node or the target node.
+	int controller;
 	int encryption;
 	
 	int local_fd;

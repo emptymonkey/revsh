@@ -34,6 +34,8 @@
 
 #include "remote_io_helper.h"
 
+#define ADDRESS "127.0.0.1:9999"
+
 // No good reason for 1024. Pick your favorite power of two.
 #define BUFFER_SIZE 1024
 
@@ -61,9 +63,9 @@
 #define REVSH_DIR ".revsh"
 #define RC_FILE "rc"
 #define KEYS_DIR "keys"
-#define CONNECTOR_CERT_FILE "connector_cert.pem"
-#define LISTENER_CERT_FILE "listener_cert.pem"
-#define LISTENER_KEY_FILE "listener_key.pem"
+#define CONNECTOR_CERT_FILE "target_cert.pem"
+#define LISTENER_CERT_FILE "controller_cert.pem"
+#define LISTENER_KEY_FILE "controller_key.pem"
 
 // State definitions.
 #define NO_EVENT        0
