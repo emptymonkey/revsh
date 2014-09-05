@@ -1,5 +1,5 @@
 
-//#define DEBUG
+#define DEBUG
 
 #define _GNU_SOURCE
 #define _XOPEN_SOURCE
@@ -81,8 +81,8 @@
 // Cipher definitions.
 #define ADH_CIPHER "ADH-AES256-SHA"
 #define EDH_CIPHER "DHE-RSA-AES256-SHA"
-#define CONTROLLER_CIPHER "!ADH:" EDH_CIPHER
 #define TARGET_CIPHER EDH_CIPHER ":" ADH_CIPHER
+#define CONTROLLER_CIPHER "!ADH" ":" EDH_CIPHER
 
 
 char **string_to_vector(char *command_string);

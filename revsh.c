@@ -251,7 +251,6 @@ int main(int argc, char **argv){
 			break;
 	}
 
-
 	buff_len = getpagesize();
 	if((buff_head = (char *) calloc(buff_len, sizeof(char))) == NULL){
 		error(-1, errno, "calloc(%d, %d)", buff_len, (int) sizeof(char));
@@ -963,15 +962,15 @@ int main(int argc, char **argv){
 			// we will want to restrict this to only EDH from the target host. Otherwise the bind shell may
 			// serve a shell to any random hacker that knows how to port scan.
 			if(bindshell){
-				cipher_list = EDH;
+				cipher_list = CONTROLLER_CIPHER;
 			}else{
 				cipher_list = TARGET_CIPHER;
 			}
 
-			if(SSL_CTX_set_cipher_list(io.ctx, TARGET_CIPHER) != 1){
+			if(SSL_CTX_set_cipher_list(io.ctx, cipher_list) != 1){
 #ifdef DEBUG
 				fprintf(stderr, "%s: %d: SSL_CTX_set_cipher_list(%lx, %s): %s\n", \
-						program_invocation_short_name, io.controller, (unsigned long) io.ctx, TARGET_CIPHER, strerror(errno));
+						program_invocation_short_name, io.controller, (unsigned long) io.ctx, cipher_list, strerror(errno));
 				ERR_print_errors_fp(stderr);
 #endif
 				exit(-1);
