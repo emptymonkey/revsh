@@ -63,9 +63,9 @@
 #define REVSH_DIR ".revsh"
 #define RC_FILE "rc"
 #define KEYS_DIR "keys"
-#define CONNECTOR_CERT_FILE "target_cert.pem"
-#define LISTENER_CERT_FILE "controller_cert.pem"
-#define LISTENER_KEY_FILE "controller_key.pem"
+#define TARGET_CERT_FILE "target_cert.pem"
+#define CONTROLLER_CERT_FILE "controller_cert.pem"
+#define CONTROLLER_KEY_FILE "controller_key.pem"
 
 // State definitions.
 #define NO_EVENT        0
@@ -81,8 +81,8 @@
 // Cipher definitions.
 #define ADH_CIPHER "ADH-AES256-SHA"
 #define EDH_CIPHER "DHE-RSA-AES256-SHA"
-#define SERVER_CIPHER "!ADH:" EDH_CIPHER
-#define CLIENT_CIPHER "DHE-RSA-AES256-SHA:ADH-AES256-SHA"
+#define CONTROLLER_CIPHER "!ADH:" EDH_CIPHER
+#define TARGET_CIPHER EDH_CIPHER ":" ADH_CIPHER
 
 
 char **string_to_vector(char *command_string);

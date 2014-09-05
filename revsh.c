@@ -247,7 +247,7 @@ int main(int argc, char **argv){
 			break;
 
 		case EDH:
-			cipher_list = SERVER_CIPHER;
+			cipher_list = CONTROLLER_CIPHER;
 			break;
 	}
 
@@ -289,7 +289,7 @@ int main(int argc, char **argv){
 
 
 	/*
-	 * Listener:
+	 * Controller:
 	 * - Open a socket / setup SSL.
 	 * - Listen for a connection.
 	 * - Send initial shell data.
@@ -326,7 +326,7 @@ int main(int argc, char **argv){
 			}
 			controller_cert_path_tail = index(controller_cert_path_head, '\0');
 			*(controller_cert_path_tail++) = '/';
-			sprintf(controller_cert_path_tail, LISTENER_CERT_FILE);
+			sprintf(controller_cert_path_tail, CONTROLLER_CERT_FILE);
 
 
 			if((controller_cert_path_head - controller_cert_path_tail) > PATH_MAX){
@@ -356,7 +356,7 @@ int main(int argc, char **argv){
 			}
 			controller_key_path_tail = index(controller_key_path_head, '\0');
 			*(controller_key_path_tail++) = '/';
-			sprintf(controller_key_path_tail, LISTENER_KEY_FILE);
+			sprintf(controller_key_path_tail, CONTROLLER_KEY_FILE);
 
 
 			if((controller_key_path_head - controller_key_path_tail) > PATH_MAX){
@@ -536,7 +536,7 @@ int main(int argc, char **argv){
 				}
 				allowed_cert_path_tail = index(allowed_cert_path_head, '\0');
 				*(allowed_cert_path_tail++) = '/';
-				sprintf(allowed_cert_path_tail, CONNECTOR_CERT_FILE);
+				sprintf(allowed_cert_path_tail, TARGET_CERT_FILE);
 
 
 				if((allowed_cert_path_head - allowed_cert_path_tail) > PATH_MAX){
@@ -959,10 +959,19 @@ int main(int argc, char **argv){
 				exit(-1);
 			}
 
-			if(SSL_CTX_set_cipher_list(io.ctx, CLIENT_CIPHER) != 1){
+			// Because the controller host will normally dictate which crypto to use, in bind shell mode
+			// we will want to restrict this to only EDH from the target host. Otherwise the bind shell may
+			// serve a shell to any random hacker that knows how to port scan.
+			if(bindshell){
+				cipher_list = EDH;
+			}else{
+				cipher_list = TARGET_CIPHER;
+			}
+
+			if(SSL_CTX_set_cipher_list(io.ctx, TARGET_CIPHER) != 1){
 #ifdef DEBUG
 				fprintf(stderr, "%s: %d: SSL_CTX_set_cipher_list(%lx, %s): %s\n", \
-						program_invocation_short_name, io.controller, (unsigned long) io.ctx, CLIENT_CIPHER, strerror(errno));
+						program_invocation_short_name, io.controller, (unsigned long) io.ctx, TARGET_CIPHER, strerror(errno));
 				ERR_print_errors_fp(stderr);
 #endif
 				exit(-1);
