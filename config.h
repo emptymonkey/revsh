@@ -7,17 +7,17 @@
 // Time to wait on a new connection before dying.
 #define TIMEOUT	3600
 
-// Default address, in case you want to bake in your C2.
+// Default address, so you can bake in your own C2.
 #define ADDRESS "127.0.0.1:9999"
 
-// I had this as "/bin/sh". Hacker's don't care for that backward compatability shit.
+// I had this as "/bin/sh". However, hacker's don't care for all that backward compatability shit.
 // They just want it to work with as little fuss as possible.
 #define DEFAULT_SHELL	"/bin/bash"
 
-// These two environement variables are important enough in allowing the tool to provide a sane
-// feeling terminal that we bake them into the binary. They will be passed automatically. Feel
-// free to bake more in here by adding them to the DEFAULT_ENV string (space delimited). Otherwise,
-// just set the environment on the fly using your rc file.
+// These two environement variables are important enough for allowing the tool to provide a sane
+// feeling terminal that we go ahead and export them automatically. Feel free to bake more in here
+// by adding them to this DEFAULT_ENV string (space delimited). Otherwise, just set the environment
+// on the fly using your rc file.
 #define DEFAULT_ENV	"TERM LANG"
 
 // Default locations of important things.

@@ -22,6 +22,7 @@ There are [many techniques](http://pentestmonkey.net/cheat-sheet/shells/reverse-
  * [processing of window re-size events](http://linux.die.net/man/4/tty_ioctl)
 
 In addition, _revsh_ also offers the following features:
+ * [UTF-8](http://en.wikipedia.org/wiki/UTF-8) support.
  * Circumvents [utmp / wtmp](http://en.wikipedia.org/wiki/Utmp). (No login recorded.)
  * Processes [rc file](http://en.wikipedia.org/wiki/Run_commands) commands upon login for easy scripting.
  * [OpenSSL](https://www.openssl.org/) encryption with key based authentication baked into the binary.

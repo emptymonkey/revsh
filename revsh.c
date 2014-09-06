@@ -20,12 +20,16 @@
  *		* Reverse Shell.
  *		* Bind Shell.
  *		* Terminal support.
+ *		* UTF-8 support.
  *		* Handle window resize events.
  *		* Circumvent utmp / wtmp. (No login recorded.)
  *		* Process rc file commands upon login.
+ *		* OpenSSL encryption with key based authentication baked into the binary.
  *		* Anonymous Diffie-Hellman encryption upon request.
  *		* Ephemeral Diffie-Hellman encryption as default.
  *		* Cert pinning for protection against sinkholes and mitm counter-intrusion.
+ *		* Connection timeout for remote process self-termination.
+ *		* Randomized retry timers for non-predictable auto-reconnection.
  *
  **********************************************************************************************************************/
 
