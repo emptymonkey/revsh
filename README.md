@@ -113,7 +113,7 @@ Remote target host:
 	git clone https://github.com/emptymonkey/revsh.git
 	cd revsh
 	vi config.h        # Set up new defaults that fit your situation.
-	make
+	make               # This *can* take a very long time, though it usually doesn't.
 	make install
 	cd ~/.revsh
 	vi rc              # Add your favorite startup commands to really customize the feel of your remote shell.
