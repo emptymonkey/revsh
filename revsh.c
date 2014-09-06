@@ -155,7 +155,7 @@ int main(int argc, char **argv){
 	struct winsize tty_winsize;
 
 	char tmp_char;
-	unsigned long tmp_ulong;
+	unsigned int tmp_uint;
 
 	struct remote_io_helper io;
 
@@ -198,11 +198,11 @@ int main(int argc, char **argv){
 	int bindshell = 0;
 	int keepalive = 0;
 
-	int timeout = TIMEOUT;
+	unsigned int timeout = TIMEOUT;
 	struct sigaction act;
 
 	char *retry_string = RETRY;
-	unsigned long retry_start, retry_stop, retry;
+	unsigned int retry_start, retry_stop, retry;
 
 	struct timespec req;
 
@@ -524,13 +524,13 @@ int main(int argc, char **argv){
 				// Using RAND_pseudo_bytes() instead of RAND_bytes() because this is a best effort. We don't
 				// actually want to die or print an error if there is a lack of entropy.
 				if(retry_stop){
-					RAND_pseudo_bytes((unsigned char *) &tmp_ulong, sizeof(tmp_ulong));
-					retry = retry_start + (tmp_ulong % (retry_stop - retry_start));
+					RAND_pseudo_bytes((unsigned char *) &tmp_uint, sizeof(tmp_uint));
+					retry = retry_start + (tmp_uint % (retry_stop - retry_start));
 				}else{
 					retry = retry_start;
 				}
 
-				printf("No connection.\nRetrying in %ld seconds...\n", retry);
+				printf("No connection.\nRetrying in %d seconds...\n", retry);
 				req.tv_sec = retry;
 				nanosleep(&req, NULL);
 				printf("Connecting to %s...", buff_head);
@@ -1248,14 +1248,14 @@ int main(int argc, char **argv){
 				// Using RAND_pseudo_bytes() instead of RAND_bytes() because this is a best effort. We don't
 				// actually want to die or print an error if there is a lack of entropy.
 				if(retry_stop){
-					RAND_pseudo_bytes((unsigned char *) &tmp_ulong, sizeof(tmp_ulong));
-					retry = retry_start + (tmp_ulong % (retry_stop - retry_start));
+					RAND_pseudo_bytes((unsigned char *) &tmp_uint, sizeof(tmp_uint));
+					retry = retry_start + (tmp_uint % (retry_stop - retry_start));
 				}else{
 					retry = retry_start;
 				}
 
 #ifdef DEBUG
-				printf("No connection.\r\nRetrying in %ld seconds...\r\n", retry);
+				printf("No connection.\r\nRetrying in %d seconds...\r\n", retry);
 #endif
 				req.tv_sec = retry;
 				nanosleep(&req, NULL);
