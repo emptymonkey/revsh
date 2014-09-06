@@ -199,6 +199,9 @@ int main(int argc, char **argv){
 	char *retry_string = RETRY;
 	int retry_start, retry_stop, retry;
 
+	struct timespec req;
+
+
 	/*
 	 * Basic initialization.
 	 */
@@ -510,6 +513,9 @@ int main(int argc, char **argv){
 				exit(-1);
 			}
 
+			printf("Connecting to %s...", buff_head);
+			fflush(stdout);
+
 			while(((retval = BIO_do_connect(io.connect)) != 1) && retry_start){
 
 				// Using RAND_pseudo_bytes() instead of RAND_bytes() because this is a best effort. We don't
@@ -520,8 +526,12 @@ int main(int argc, char **argv){
 				}else{
 					retry = retry_start;
 				}
-
-				sleep(retry);
+	
+				printf("No connection.\nRetrying in %d seconds...\n", retry);
+				req.tv_sec = retry;
+				nanosleep(&req, NULL);
+				printf("Connecting to %s...", buff_head);
+				fflush(stdout);
 			}
 
 			if(retval != 1){
@@ -1225,6 +1235,11 @@ int main(int argc, char **argv){
 				exit(-1);
 			}
 
+
+#ifdef DEBUG
+			printf("Connecting to %s...", buff_head);
+			fflush(stdout);
+#endif
 			while(((retval = BIO_do_connect(io.connect)) != 1) && retry_start){
 
 				// Using RAND_pseudo_bytes() instead of RAND_bytes() because this is a best effort. We don't
@@ -1236,7 +1251,15 @@ int main(int argc, char **argv){
 					retry = retry_start;
 				}
 
-				sleep(retry);
+#ifdef DEBUG
+				printf("No connection.\r\nRetrying in %d seconds...\r\n", retry);
+#endif
+				req.tv_sec = retry;
+				nanosleep(&req, NULL);
+#ifdef DEBUG
+				printf("Connecting to %s...", buff_head);
+				fflush(stdout);
+#endif
 			}
 
 			if(retval != 1){
@@ -1254,13 +1277,17 @@ int main(int argc, char **argv){
 		if((retval = sigaction(SIGALRM, &act, NULL)) == -1){
 #ifdef DEBUG
 			fprintf(stderr, "%s: %d: sigaction(%d, %lx, %p): %s\r\n", \
-					program_invocation_short_name, io->controller, \
+					program_invocation_short_name, io.controller, \
 					SIGALRM, (unsigned long) &act, NULL, strerror(errno));
 #endif
 			exit(-1);
 		}
 
 		alarm(0);
+
+#ifdef DEBUG
+		printf("\tConnected!\r\n");
+#endif
 
 		if(BIO_get_fd(io.connect, &(io.remote_fd)) < 0){
 #ifdef DEBUG
