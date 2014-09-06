@@ -335,11 +335,6 @@ int main(int argc, char **argv){
 		exit(-1);
 	}
 
-	// XXX DEBUG:
-	RAND_pseudo_bytes((unsigned char *) &tmp_ulong, sizeof(tmp_ulong));
-	retry = retry_start + (tmp_ulong % (retry_stop - retry_start));
-	printf("DEBUG: retry: %ld\n", retry);
-
 	// The joy of a struct with pointers to functions. We only call "io.remote_read()" and the
 	// appropriate crypto / no crypto version is called on the backend.
 	if(io.encryption){
@@ -714,7 +709,7 @@ int main(int argc, char **argv){
 					exit(-1);
 				}
 
-				printf(" Remote fingerprint recieved: ");
+				printf(" Remote fingerprint received: ");
 				for(i = 0; i < (int) remote_fingerprint_len; i++){
 					printf("%02x", remote_fingerprint[i]);
 				}
