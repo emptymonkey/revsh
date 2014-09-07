@@ -38,6 +38,7 @@ _revsh_ is intended as a supplementary tool for a [pentester's](http://en.wikipe
 
 _revsh_ was developed on x86_64 Linux. Here is a brief list of Arch / OS combinations that it has been used on:
  * x86_64 Linux
+ * i686 Linux
 
 (If you have successfully used revsh on another platform, drop me a line and I'll add it to the list.)
 
