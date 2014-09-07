@@ -89,7 +89,7 @@ We will now find a shell waiting for us back at the control host:
 	
 	################################
 	# hostname: kitty
-	# ip address: 192.168.0.42
+	# ip address: 192.168.0.123
 	# real user: target
 	# effective user: target
 	################################
