@@ -21,9 +21,9 @@
 #define DEFAULT_ENV	"TERM LANG"
 
 // Default locations of important things.
-#define REVSH_DIR ".revsh"
-#define RC_FILE "rc"
-#define KEYS_DIR "keys"
+#define REVSH_DIR "~/.revsh/"
+#define RC_FILE	REVSH_DIR "rc"
+#define KEYS_DIR REVSH_DIR "keys/"
 
 // Cipher definitions.
 #define ADH_CIPHER "ADH-AES256-SHA"

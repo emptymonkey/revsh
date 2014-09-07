@@ -77,7 +77,7 @@ revsh: revsh.c remote_io_helper.h common.h config.h $(OBJS)
 			sed 's/\(..\)/\1\n/g' | \
 			wc -l | \
 			xargs echo -n >>$(KEYS_DIR)/target_key.c) && \
-		(echo ']={') >>$(KEYS_DIR)/target_key.c && \
+		(echo ']={' >>$(KEYS_DIR)/target_key.c) && \
 		(cat $(KEYS_DIR)/target_key.pem | \
 			grep -v '^-----BEGIN RSA PRIVATE KEY-----$$' | \
 			grep -v '^-----END RSA PRIVATE KEY-----$$' | \

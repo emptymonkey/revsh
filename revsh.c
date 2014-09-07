@@ -54,8 +54,8 @@ void usage(){
 	fprintf(stderr, "\n\t-c\t\tRun in controller mode.\t\t\t\t(Default is target mode.)\n");
 	fprintf(stderr, "\t-a\t\tEnable Anonymous Diffie-Hellman mode.\t\t(Default is \"%s\".)\n", CONTROLLER_CIPHER);
 	fprintf(stderr, "\t-s SHELL\tInvoke SHELL as the remote shell.\t\t(Default is \"%s\".)\n", DEFAULT_SHELL);
-	fprintf(stderr, "\t-d KEYS_DIR\tReference the keys in an alternate directory.\t(Default is \"%s/%s/\".)\n", REVSH_DIR, KEYS_DIR);
-	fprintf(stderr, "\t-f RC_FILE\tReference an alternate rc file.\t\t\t(Default is \"%s/%s\".)\n", REVSH_DIR, RC_FILE);
+	fprintf(stderr, "\t-d KEYS_DIR\tReference the keys in an alternate directory.\t(Default is \"%s\".)\n", KEYS_DIR);
+	fprintf(stderr, "\t-f RC_FILE\tReference an alternate rc file.\t\t\t(Default is \"%s\".)\n", RC_FILE);
 	fprintf(stderr, "\t-t SEC\t\tSet the connection timeout to SEC seconds.\t(Default is \"%d\".)\n", TIMEOUT);
 	fprintf(stderr, "\t-r SEC1,SEC2\tSet the retry time to be SEC1 seconds, or\t(Default is \"%s\".)\n\t\t\tto be random in the range from SEC1 to SEC2.\n", RETRY);
 	fprintf(stderr, "\t-b\t\tStart in bind shell mode.\t\t\t(Default is reverse shell mode.)\n");
@@ -135,7 +135,6 @@ int main(int argc, char **argv){
 
 	int opt;
 	char *shell = NULL;
-	char *keys_dir = NULL;
 	char *env_string = NULL;
 
 	char *pty_name;
@@ -191,9 +190,9 @@ int main(int argc, char **argv){
 
 	SSL_CIPHER *current_cipher;
 
-	char *rc_path_head, *rc_path_tail;
 	int rc_fd;
-	char *rc_file = NULL;
+	char *rc_file = RC_FILE;
+	char *keys_dir = KEYS_DIR;
 
 	int bindshell = 0;
 	int keepalive = 0;
@@ -206,6 +205,8 @@ int main(int argc, char **argv){
 
 	struct timespec req;
 
+	wordexp_t rc_file_exp;
+	wordexp_t keys_dir_exp;
 
 	/*
 	 * Basic initialization.
@@ -213,6 +214,7 @@ int main(int argc, char **argv){
 
 	io.controller = 0;
 	io.encryption = EDH;
+
 
 	while((opt = getopt(argc, argv, "pbkacs:d:f:r:ht:")) != -1){
 		switch(opt){
@@ -356,6 +358,37 @@ int main(int argc, char **argv){
 	}
 
 
+	if(wordexp(rc_file, &rc_file_exp, 0)){
+		fprintf(stderr, "%s: %d: wordexp(%s, %lx, 0): %s\r\n", \
+				program_invocation_short_name, io.controller, \
+				rc_file, (unsigned long)  &rc_file_exp, \
+				strerror(errno));
+		exit(-1);	
+	}
+
+	if(rc_file_exp.we_wordc != 1){
+		fprintf(stderr, "%s: %d: Invalid path: %s\r\n", \
+				program_invocation_short_name, io.controller, \
+				rc_file);
+		exit(-1);
+	}
+
+	if(wordexp(keys_dir, &keys_dir_exp, 0)){
+		fprintf(stderr, "%s: %d: wordexp(%s, %lx, 0): %s\r\n", \
+				program_invocation_short_name, io.controller, \
+				keys_dir, (unsigned long)  &keys_dir_exp, \
+				strerror(errno));
+		exit(-1);	
+	}
+
+	if(keys_dir_exp.we_wordc != 1){
+		fprintf(stderr, "%s: %d: Invalid path: %s\r\n", \
+				program_invocation_short_name, io.controller, \
+				keys_dir);
+		exit(-1);
+	}
+
+
 	/*
 	 * Controller:
 	 * - Open a socket / setup SSL.
@@ -380,18 +413,7 @@ int main(int argc, char **argv){
 				exit(-1);
 			}
 
-			if(!keys_dir){
-				memcpy(controller_cert_path_head, getenv("HOME"), strnlen(getenv("HOME"), PATH_MAX));
-
-				controller_cert_path_tail = index(controller_cert_path_head, '\0');
-				*(controller_cert_path_tail++) = '/';
-				sprintf(controller_cert_path_tail, REVSH_DIR);
-				controller_cert_path_tail = index(controller_cert_path_head, '\0');
-				*(controller_cert_path_tail++) = '/';
-				sprintf(controller_cert_path_tail, KEYS_DIR);
-			}else{
-				memcpy(controller_cert_path_head, keys_dir, strnlen(keys_dir, PATH_MAX));
-			}
+			memcpy(controller_cert_path_head, keys_dir_exp.we_wordv[0], strnlen(keys_dir_exp.we_wordv[0], PATH_MAX));
 			controller_cert_path_tail = index(controller_cert_path_head, '\0');
 			*(controller_cert_path_tail++) = '/';
 			sprintf(controller_cert_path_tail, CONTROLLER_CERT_FILE);
@@ -410,18 +432,7 @@ int main(int argc, char **argv){
 				exit(-1);
 			}
 
-			if(!keys_dir){
-				memcpy(controller_key_path_head, getenv("HOME"), strnlen(getenv("HOME"), PATH_MAX));
-
-				controller_key_path_tail = index(controller_key_path_head, '\0');
-				*(controller_key_path_tail++) = '/';
-				sprintf(controller_key_path_tail, REVSH_DIR);
-				controller_key_path_tail = index(controller_key_path_head, '\0');
-				*(controller_key_path_tail++) = '/';
-				sprintf(controller_key_path_tail, KEYS_DIR);
-			}else{
-				memcpy(controller_key_path_head, keys_dir, strnlen(keys_dir, PATH_MAX));
-			}
+			memcpy(controller_key_path_head, keys_dir_exp.we_wordv[0], strnlen(keys_dir_exp.we_wordv[0], PATH_MAX));
 			controller_key_path_tail = index(controller_key_path_head, '\0');
 			*(controller_key_path_tail++) = '/';
 			sprintf(controller_key_path_tail, CONTROLLER_KEY_FILE);
@@ -632,18 +643,7 @@ int main(int argc, char **argv){
 					exit(-1);
 				}
 
-				if(!keys_dir){
-					memcpy(allowed_cert_path_head, getenv("HOME"), strnlen(getenv("HOME"), PATH_MAX));
-
-					allowed_cert_path_tail = index(allowed_cert_path_head, '\0');
-					*(allowed_cert_path_tail++) = '/';
-					sprintf(allowed_cert_path_tail, REVSH_DIR);
-					allowed_cert_path_tail = index(allowed_cert_path_head, '\0');
-					*(allowed_cert_path_tail++) = '/';
-					sprintf(allowed_cert_path_tail, KEYS_DIR);
-				}else{
-					memcpy(allowed_cert_path_head, keys_dir, strnlen(keys_dir, PATH_MAX));
-				}
+				memcpy(allowed_cert_path_head, keys_dir_exp.we_wordv[0], strnlen(keys_dir_exp.we_wordv[0], PATH_MAX));
 				allowed_cert_path_tail = index(allowed_cert_path_head, '\0');
 				*(allowed_cert_path_tail++) = '/';
 				sprintf(allowed_cert_path_tail, TARGET_CERT_FILE);
@@ -915,33 +915,8 @@ int main(int argc, char **argv){
 		io.local_fd = STDIN_FILENO;
 
 		// - Send the commands in the rc file.
-		if((rc_path_head = (char *) calloc(PATH_MAX, sizeof(char))) == NULL){
-			print_error(&io, "%s: %d: calloc(%d, %d): %s\r\n", \
-					program_invocation_short_name, io.controller, PATH_MAX, (int) sizeof(char), \
-					strerror(errno));
-			exit(-1);
-		}
 
-		if(rc_file){
-			memcpy(rc_path_head, rc_file, strlen(rc_file));
-		}else{
-			memcpy(rc_path_head, getenv("HOME"), strnlen(getenv("HOME"), PATH_MAX));
-
-			rc_path_tail = index(rc_path_head, '\0');
-			*(rc_path_tail++) = '/';
-			sprintf(rc_path_tail, REVSH_DIR);
-			rc_path_tail = index(rc_path_head, '\0');
-			*(rc_path_tail++) = '/';
-			sprintf(rc_path_tail, RC_FILE);
-
-			if((rc_path_head - rc_path_tail) > PATH_MAX){
-				print_error(&io, "%s: %d: rc file: path too long!\n",
-						program_invocation_short_name, io.controller);
-				exit(-1);
-			}
-		}
-
-		if((rc_fd = open(rc_path_head, O_RDONLY)) != -1){
+		if((rc_fd = open(rc_file_exp.we_wordv[0], O_RDONLY)) != -1){
 
 			buff_tail = buff_head;
 			buff_ptr = buff_head;
@@ -966,7 +941,6 @@ int main(int argc, char **argv){
 				}
 			}
 
-			free(rc_path_head);
 			close(rc_fd);
 		}
 
