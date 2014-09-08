@@ -8,6 +8,7 @@
 #include <errno.h>
 #include <error.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <netdb.h>
 #include <pwd.h>
 #include <signal.h>
@@ -20,7 +21,6 @@
 
 #include <arpa/inet.h>
 
-#include <linux/limits.h>
 
 #include <openssl/bio.h>
 #include <openssl/err.h>
