@@ -10,8 +10,7 @@
 // Default address, so you can bake in your own C2.
 #define ADDRESS "127.0.0.1:9999"
 
-// I had this as "/bin/sh". However, hacker's don't care for all that backward compatability shit.
-// They just want it to work with as little fuss as possible.
+// Default shell.
 #define DEFAULT_SHELL	"/bin/bash"
 
 // These two environement variables are important enough for allowing the tool to provide a sane

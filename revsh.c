@@ -84,7 +84,7 @@ void usage(){
  *
  * Purpose: This dummy function does nothing of interest, but satisfies openssl that a verify_callback function does 
  *	exist. The net effect of a dummy verify_callback function like this is that you can use self signed certs without
- *	any errors. As this tool is for dirty hackers, we won't ever be using a cert that isn't self signed.
+ *	any errors.
  *
  **********************************************************************************************************************/
 int dummy_verify_callback(int preverify_ok, X509_STORE_CTX* ctx) {
