@@ -27,7 +27,7 @@ In addition, _revsh_ also offers the following features:
  * Processes [rc file](http://en.wikipedia.org/wiki/Run_commands) commands upon login for easy scripting.
  * [OpenSSL](https://www.openssl.org/) encryption with key based authentication baked into the binary.
  * Anonymous [Diffie-Hellman](http://en.wikipedia.org/wiki/Diffie%E2%80%93Hellman_key_exchange) encryption upon request.
- * Ephemeral Diffie-Hellman encryption as default. (Now with more Perfect Forward Secrecy!)
+ * Ephemeral Diffie-Hellman encryption as default. (Now with more [Perfect Forward Secrecy](http://en.wikipedia.org/wiki/Forward_secrecy)!)
  * [Cert pinning](http://en.wikipedia.org/wiki/Transport_Layer_Security#Certificate_pinning) for protection against [sinkholes](http://en.wikipedia.org/wiki/DNS_sinkhole) and [mitm](http://en.wikipedia.org/wiki/Man-in-the-middle_attack) counter-intrusion.
  * Connection timeout for remote process self-termination.
  * Randomized retry timers for non-predictable auto-reconnection.
