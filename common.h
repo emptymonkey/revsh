@@ -1,7 +1,8 @@
 
 //#define DEBUG
 
-#define _GNU_SOURCE
+#define _POSIX_C_SOURCE	200112L
+#define _BSD_SOURCE
 #define _XOPEN_SOURCE
 
 #include <ctype.h>
@@ -15,7 +16,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <termios.h>
+#include <time.h>
 #include <unistd.h>
 #include <wordexp.h>
 
@@ -65,6 +68,11 @@
 #define PLAINTEXT 0
 #define ADH 1
 #define EDH 2
+
+
+
+// We will set this up ourselves for portability.
+char *program_invocation_short_name;
 
 
 char **string_to_vector(char *command_string);

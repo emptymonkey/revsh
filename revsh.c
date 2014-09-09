@@ -212,6 +212,11 @@ int main(int argc, char **argv){
 	 * Basic initialization.
 	 */
 
+	// Normally I would use the Gnu version. However, this tool needs to be more portable.
+	// Keeping the naming scheme, but setting it up myself.
+	program_invocation_short_name = strrchr(argv[0], '/');
+	program_invocation_short_name++;
+
 	io.controller = 0;
 	io.encryption = EDH;
 
@@ -413,7 +418,7 @@ int main(int argc, char **argv){
 				exit(-1);
 			}
 
-			memcpy(controller_cert_path_head, keys_dir_exp.we_wordv[0], strnlen(keys_dir_exp.we_wordv[0], PATH_MAX));
+			memcpy(controller_cert_path_head, keys_dir_exp.we_wordv[0], strlen(keys_dir_exp.we_wordv[0]));
 			controller_cert_path_tail = index(controller_cert_path_head, '\0');
 			*(controller_cert_path_tail++) = '/';
 			sprintf(controller_cert_path_tail, CONTROLLER_CERT_FILE);
@@ -432,7 +437,7 @@ int main(int argc, char **argv){
 				exit(-1);
 			}
 
-			memcpy(controller_key_path_head, keys_dir_exp.we_wordv[0], strnlen(keys_dir_exp.we_wordv[0], PATH_MAX));
+			memcpy(controller_key_path_head, keys_dir_exp.we_wordv[0], strlen(keys_dir_exp.we_wordv[0]));
 			controller_key_path_tail = index(controller_key_path_head, '\0');
 			*(controller_key_path_tail++) = '/';
 			sprintf(controller_key_path_tail, CONTROLLER_KEY_FILE);
@@ -643,7 +648,7 @@ int main(int argc, char **argv){
 					exit(-1);
 				}
 
-				memcpy(allowed_cert_path_head, keys_dir_exp.we_wordv[0], strnlen(keys_dir_exp.we_wordv[0], PATH_MAX));
+				memcpy(allowed_cert_path_head, keys_dir_exp.we_wordv[0], strlen(keys_dir_exp.we_wordv[0]));
 				allowed_cert_path_tail = index(allowed_cert_path_head, '\0');
 				*(allowed_cert_path_tail++) = '/';
 				sprintf(allowed_cert_path_tail, TARGET_CERT_FILE);
