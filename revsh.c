@@ -1677,7 +1677,7 @@ int main(int argc, char **argv){
 
 			retval = broker(&io);
 
-			if((retval == -1)){
+			if(retval == -1){
 				print_error(&io, "%s: %d: broker(%lx): %s\r\n", \
 						program_invocation_short_name, io.controller, \
 						(unsigned long) &io, strerror(errno));
