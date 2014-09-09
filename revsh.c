@@ -307,7 +307,11 @@ int main(int argc, char **argv){
 
 	buff_len = getpagesize();
 	if((buff_head = (char *) calloc(buff_len, sizeof(char))) == NULL){
-		error(-1, errno, "calloc(%d, %d)", buff_len, (int) sizeof(char));
+    fprintf(stderr, "%s: %d: calloc(%d, %d): %s\r\n", \
+        program_invocation_short_name, io.controller, \
+				buff_len, (int) sizeof(char), \
+				strerror(errno));
+    exit(-1);
 	}
 
 	if((argc - optind) == 1){
@@ -1021,17 +1025,17 @@ int main(int argc, char **argv){
 
 
 		if(retval == -1){
-			error(-1, errno, "fork()");
+			exit(-1);
 		}else if(retval){
 			exit(0);
 		}
 
 		if((retval = setsid()) == -1){
-			error(-1, errno, "setsid()");
+			exit(-1);
 		}
 
 		if((retval = chdir("/")) == -1){
-			error(-1, errno, "chdir(\"/\")");
+			exit(-1);
 		}
 
 #endif
