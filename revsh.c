@@ -208,6 +208,10 @@ int main(int argc, char **argv){
 	wordexp_t rc_file_exp;
 	wordexp_t keys_dir_exp;
 
+	struct sockaddr addr;
+	socklen_t addrlen = (socklen_t) sizeof(addr);
+
+
 	/*
 	 * Basic initialization.
 	 */
@@ -743,6 +747,7 @@ int main(int argc, char **argv){
 				}
 			}
 		}
+
 
 		printf("Initializing...");
 
@@ -1597,6 +1602,20 @@ int main(int argc, char **argv){
 
 		remote_printf(&io, "################################\r\n");
 		remote_printf(&io, "# hostname: %s\r\n", buff_head);
+
+
+		remote_printf(&io, "# ip address: ");
+    if((retval = getsockname(io.remote_fd, &addr, &addrlen)) != -1){
+			memset(buff_head, 0, buff_len);
+			if(inet_ntop(addr.sa_family, addr.sa_data + 2, buff_head, buff_len - 1)){
+				remote_printf(&io, "%s", buff_head);
+			}
+		}
+
+		if(!buff_head[0]){
+			remote_printf(&io, "I have no address!");
+		}
+		remote_printf(&io, "\r\n");
 
 		// if the uid doesn't match an entry in /etc/passwd, we don't want to crash.
 		// Borrowed the "I have no name!" convention from bash.
