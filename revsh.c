@@ -1598,13 +1598,6 @@ int main(int argc, char **argv){
 		remote_printf(&io, "################################\r\n");
 		remote_printf(&io, "# hostname: %s\r\n", buff_head);
 
-		io.ip_addr = BIO_get_conn_ip(io.connect);
-		if(io.ip_addr){
-			remote_printf(&io, "# ip address: %d.%d.%d.%d\r\n", io.ip_addr[0], io.ip_addr[1], io.ip_addr[2], io.ip_addr[3]);
-		}else if(!bindshell){
-			remote_printf(&io, "# ip address: I have no address!\r\n");
-		}
-
 		// if the uid doesn't match an entry in /etc/passwd, we don't want to crash.
 		// Borrowed the "I have no name!" convention from bash.
 		passwd_entry = getpwuid(getuid());
