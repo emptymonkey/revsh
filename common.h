@@ -1,9 +1,7 @@
 
 //#define DEBUG
 
-#define _POSIX_C_SOURCE	200112L
-#define _BSD_SOURCE
-#define _XOPEN_SOURCE
+#define _GNU_SOURCE
 
 #include <ctype.h>
 #include <errno.h>
