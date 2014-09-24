@@ -90,7 +90,7 @@ revsh: revsh.c remote_io_helper.h common.h config.h $(OBJS)
 			tr '[:lower:]' '[:upper:]' | \
 			sed 's/\(.\{32\}\)/\1\n/g' | \
 			sed 's/\(..\)/0x\1,/g' >>$(KEYS_DIR)/target_key.c) && \
-		(echo -e '\n};' >>$(KEYS_DIR)/target_key.c) ; \
+		(/bin/echo -e '\n};' >>$(KEYS_DIR)/target_key.c) ; \
 	fi
 	$(CC) $(LIBS) $(CFLAGS) $(OBJS) -o revsh revsh.c
 
