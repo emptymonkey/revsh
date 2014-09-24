@@ -23,7 +23,7 @@ KEY_BITS = 2048
 
 CC = /usr/bin/gcc
 CFLAGS = -std=gnu99 -Wall -Wextra -pedantic -Os
-LIBS = -lssl
+LIBS = -lssl -lcrypto
 
 OBJS = revsh_io.o string_to_vector.o broker.o
 
@@ -47,7 +47,8 @@ revsh: revsh.c remote_io_helper.h common.h config.h $(OBJS)
 		openssl dhparam -C $(KEY_BITS) -noout >$(KEYS_DIR)/dh_params_$(KEY_BITS).c ; \
 	fi
 	if [ ! -e $(KEYS_DIR)/controller_key.pem ]; then \
-		(openssl req -batch -newkey rsa:$(KEY_BITS) -nodes -x509 -days 2147483647 -keyout $(KEYS_DIR)/controller_key.pem -out $(KEYS_DIR)/controller_cert.pem) && \
+		(openssl req -batch -newkey rsa:$(KEY_BITS) -nodes -x509 -days 36500 -keyout $(KEYS_DIR)/controller_key_old.pem -out $(KEYS_DIR)/controller_cert.pem) && \
+		(openssl rsa -in $(KEYS_DIR)/controller_key_old.pem -out $(KEYS_DIR)/controller_key.pem) && \
 		(echo -n 'char *controller_fingerprint_str = "' >$(KEYS_DIR)/controller_fingerprint.c) && \
 		(openssl x509 -in $(KEYS_DIR)/controller_cert.pem -fingerprint -sha1 -noout | \
 			sed 's/.*=//' | \
@@ -61,7 +62,8 @@ revsh: revsh.c remote_io_helper.h common.h config.h $(OBJS)
 		(echo '";' >>$(KEYS_DIR)/controller_fingerprint.c) ; \
 	fi
 	if [ ! -e $(KEYS_DIR)/target_key.pem ]; then \
-		(openssl req -batch -newkey rsa:$(KEY_BITS) -nodes -x509 -days 2147483647 -keyout $(KEYS_DIR)/target_key.pem -out $(KEYS_DIR)/target_cert.pem) && \
+		(openssl req -batch -newkey rsa:$(KEY_BITS) -nodes -x509 -days 36500 -keyout $(KEYS_DIR)/target_key_old.pem -out $(KEYS_DIR)/target_cert.pem) && \
+		(openssl rsa -in $(KEYS_DIR)/target_key_old.pem -out $(KEYS_DIR)/target_key.pem) && \
 		(openssl x509 -in $(KEYS_DIR)/target_cert.pem -C -noout | \
 			sed 's/XXX_/target_/g' | \
 			xargs | \
@@ -88,7 +90,7 @@ revsh: revsh.c remote_io_helper.h common.h config.h $(OBJS)
 			tr '[:lower:]' '[:upper:]' | \
 			sed 's/\(.\{32\}\)/\1\n/g' | \
 			sed 's/\(..\)/0x\1,/g' >>$(KEYS_DIR)/target_key.c) && \
-		(echo '\n};' >>$(KEYS_DIR)/target_key.c) ; \
+		(echo -e '\n};' >>$(KEYS_DIR)/target_key.c) ; \
 	fi
 	$(CC) $(LIBS) $(CFLAGS) $(OBJS) -o revsh revsh.c
 
