@@ -806,6 +806,7 @@ int main(int argc, char **argv){
 
 		free(env_string);
 
+		memset(buff_head, 0, buff_len);
 		buff_tail = buff_head;
 		*(buff_tail++) = (char) APC;
 
