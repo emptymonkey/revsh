@@ -2,7 +2,7 @@
 #include "common.h"
 
 
-// The plaintext case for I/O is really easy. Call the openssl BIO_* functions and return.
+/* The plaintext case for I/O is really easy. Call the openssl BIO_* functions and return. */
 
 /***********************************************************************************************************************
  *
@@ -59,7 +59,7 @@ int remote_read_encrypted(struct remote_io_helper *io, void *buff, size_t count)
 
 	do{
 
-		// We've already been through the loop once, but now we need to wait for the socket to be ready.
+		/* We've already been through the loop once, but now we need to wait for the socket to be ready. */
 		if(ssl_error != SSL_ERROR_NONE){
 			FD_ZERO(&fd_select);
 			FD_SET(io->remote_fd, &fd_select);
@@ -131,7 +131,7 @@ int remote_write_encrypted(struct remote_io_helper *io, void *buff, size_t count
 
 	do{
 
-		// We've already been through the loop once, but now we need to wait for the socket to be ready.
+		/* We've already been through the loop once, but now we need to wait for the socket to be ready. */
 		if(ssl_error != SSL_ERROR_NONE){
 			FD_ZERO(&fd_select);
 			FD_SET(io->remote_fd, &fd_select);

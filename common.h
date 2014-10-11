@@ -1,7 +1,9 @@
 
-//#define DEBUG
 
-#define _GNU_SOURCE
+#define _POSIX_C_SOURCE 199309L
+#define _BSD_SOURCE
+#define _XOPEN_SOURCE 500
+
 
 #include <ctype.h>
 #include <errno.h>
@@ -41,34 +43,36 @@
 #define CONTROLLER_CERT_FILE "controller_cert.pem"
 #define CONTROLLER_KEY_FILE "controller_key.pem"
 
-// No good reason for 1024. Pick your favorite power of two.
+/* No good reason for 1024. Pick your favorite power of two. */
 #define BUFFER_SIZE 1024
 
-// These define the actual values to be used for controlling the in-band signalling.
+/* These define the actual values to be used for controlling the in-band signalling. */
 #define UTF8_HIGH 0xc2
 #define APC 0x9f
 #define ST  0x9c
 
-// This should only need to be 16 chars long.
-// 4 control chars + 1 space + (2 * string length of winsize members).
-// winsize members are unsigned shorts on my dev platform.
-// There are four members total in a winsize object, but the second two are ignored.
+/*
+	 This should only need to be 16 chars long.
+	 4 control chars + 1 space + (2 * string length of winsize members).
+	 winsize members are unsigned shorts on my dev platform.
+	 There are four members total in a winsize object, but the second two are ignored.
+ */
 #define WINSIZE_BUFF_LEN  16
 
-// State definitions.
+/* State definitions. */
 #define NO_EVENT        0
 #define APC_HIGH_FOUND  1
 #define DATA_FOUND      2
 #define ST_HIGH_FOUND   3
 
-// Encryption definitions.
+/* Encryption definitions. */
 #define PLAINTEXT 0
 #define ADH 1
 #define EDH 2
 
 
 
-// We will set this up ourselves for portability.
+/* We will set this up ourselves for portability. */
 char *program_invocation_short_name;
 
 
