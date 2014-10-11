@@ -21,8 +21,7 @@
 
 KEY_BITS = 2048
 
-CC = /usr/bin/gcc
-#CFLAGS = -std=gnu99 -Wall -Wextra -pedantic -Os
+CC = /usr/bin/cc
 CFLAGS = -Wall -Wextra -std=c99 -pedantic -Os
 LIBS = -lssl -lcrypto
 
