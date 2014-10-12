@@ -1,4 +1,5 @@
 
+/* #define DEBUG */
 
 #define _POSIX_C_SOURCE 199309L
 #define _BSD_SOURCE

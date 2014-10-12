@@ -35,7 +35,7 @@
 
 
 #include "common.h"
-#include "keys/dh_params_2048.c"
+#include "keys/dh_params.c"
 
 
 
@@ -176,10 +176,10 @@ int main(int argc, char **argv){
 	char *cipher_list = NULL;
 
 #include "keys/target_key.c"
-	int target_private_key_len = sizeof(target_private_key);
+	int target_key_len = sizeof(target_key);
 
 #include "keys/target_cert.c"
-	int target_certificate_len = sizeof(target_certificate);
+	int target_cert_len = sizeof(target_cert);
 
 	char *controller_cert_path_head = NULL, *controller_cert_path_tail = NULL;
 	char *controller_key_path_head = NULL, *controller_key_path_tail = NULL;
@@ -479,8 +479,8 @@ int main(int argc, char **argv){
 				exit(-1);
 			}
 
-			if((io.dh = get_dh2048()) == NULL){
-				fprintf(stderr, "%s: %d: get_dh2048(): %s\n", \
+			if((io.dh = get_dh()) == NULL){
+				fprintf(stderr, "%s: %d: get_dh(): %s\n", \
 						program_invocation_short_name, io.controller, strerror(errno));
 				ERR_print_errors_fp(stderr);
 				exit(-1);
@@ -1089,19 +1089,19 @@ int main(int argc, char **argv){
 
 			SSL_CTX_set_verify(io.ctx, SSL_VERIFY_PEER, dummy_verify_callback);
 
-			if((retval = SSL_CTX_use_certificate_ASN1(io.ctx, target_certificate_len, target_certificate)) != 1){
+			if((retval = SSL_CTX_use_certificate_ASN1(io.ctx, target_cert_len, target_cert)) != 1){
 #ifdef DEBUG
 				fprintf(stderr, "%s: %d: SSL_CTX_use_certificate_ASN1(%lx, %d, %lx): %s\n", \
-						program_invocation_short_name, io.controller, (unsigned long) io.ctx, target_certificate_len, (unsigned long) target_certificate, strerror(errno));
+						program_invocation_short_name, io.controller, (unsigned long) io.ctx, target_cert_len, (unsigned long) target_cert, strerror(errno));
 				ERR_print_errors_fp(stderr);
 #endif
 				exit(-1);
 			}
 
-			if((retval = SSL_CTX_use_RSAPrivateKey_ASN1(io.ctx, target_private_key, target_private_key_len)) != 1){
+			if((retval = SSL_CTX_use_RSAPrivateKey_ASN1(io.ctx, target_key, target_key_len)) != 1){
 #ifdef DEBUG
 				fprintf(stderr, "%s: %d: SSL_CTX_use_RSAPrivateKey_ASN1(%lx, %lx, %d): %s\n", \
-						program_invocation_short_name, io.controller, (unsigned long) io.ctx, (unsigned long) target_private_key, target_private_key_len, strerror(errno));
+						program_invocation_short_name, io.controller, (unsigned long) io.ctx, (unsigned long) target_key, target_key_len, strerror(errno));
 				ERR_print_errors_fp(stderr);
 #endif
 				exit(-1);
@@ -1358,10 +1358,10 @@ int main(int argc, char **argv){
 					exit(-1);
 				}
 
-				if((remote_fingerprint_str = (char *) calloc(strlen(controller_fingerprint_str) + 1, sizeof(char))) == NULL){
+				if((remote_fingerprint_str = (char *) calloc(strlen(controller_cert_fingerprint) + 1, sizeof(char))) == NULL){
 #ifdef DEBUG
 					fprintf(stderr, "%s: %d: calloc(%d, %d): %s\r\n", \
-							program_invocation_short_name, io.controller, (int) strlen(controller_fingerprint_str) + 1, (int) sizeof(char), \
+							program_invocation_short_name, io.controller, (int) strlen(controller_cert_fingerprint) + 1, (int) sizeof(char), \
 							strerror(errno));
 #endif
 					exit(-1);
@@ -1371,9 +1371,9 @@ int main(int argc, char **argv){
 					sprintf(remote_fingerprint_str + (i * 2), "%02x", remote_fingerprint[i]);
 				}
 
-				if(strncmp(controller_fingerprint_str, remote_fingerprint_str, strlen(controller_fingerprint_str))){
+				if(strncmp(controller_cert_fingerprint, remote_fingerprint_str, strlen(controller_cert_fingerprint))){
 #ifdef DEBUG
-					fprintf(stderr, "Remote fingerprint expected:\n\t%s\n", controller_fingerprint_str);
+					fprintf(stderr, "Remote fingerprint expected:\n\t%s\n", controller_cert_fingerprint);
 					fprintf(stderr, "Remote fingerprint received:\n\t%s\n", remote_fingerprint_str);
 					fprintf(stderr, "%s: %d: Fingerprint mistmatch. Possible mitm. Aborting!\n", \
 							program_invocation_short_name, io.controller);
