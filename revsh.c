@@ -39,6 +39,11 @@
 
 
 
+
+char *CALLING_CARD = "@emptymonkey - https://github.com/emptymonkey";
+
+
+
 /* 
 	 The man page for POSIX_OPENPT(3) states that for code that runs on older systems, you can define this yourself
 	 easily.
