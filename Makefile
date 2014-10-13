@@ -4,7 +4,10 @@ KEY_BITS = 2048
 OPENSSL = /usr/bin/openssl
 
 CC = /usr/bin/cc
+
+#CFLAGS = -Wall -Wextra -std=c99 -pedantic -Os -DFREEBSD
 CFLAGS = -Wall -Wextra -std=c99 -pedantic -Os
+
 LIBS = -lssl -lcrypto
 
 OBJS = revsh_io.o string_to_vector.o broker.o

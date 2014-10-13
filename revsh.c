@@ -43,9 +43,11 @@
 	 The man page for POSIX_OPENPT(3) states that for code that runs on older systems, you can define this yourself
 	 easily.
  */
+#ifndef FREEBSD
 int posix_openpt(int flags){
 	return open("/dev/ptmx", flags);
 }
+#endif /* FREEBSD */
 
 
 
@@ -199,7 +201,7 @@ int main(int argc, char **argv){
 
 	char *allowed_cert_path_head, *allowed_cert_path_tail;
 
-	SSL_CIPHER *current_cipher;
+	const SSL_CIPHER *current_cipher;
 
 	int rc_fd;
 	char *rc_file = RC_FILE;
