@@ -574,6 +574,7 @@ int main(int argc, char **argv){
 
 				printf("No connection.\nRetrying in %d seconds...\n", retry);
 				req.tv_sec = retry;
+				req.tv_nsec = 0;
 				nanosleep(&req, NULL);
 				printf("Connecting to %s...", buff_head);
 				fflush(stdout);
@@ -1265,6 +1266,7 @@ int main(int argc, char **argv){
 				printf("No connection.\r\nRetrying in %d seconds...\r\n", retry);
 #endif
 				req.tv_sec = retry;
+				req.tv_nsec = 0;
 				nanosleep(&req, NULL);
 #ifdef DEBUG
 				printf("Connecting to %s...", buff_head);
