@@ -5,10 +5,18 @@ OPENSSL = /usr/bin/openssl
 
 CC = /usr/bin/cc
 
-#CFLAGS = -Wall -Wextra -std=c99 -pedantic -Os -DFREEBSD
+# Build normal.
 CFLAGS = -Wall -Wextra -std=c99 -pedantic -Os
-
 LIBS = -lssl -lcrypto
+
+# Build FreeBSD
+#CFLAGS = -Wall -Wextra -std=c99 -pedantic -Os -DFREEBSD
+
+# Build "static". 
+# OpenSSL will be static, but it will still call some shared libs on the backend.
+# Also, the binary will be large. I recommend against this option unless necessary.
+#CFLAGS = -static -Wall -Wextra -std=c99 -pedantic -Os
+#LIBS = -lssl -lcrypto -ldl -lz
 
 OBJS = revsh_io.o string_to_vector.o broker.o
 
@@ -40,10 +48,10 @@ revsh: revsh.c remote_io_helper.h common.h config.h $(OBJS) in_the_key_of_c
 	if [ ! -e $(KEYS_DIR)/target_cert.c ]; then \
 		./in_the_key_of_c -c $(KEYS_DIR)/target_cert.pem >$(KEYS_DIR)/target_cert.c ; \
 	fi
-	$(CC) $(LIBS) $(CFLAGS) $(OBJS) -o revsh revsh.c
+	$(CC) $(CFLAGS) $(OBJS) -o revsh revsh.c $(LIBS)
 
 revsh_io: revsh_io.c remote_io_helper.h common.h config.h
-	$(CC) $(LIBS) $(CFLAGS) -c -o revsh_io.o revsh_io.c
+	$(CC) $(CFLAGS) -c -o revsh_io.o revsh_io.c
 
 string_to_vector: string_to_vector.c string_to_vector.h common.h config.h
 	$(CC) $(CFLAGS) -c -o string_to_vector.o string_to_vector.c
@@ -52,7 +60,7 @@ broker: broker.c common.h config.h
 	$(CC) $(CFLAGS) -c -o broker.o broker.c
 
 in_the_key_of_c: in_the_key_of_c.c
-	$(CC) $(LIBS) $(CFLAGS) -o in_the_key_of_c in_the_key_of_c.c
+	$(CC) $(CFLAGS) -o in_the_key_of_c in_the_key_of_c.c $(LIBS)
 
 
 install:
