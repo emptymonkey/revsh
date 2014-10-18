@@ -31,6 +31,7 @@ In addition, _revsh_ also offers the following features:
  * [Cert pinning](http://en.wikipedia.org/wiki/Transport_Layer_Security#Certificate_pinning) for protection against [sinkholes](http://en.wikipedia.org/wiki/DNS_sinkhole) and [mitm](http://en.wikipedia.org/wiki/Man-in-the-middle_attack) counter-intrusion.
  * Connection timeout for remote process self-termination.
  * Randomized retry timers for non-predictable auto-reconnection.
+ * Netcat style non-interactive data brokering for file transfer.
 
 _revsh_ is intended as a supplementary tool for a [pentester's](http://en.wikipedia.org/wiki/Pentester) toolkit that provides the full set of terminal features across an encrypted tunnel. All together in a small (~50k) easy to use binary.
 
