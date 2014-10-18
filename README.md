@@ -45,7 +45,7 @@ _revsh_ was developed on x86_64 Linux. Here is a brief list of Arch / OS combina
 
 ## Usage ##
 
-	empty@monkey:~/devel/code/revsh$ ./revsh -h
+	empty@monkey:~$ revsh -h
 	
 	usage:  revsh [-c [-a] [-s SHELL] [-d KEYS_DIR] [-f RC_FILE]] [-t SEC] [-r SEC1[,SEC2]] [-b [-k]] [-n] [-v] [ADDRESS:PORT]
 	
