@@ -53,7 +53,7 @@ revsh: revsh.c remote_io_helper.h common.h config.h $(OBJS) in_the_key_of_c
 revsh_io: revsh_io.c remote_io_helper.h common.h config.h
 	$(CC) $(CFLAGS) -c -o revsh_io.o revsh_io.c
 
-string_to_vector: string_to_vector.c string_to_vector.h common.h config.h
+string_to_vector: string_to_vector.c common.h config.h
 	$(CC) $(CFLAGS) -c -o string_to_vector.o string_to_vector.c
 
 broker: broker.c common.h config.h
