@@ -64,7 +64,7 @@ int broker(struct remote_io_helper *io){
 
 
 	/*  Prepare our signal handler. */
-	if(io->controller){
+	if(io->controller && io->interactive){
 		memset(&act, 0, sizeof(act));
 		act.sa_handler = signal_handler;
 
@@ -99,32 +99,33 @@ int broker(struct remote_io_helper *io){
 
 	/*  Also prepare one buffer specifically for dealing with serialization */
 	/*  and transmission / receipt of a struct winsize. */
-	winsize_buff_len = WINSIZE_BUFF_LEN;
-	if((winsize_buff_head = (char *) calloc(winsize_buff_len, sizeof(char))) == NULL){
-		print_error(io, "%s: %d: calloc(%d, %d): %s\r\n", \
-				program_invocation_short_name, io->controller, \
-				winsize_buff_len, (int) sizeof(char));
-		retval = -1;
-		goto CLEAN_UP;
-	}
+	if(io->interactive){
+		winsize_buff_len = WINSIZE_BUFF_LEN;
+		if((winsize_buff_head = (char *) calloc(winsize_buff_len, sizeof(char))) == NULL){
+			print_error(io, "%s: %d: calloc(%d, %d): %s\r\n", \
+					program_invocation_short_name, io->controller, \
+					winsize_buff_len, (int) sizeof(char));
+			retval = -1;
+			goto CLEAN_UP;
+		}
 
+		/*  Time to set our socket non-blocking. */
+		if((fcntl_flags = fcntl(io->remote_fd, F_GETFL, 0)) == -1){
+			print_error(io, "%s: %d: fcntl(%d, FGETFL, 0): %s\r\n", \
+					program_invocation_short_name, io->controller, \
+					io->remote_fd, strerror(errno));
+			retval = -1;
+			goto CLEAN_UP;
+		}
 
-	/*  Time to set our socket non-blocking. */
-	if((fcntl_flags = fcntl(io->remote_fd, F_GETFL, 0)) == -1){
-		print_error(io, "%s: %d: fcntl(%d, FGETFL, 0): %s\r\n", \
-				program_invocation_short_name, io->controller, \
-				io->remote_fd, strerror(errno));
-		retval = -1;
-		goto CLEAN_UP;
-	}
-
-	fcntl_flags |= O_NONBLOCK;
-	if((retval = fcntl(io->remote_fd, F_SETFL, fcntl_flags)) == -1){
-		print_error(io, "%s: %d: fcntl(%d, FGETFL, %d): %s\r\n", \
-				program_invocation_short_name, io->controller, \
-				io->remote_fd, fcntl_flags, strerror(errno));
-		retval = -1;
-		goto CLEAN_UP;
+		fcntl_flags |= O_NONBLOCK;
+		if((retval = fcntl(io->remote_fd, F_SETFL, fcntl_flags)) == -1){
+			print_error(io, "%s: %d: fcntl(%d, FGETFL, %d): %s\r\n", \
+					program_invocation_short_name, io->controller, \
+					io->remote_fd, fcntl_flags, strerror(errno));
+			retval = -1;
+			goto CLEAN_UP;
+		}
 	}
 
 
@@ -175,10 +176,10 @@ int broker(struct remote_io_helper *io){
 
 			if(!ssl_bytes_pending){
 				FD_ZERO(&fd_select);
-				FD_SET(io->local_fd, &fd_select);
+				FD_SET(io->local_in_fd, &fd_select);
 				FD_SET(io->remote_fd, &fd_select);
 
-				fd_max = (io->local_fd > io->remote_fd) ? io->local_fd : io->remote_fd;
+				fd_max = (io->local_in_fd > io->remote_fd) ? io->local_in_fd : io->remote_fd;
 
 				if(((retval = select(fd_max + 1, &fd_select, NULL, NULL, NULL)) == -1) \
 						&& !sig_found){
@@ -191,7 +192,7 @@ int broker(struct remote_io_helper *io){
 			}
 
 			/*  Case 1: select() was interrupted by a signal that we handle. */
-			if(sig_found){
+			if(sig_found && io->interactive){
 
 				local_buff_tail = local_buff_head;
 				local_buff_ptr = local_buff_head;
@@ -204,10 +205,10 @@ int broker(struct remote_io_helper *io){
 				switch(current_sig){
 
 					case SIGWINCH:
-						if((retval = ioctl(io->local_fd, TIOCGWINSZ, &tty_winsize)) == -1){
+						if((retval = ioctl(io->local_out_fd, TIOCGWINSZ, &tty_winsize)) == -1){
 							print_error(io, "%s: %d: ioctl(%d, TIOCGWINSZ, %lx): %s\r\n", \
 									program_invocation_short_name, io->controller, \
-									io->local_fd, (unsigned long) &tty_winsize, strerror(errno));
+									io->local_out_fd, (unsigned long) &tty_winsize, strerror(errno));
 							goto CLEAN_UP;
 						}
 
@@ -236,17 +237,17 @@ int broker(struct remote_io_helper *io){
 
 
 				/*  Case 2: Data is ready on the local fd. */
-			}else if(FD_ISSET(io->local_fd, &fd_select)){
+			}else if(FD_ISSET(io->local_in_fd, &fd_select)){
 				local_buff_tail = local_buff_head;
 				local_buff_ptr = local_buff_head;
 
-				if((io_bytes = read(io->local_fd, local_buff_head, buff_len)) == -1){
+				if((io_bytes = read(io->local_in_fd, local_buff_head, buff_len)) == -1){
 					if(!io->controller && errno == EIO){
 						goto CLEAN_UP;
 					}
 					print_error(io, "%s: %d: broker(): read(%d, %lx, %d): %s\r\n", \
 							program_invocation_short_name, io->controller, \
-							io->local_fd, (unsigned long) local_buff_head, buff_len, strerror(errno));
+							io->local_in_fd, (unsigned long) local_buff_head, buff_len, strerror(errno));
 					retval = -1;
 					goto CLEAN_UP;
 				}
@@ -280,7 +281,7 @@ int broker(struct remote_io_helper *io){
 				}
 				remote_buff_tail = remote_buff_head + io_bytes;
 
-				if(!io->controller){
+				if(!io->controller && io->interactive){
 					event_ptr = NULL;
 					while(remote_buff_ptr != remote_buff_tail){
 						if(*remote_buff_ptr == (char) UTF8_HIGH){
@@ -297,10 +298,10 @@ int broker(struct remote_io_helper *io){
 
 					/*  First, clear out any data that preceeds the possible event. */
 					while(remote_buff_ptr != event_ptr){
-						if((retval = write(io->local_fd, remote_buff_ptr, (event_ptr - remote_buff_ptr))) == -1){
+						if((retval = write(io->local_out_fd, remote_buff_ptr, (event_ptr - remote_buff_ptr))) == -1){
 							print_error(io, "%s: %d: broker(): write(%d, %lx, %d): %s\r\n", \
 									program_invocation_short_name, io->controller, \
-									io->local_fd, (unsigned long) remote_buff_ptr, (event_ptr - remote_buff_ptr), strerror(errno));
+									io->local_out_fd, (unsigned long) remote_buff_ptr, (event_ptr - remote_buff_ptr), strerror(errno));
 							goto CLEAN_UP;
 						}
 						remote_buff_ptr += retval;
@@ -374,11 +375,11 @@ int broker(struct remote_io_helper *io){
 									state_counter = APC_HIGH_FOUND;
 								}else{
 
-									while((retval = write(io->local_fd, &tmp_char, 1)) < 1){
+									while((retval = write(io->local_out_fd, &tmp_char, 1)) < 1){
 										if(retval == -1){
 											print_error(io, "%s: %d: broker(): write(%d, %lx, %d): %s\r\n", \
 													program_invocation_short_name, io->controller, \
-													io->local_fd, (unsigned long) &tmp_char, 1, strerror(errno));
+													io->local_out_fd, (unsigned long) &tmp_char, 1, strerror(errno));
 											goto CLEAN_UP;
 										}
 									}
@@ -399,21 +400,21 @@ int broker(struct remote_io_helper *io){
 
 									/*  Remember that UTF8_HIGH we stored at buff_head[0] earlier? */
 									/*  This is where we'll use it. */
-									while((retval = write(io->local_fd, &tmp_char, 1)) < 1){
+									while((retval = write(io->local_out_fd, &tmp_char, 1)) < 1){
 										if(retval == -1){
 											print_error(io, "%s: %d: broker(): write(%d, %lx, %d): %s\r\n", \
 													program_invocation_short_name, io->controller, \
-													io->local_fd, (unsigned long) UTF8_HIGH, 1, strerror(errno));
+													io->local_out_fd, (unsigned long) UTF8_HIGH, 1, strerror(errno));
 											goto CLEAN_UP;
 										}
 									}
 
 									/*  Flush the buffer before returning to the normal loop. */
-									while((retval = write(io->local_fd, &tmp_char, 1)) < 1){
+									while((retval = write(io->local_out_fd, &tmp_char, 1)) < 1){
 										if(retval == -1){
 											print_error(io, "%s: %d: broker(): write(%d, %lx, %d): %s\r\n", \
 													program_invocation_short_name, io->controller, \
-													io->local_fd, (unsigned long) &tmp_char, 1, strerror(errno));
+													io->local_out_fd, (unsigned long) &tmp_char, 1, strerror(errno));
 											goto CLEAN_UP;
 										}
 									}
@@ -421,8 +422,8 @@ int broker(struct remote_io_helper *io){
 
 								break;
 
-							/*  In this case, we will process the event data, adding it to the winsize  */
-							/*  data structure. */
+								/*  In this case, we will process the event data, adding it to the winsize  */
+								/*  data structure. */
 							case DATA_FOUND:
 
 								if(tmp_char == (char) UTF8_HIGH){
@@ -497,18 +498,18 @@ int broker(struct remote_io_helper *io){
 										goto CLEAN_UP;
 									}
 
-									if((retval = ioctl(io->local_fd, TIOCSWINSZ, &tty_winsize)) == -1){
+									if((retval = ioctl(io->local_out_fd, TIOCSWINSZ, &tty_winsize)) == -1){
 										print_error(io, "%s: %d: ioctl(%d, %d, %lx): %s\r\n", \
 												program_invocation_short_name, io->controller, \
-												io->local_fd, TIOCGWINSZ, (unsigned long) &tty_winsize, \
+												io->local_out_fd, TIOCGWINSZ, (unsigned long) &tty_winsize, \
 												strerror(errno));
 										goto CLEAN_UP;
 									}
 
-									if((sig_pid = tcgetsid(io->local_fd)) == -1){
+									if((sig_pid = tcgetsid(io->local_out_fd)) == -1){
 										print_error(io, "%s: %d: tcgetsid(%d): %s\r\n", \
 												program_invocation_short_name, io->controller, \
-												io->local_fd, strerror(errno));
+												io->local_out_fd, strerror(errno));
 										retval = -1;
 										goto CLEAN_UP;
 									}
@@ -534,7 +535,7 @@ int broker(struct remote_io_helper *io){
 								break;
 
 
-							/*  The case of no case. This should be unreachable. */
+								/*  The case of no case. This should be unreachable. */
 							default:
 
 								print_error(io, \
@@ -550,10 +551,10 @@ int broker(struct remote_io_helper *io){
 
 					/*  Flush the remote buffer to the terminal. */
 					while(remote_buff_ptr != remote_buff_tail){
-						if((retval = write(io->local_fd, remote_buff_head, (remote_buff_tail - remote_buff_ptr))) == -1){
+						if((retval = write(io->local_out_fd, remote_buff_head, (remote_buff_tail - remote_buff_ptr))) == -1){
 							print_error(io, "%s: %d: broker(): write(%d, %lx, %d): %s\r\n", \
 									program_invocation_short_name, io->controller, \
-									io->local_fd, (unsigned long) remote_buff_head, (remote_buff_tail - remote_buff_ptr), strerror(errno));
+									io->local_out_fd, (unsigned long) remote_buff_head, (remote_buff_tail - remote_buff_ptr), strerror(errno));
 							goto CLEAN_UP;
 						}
 						remote_buff_ptr += retval;
@@ -570,7 +571,11 @@ int broker(struct remote_io_helper *io){
 CLEAN_UP:
 	free(local_buff_head);
 	free(remote_buff_head);
-	free(winsize_buff_head);
+
+	if(io->interactive){
+		free(winsize_buff_head);
+	}
+
 	return(retval);
 }
 
@@ -591,4 +596,3 @@ CLEAN_UP:
 void signal_handler(int signal){
 	sig_found = signal;
 }
-

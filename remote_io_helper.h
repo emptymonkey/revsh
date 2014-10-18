@@ -3,11 +3,14 @@
 
 struct remote_io_helper {
 
+	int interactive;
+
 	/* Denote whether this instance is on the control node or the target node. */
 	int controller;
 	int encryption;
 	
-	int local_fd;
+	int local_in_fd;
+	int local_out_fd;
 	int remote_fd;
 
 	char *ip_addr;

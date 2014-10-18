@@ -57,8 +57,8 @@ int remote_read_encrypted(struct remote_io_helper *io, void *buff, size_t count)
 	fd_set fd_select;
 	int ssl_error = SSL_ERROR_NONE;	
 
-	do{
 
+	do{
 		/* We've already been through the loop once, but now we need to wait for the socket to be ready. */
 		if(ssl_error != SSL_ERROR_NONE){
 			FD_ZERO(&fd_select);
@@ -128,6 +128,7 @@ int remote_write_encrypted(struct remote_io_helper *io, void *buff, size_t count
 	int retval;
 	fd_set fd_select;
 	int ssl_error = SSL_ERROR_NONE;	
+
 
 	do{
 
@@ -200,6 +201,7 @@ int remote_printf(struct remote_io_helper *io, char *fmt, ...){
 
 	va_start(list_ptr, fmt);
 
+	/* XXX Add a loop here in case we need to print something longer than BUFFER_SIZE. */
 	memset(buff, 0, BUFFER_SIZE);
 	if((retval = vsnprintf(buff, BUFFER_SIZE - 1, fmt, list_ptr)) < 0){
 		print_error(io, "%s: %d: vsnprintf(%lx, %d, %lx, %lx): %s\n", \
