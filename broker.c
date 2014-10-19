@@ -132,8 +132,6 @@ int broker(struct remote_io_helper *io){
 	/*  Set the proper initial state of our buffer pointers. */
 	local_buff_tail = local_buff_head;
 	local_buff_ptr = local_buff_head;
-	remote_buff_tail = remote_buff_head;
-	remote_buff_ptr = remote_buff_head;
 
 
 	/*  Start the broker() loop. */
@@ -194,7 +192,6 @@ int broker(struct remote_io_helper *io){
 			/*  Case 1: select() was interrupted by a signal that we handle. */
 			if(sig_found && io->interactive){
 
-				local_buff_tail = local_buff_head;
 				local_buff_ptr = local_buff_head;
 
 				current_sig = sig_found;
@@ -233,13 +230,10 @@ int broker(struct remote_io_helper *io){
 						retval = -1;
 						goto CLEAN_UP;
 				}
-				current_sig = 0;
 
 
 				/*  Case 2: Data is ready on the local fd. */
 			}else if(FD_ISSET(io->local_in_fd, &fd_select)){
-				local_buff_tail = local_buff_head;
-				local_buff_ptr = local_buff_head;
 
 				if((io_bytes = read(io->local_in_fd, local_buff_head, buff_len)) == -1){
 					if(!io->controller && errno == EIO){
@@ -264,7 +258,6 @@ int broker(struct remote_io_helper *io){
 
 				ssl_bytes_pending = 0;
 
-				remote_buff_tail = remote_buff_head;
 				remote_buff_ptr = remote_buff_head;
 
 				if((io_bytes = io->remote_read(io, remote_buff_head, buff_len)) == -1){

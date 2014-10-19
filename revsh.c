@@ -250,8 +250,11 @@ int main(int argc, char **argv){
 
 	/*  Normally I would use the Gnu version. However, this tool needs to be more portable. */
 	/*  Keeping the naming scheme, but setting it up myself. */
-	program_invocation_short_name = strrchr(argv[0], '/');
-	program_invocation_short_name++;
+	if((program_invocation_short_name = strrchr(argv[0], '/'))){
+		program_invocation_short_name++;
+	}else{
+		program_invocation_short_name = argv[0];
+	}
 
 	io.controller = 0;
 	io.encryption = EDH;
@@ -532,7 +535,7 @@ int main(int argc, char **argv){
 			if(io.encryption == EDH){
 				SSL_CTX_set_verify(io.ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, dummy_verify_callback);
 
-				if((retval = SSL_CTX_use_certificate_file(io.ctx, controller_cert_path_head, SSL_FILETYPE_PEM)) != 1){
+				if(SSL_CTX_use_certificate_file(io.ctx, controller_cert_path_head, SSL_FILETYPE_PEM) != 1){
 					fprintf(stderr, "%s: %d: SSL_CTX_use_certificate_file(%lx, %s, SSL_FILETYPE_PEM): %s\n", \
 							program_invocation_short_name, io.controller, (unsigned long) io.ctx, controller_cert_path_head, strerror(errno));
 					ERR_print_errors_fp(stderr);
@@ -541,7 +544,7 @@ int main(int argc, char **argv){
 
 				free(controller_cert_path_head);
 
-				if((retval = SSL_CTX_use_PrivateKey_file(io.ctx, controller_key_path_head, SSL_FILETYPE_PEM)) != 1){
+				if(SSL_CTX_use_PrivateKey_file(io.ctx, controller_key_path_head, SSL_FILETYPE_PEM) != 1){
 					fprintf(stderr, "%s: %d: SSL_CTX_use_PrivateKey_file(%lx, %s, SSL_FILETYPE_PEM): %s\n", \
 							program_invocation_short_name, io.controller, (unsigned long) io.ctx, controller_key_path_head, strerror(errno));
 					ERR_print_errors_fp(stderr);
@@ -550,7 +553,7 @@ int main(int argc, char **argv){
 
 				free(controller_key_path_head);
 
-				if((retval = SSL_CTX_check_private_key(io.ctx)) != 1){
+				if(SSL_CTX_check_private_key(io.ctx) != 1){
 					fprintf(stderr, "%s: %d: SSL_CTX_check_private_key(%lx): %s\n", \
 							program_invocation_short_name, io.controller, (unsigned long) io.ctx, strerror(errno));
 					ERR_print_errors_fp(stderr);
@@ -561,7 +564,7 @@ int main(int argc, char **argv){
 
 		act.sa_handler = catch_alarm;
 
-		if((retval = sigaction(SIGALRM, &act, NULL)) == -1){
+		if(sigaction(SIGALRM, &act, NULL) == -1){
 			fprintf(stderr, "%s: %d: sigaction(%d, %lx, %p): %s\r\n", \
 					program_invocation_short_name, io.controller, \
 					SIGALRM, (unsigned long) &act, NULL, strerror(errno));
@@ -665,7 +668,7 @@ int main(int argc, char **argv){
 
 		act.sa_handler = SIG_DFL;
 
-		if((retval = sigaction(SIGALRM, &act, NULL)) == -1){
+		if(sigaction(SIGALRM, &act, NULL) == -1){
 			fprintf(stderr, "%s: %d: sigaction(%d, %lx, %p): %s\r\n", \
 					program_invocation_short_name, io.controller, \
 					SIGALRM, (unsigned long) &act, NULL, strerror(errno));
@@ -816,7 +819,7 @@ int main(int argc, char **argv){
 		buff_tail = buff_head;
 		*(buff_tail++) = (char) APC;
 		*(buff_tail++) = (char) io.interactive;
-		*(buff_tail++) = (char) ST;
+		*(buff_tail) = (char) ST;
 
 		if((io_bytes = io.remote_write(&io, buff_head, HANDSHAKE_LEN)) == -1){
 			fprintf(stderr, "%s: %d: io.remote_write(%lx, %lx, %d): %s\n", \
@@ -977,7 +980,7 @@ int main(int argc, char **argv){
 
 
 		/*  - Send initial termios data. */
-		if((retval = ioctl(STDIN_FILENO, TIOCGWINSZ, &tty_winsize)) == -1){
+		if(ioctl(STDIN_FILENO, TIOCGWINSZ, &tty_winsize) == -1){
 			print_error(&io, "%s: %d: ioctl(STDIN_FILENO, TIOCGWINSZ, %lx): %s\n", \
 					program_invocation_short_name, io.controller, \
 					(unsigned long) &tty_winsize, strerror(errno));
@@ -997,7 +1000,7 @@ int main(int argc, char **argv){
 		}
 
 		buff_tail += retval;
-		*(buff_tail++) = (char) ST;
+		*(buff_tail) = (char) ST;
 
 		tmp_len = strlen(buff_head);
 		if((io_bytes = io.remote_write(&io, buff_head, tmp_len)) == -1){
@@ -1015,7 +1018,7 @@ int main(int argc, char **argv){
 		}
 
 		/*  - Set local terminal to raw.  */
-		if((retval = tcgetattr(STDIN_FILENO, &saved_termios_attrs)) == -1){
+		if(tcgetattr(STDIN_FILENO, &saved_termios_attrs) == -1){
 			print_error(&io, "%s: %d: tcgetattr(STDIN_FILENO, %lx): %s\n", \
 					program_invocation_short_name, io.controller, \
 					(unsigned long) &saved_termios_attrs, strerror(errno));
@@ -1033,7 +1036,7 @@ int main(int argc, char **argv){
 		new_termios_attrs.c_cc[VMIN] = 1;
 		new_termios_attrs.c_cc[VTIME] = 0;
 
-		if((retval = tcsetattr(STDIN_FILENO, TCSANOW, &new_termios_attrs)) == -1){
+		if(tcsetattr(STDIN_FILENO, TCSANOW, &new_termios_attrs) == -1){
 			print_error(&io, "%s: %d: tcsetattr(STDIN_FILENO, TCSANOW, %lx): %s\n", \
 					program_invocation_short_name, io.controller, \
 					(unsigned long) &new_termios_attrs, strerror(errno));
@@ -1049,7 +1052,6 @@ int main(int argc, char **argv){
 
 		if((rc_fd = open(rc_file_exp.we_wordv[0], O_RDONLY)) != -1){
 
-			buff_tail = buff_head;
 			buff_ptr = buff_head;
 
 			while((io_bytes = read(rc_fd, buff_head, buff_len))){
@@ -1079,7 +1081,7 @@ int main(int argc, char **argv){
 		errno = 0;
 
 		/*  - Enter broker() for tty brokering. */
-		if((retval = broker(&io) == -1)){
+		if(broker(&io) == -1){
 			print_error(&io, "%s: %d: broker(%lx): %s\r\n", \
 					program_invocation_short_name, io.controller, (unsigned long) &io,
 					strerror(errno));
@@ -1171,7 +1173,7 @@ int main(int argc, char **argv){
 
 			SSL_CTX_set_verify(io.ctx, SSL_VERIFY_PEER, dummy_verify_callback);
 
-			if((retval = SSL_CTX_use_certificate_ASN1(io.ctx, target_cert_len, target_cert)) != 1){
+			if(SSL_CTX_use_certificate_ASN1(io.ctx, target_cert_len, target_cert) != 1){
 #ifdef DEBUG
 				fprintf(stderr, "%s: %d: SSL_CTX_use_certificate_ASN1(%lx, %d, %lx): %s\n", \
 						program_invocation_short_name, io.controller, (unsigned long) io.ctx, target_cert_len, (unsigned long) target_cert, strerror(errno));
@@ -1180,7 +1182,7 @@ int main(int argc, char **argv){
 				exit(-1);
 			}
 
-			if((retval = SSL_CTX_use_RSAPrivateKey_ASN1(io.ctx, target_key, target_key_len)) != 1){
+			if(SSL_CTX_use_RSAPrivateKey_ASN1(io.ctx, target_key, target_key_len) != 1){
 #ifdef DEBUG
 				fprintf(stderr, "%s: %d: SSL_CTX_use_RSAPrivateKey_ASN1(%lx, %lx, %d): %s\n", \
 						program_invocation_short_name, io.controller, (unsigned long) io.ctx, (unsigned long) target_key, target_key_len, strerror(errno));
@@ -1189,7 +1191,7 @@ int main(int argc, char **argv){
 				exit(-1);
 			}
 
-			if((retval = SSL_CTX_check_private_key(io.ctx)) != 1){
+			if(SSL_CTX_check_private_key(io.ctx) != 1){
 #ifdef DEBUG
 				fprintf(stderr, "%s: %d: SSL_CTX_check_private_key(%lx): %s\n", \
 						program_invocation_short_name, io.controller, (unsigned long) io.ctx, strerror(errno));
@@ -1201,7 +1203,7 @@ int main(int argc, char **argv){
 
 		act.sa_handler = catch_alarm;
 
-		if((retval = sigaction(SIGALRM, &act, NULL)) == -1){
+		if(sigaction(SIGALRM, &act, NULL) == -1){
 #ifdef DEBUG
 			fprintf(stderr, "%s: %d: sigaction(%d, %lx, %p): %s\r\n", \
 					program_invocation_short_name, io.controller, \
@@ -1362,7 +1364,7 @@ int main(int argc, char **argv){
 
 		act.sa_handler = SIG_DFL;
 
-		if((retval = sigaction(SIGALRM, &act, NULL)) == -1){
+		if(sigaction(SIGALRM, &act, NULL) == -1){
 #ifdef DEBUG
 			fprintf(stderr, "%s: %d: sigaction(%d, %lx, %p): %s\r\n", \
 					program_invocation_short_name, io.controller, \
@@ -1400,7 +1402,7 @@ int main(int argc, char **argv){
 
 			SSL_set_bio(io.ssl, io.connect, io.connect);
 
-			if((retval = SSL_connect(io.ssl)) < 1){
+			if(SSL_connect(io.ssl) < 1){
 #ifdef DEBUG
 				fprintf(stderr, "%s: %d: SSL_connect(%lx): %s\n", \
 						program_invocation_short_name, io.controller, (unsigned long) io.ssl, strerror(errno));
@@ -1476,7 +1478,7 @@ int main(int argc, char **argv){
 		buff_tail = buff_head;
 		*(buff_tail++) = (char) APC;
 		*(buff_tail++) = (char) io.interactive;
-		*(buff_tail++) = (char) ST;
+		*(buff_tail) = (char) ST;
 
 		if((io_bytes = io.remote_write(&io, buff_head, HANDSHAKE_LEN)) == -1){
 			fprintf(stderr, "%s: %d: io.remote_write(%lx, %lx, %d): %s\n", \
@@ -1539,11 +1541,11 @@ int main(int argc, char **argv){
 			exit(0);
 		}
 
-		if((retval = setsid()) == -1){
+		if(setsid() == -1){
 			exit(-1);
 		}
 
-		if((retval = chdir("/")) == -1){
+		if(chdir("/") == -1){
 			exit(-1);
 		}
 
@@ -1551,7 +1553,7 @@ int main(int argc, char **argv){
 
 
 		/*  - Receive and set the shell. */
-		if((io_bytes = io.remote_read(&io, &tmp_char, 1)) == -1){
+		if(io.remote_read(&io, &tmp_char, 1) == -1){
 			print_error(&io, "%s: %d: io.remote_read(%lx, %lx, %d): %s\r\n", \
 					program_invocation_short_name, io.controller, (unsigned long) &io, (unsigned long) &tmp_char, 1, strerror(errno));
 			exit(-1);
@@ -1565,7 +1567,7 @@ int main(int argc, char **argv){
 		memset(buff_head, 0, buff_len);
 		buff_tail = buff_head;
 
-		if((io_bytes = io.remote_read(&io, &tmp_char, 1)) == -1){
+		if(io.remote_read(&io, &tmp_char, 1) == -1){
 			print_error(&io, "%s: %d: io.remote_read(%lx, %lx, 1): %s\r\n", \
 					program_invocation_short_name, io.controller, \
 					(unsigned long) &io, (unsigned long) &tmp_char, strerror(errno));
@@ -1581,7 +1583,7 @@ int main(int argc, char **argv){
 				exit(-1);
 			}
 
-			if((io_bytes = io.remote_read(&io, &tmp_char, 1)) == -1){
+			if(io.remote_read(&io, &tmp_char, 1) == -1){
 				print_error(&io, "%s: %d: io.remote_read(%lx, %lx, 1): %s\r\n", \
 						program_invocation_short_name, io.controller, \
 						(unsigned long) &io, (unsigned long) &tmp_char, strerror(errno));
@@ -1600,7 +1602,7 @@ int main(int argc, char **argv){
 
 
 		/*  - Receive and set the initial environment. */
-		if((io_bytes = io.remote_read(&io, &tmp_char, 1)) == -1){
+		if(io.remote_read(&io, &tmp_char, 1) == -1){
 			print_error(&io, "%s: %d: io.remote_read(%lx, %lx, 1): %s\r\n", \
 					program_invocation_short_name, io.controller, \
 					(unsigned long) &io, (unsigned long) &tmp_char, strerror(errno));
@@ -1616,7 +1618,7 @@ int main(int argc, char **argv){
 		memset(buff_head, 0, buff_len);
 		buff_tail = buff_head;
 
-		if((io_bytes = io.remote_read(&io, &tmp_char, 1)) == -1){
+		if(io.remote_read(&io, &tmp_char, 1) == -1){
 			print_error(&io, "%s: %d: io.remote_read(%lx, %lx, 1): %s\r\n", \
 					program_invocation_short_name, io.controller, \
 					(unsigned long) &io, (unsigned long) &tmp_char, strerror(errno));
@@ -1632,7 +1634,7 @@ int main(int argc, char **argv){
 				exit(-1);
 			}
 
-			if((io_bytes = io.remote_read(&io, &tmp_char, 1)) == -1){
+			if(io.remote_read(&io, &tmp_char, 1) == -1){
 				print_error(&io, "%s: %d: io.remote_read(%lx, %lx, 1): %s\r\n", \
 						program_invocation_short_name, io.controller, \
 						(unsigned long) &io, (unsigned long) &tmp_char, strerror(errno));
@@ -1648,7 +1650,7 @@ int main(int argc, char **argv){
 		}
 
 		/*  - Receive and set the initial termios. */
-		if((io_bytes = io.remote_read(&io, &tmp_char, 1)) == -1){
+		if(io.remote_read(&io, &tmp_char, 1) == -1){
 			print_error(&io, "%s: %d: io.remote_read(%lx, %lx, 1): %s\r\n", \
 					program_invocation_short_name, io.controller, \
 					(unsigned long) &io, (unsigned long) &tmp_char, strerror(errno));
@@ -1664,7 +1666,7 @@ int main(int argc, char **argv){
 		memset(buff_head, 0, buff_len);
 		buff_tail = buff_head;
 
-		if((io_bytes = io.remote_read(&io, &tmp_char, 1)) == -1){
+		if(io.remote_read(&io, &tmp_char, 1) == -1){
 			print_error(&io, "%s: %d: io.remote_read(%lx, %lx, 1): %s\r\n", \
 					program_invocation_short_name, io.controller, \
 					(unsigned long) &io, (unsigned long) &tmp_char, strerror(errno));
@@ -1680,7 +1682,7 @@ int main(int argc, char **argv){
 				exit(-1);
 			}
 
-			if((io_bytes = io.remote_read(&io, &tmp_char, 1)) == -1){
+			if(io.remote_read(&io, &tmp_char, 1) == -1){
 				print_error(&io, "%s: %d: io.remote_read(%lx, %lx, 1): %s\r\n", \
 						program_invocation_short_name, io.controller, \
 						(unsigned long) &io, (unsigned long) &tmp_char, strerror(errno));
@@ -1733,21 +1735,21 @@ int main(int argc, char **argv){
 			exit(-1);
 		}
 
-		if((retval = grantpt(pty_master)) == -1){
+		if(grantpt(pty_master) == -1){
 			print_error(&io, "%s: %d: grantpt(%d): %s\r\n", \
 					program_invocation_short_name, io.controller, \
 					pty_master, strerror(errno));
 			exit(-1);
 		}
 
-		if((retval = unlockpt(pty_master)) == -1){
+		if(unlockpt(pty_master) == -1){
 			print_error(&io, "%s: %d: unlockpt(%d): %s\r\n", \
 					program_invocation_short_name, io.controller, \
 					pty_master, strerror(errno));
 			exit(-1);
 		}
 
-		if((retval = ioctl(pty_master, TIOCSWINSZ, &tty_winsize)) == -1){
+		if(ioctl(pty_master, TIOCSWINSZ, &tty_winsize) == -1){
 			print_error(&io, "%s: %d: ioctl(%d, %d, %lx): %s\r\n", \
 					program_invocation_short_name, io.controller, \
 					pty_master, TIOCGWINSZ, (unsigned long) &tty_winsize, strerror(errno));
@@ -1770,7 +1772,7 @@ int main(int argc, char **argv){
 
 		/*  - Send basic information back to the controller about the connecting host. */
 		memset(buff_head, 0, buff_len);
-		if((retval = gethostname(buff_head, buff_len - 1)) == -1){
+		if(gethostname(buff_head, buff_len - 1) == -1){
 			print_error(&io, "%s: %d: gethostname(%lx, %d): %s\r\n", \
 					program_invocation_short_name, io.controller, \
 					(unsigned long) buff_head, buff_len - 1, strerror(errno));
@@ -1782,7 +1784,7 @@ int main(int argc, char **argv){
 
 
 		remote_printf(&io, "# ip address: ");
-		if((retval = getsockname(io.remote_fd, &addr, &addrlen)) != -1){
+		if(getsockname(io.remote_fd, &addr, &addrlen) != -1){
 			memset(buff_head, 0, buff_len);
 			if(inet_ntop(addr.sa_family, addr.sa_data + 2, buff_head, buff_len - 1)){
 				remote_printf(&io, "%s", buff_head);
@@ -1818,14 +1820,14 @@ int main(int argc, char **argv){
 
 		free(buff_head);
 
-		if((retval = close(STDIN_FILENO)) == -1){
+		if(close(STDIN_FILENO) == -1){
 			print_error(&io, "%s: %d: close(STDIN_FILENO): %s\r\n", \
 					program_invocation_short_name, io.controller, \
 					strerror(errno));
 			exit(-1);
 		}
 
-		if((retval = close(STDOUT_FILENO)) == -1){
+		if(close(STDOUT_FILENO) == -1){
 			print_error(&io, "%s: %d: close(STDOUT_FILENO): %s\r\n", \
 					program_invocation_short_name, io.controller, \
 					strerror(errno));
@@ -1834,7 +1836,7 @@ int main(int argc, char **argv){
 
 #ifndef DEBUG
 
-		if((retval = close(STDERR_FILENO)) == -1){
+		if(close(STDERR_FILENO) == -1){
 			print_error(&io, "%s: %d: close(STDERR_FILENO): %s\r\n", \
 					program_invocation_short_name, io.controller, \
 					strerror(errno));
@@ -1855,7 +1857,7 @@ int main(int argc, char **argv){
 		if(retval){
 
 			/*  - Parent: Enter broker() and broker tty. */
-			if((retval = close(pty_slave)) == -1){
+			if(close(pty_slave) == -1){
 				print_error(&io, "%s: %d: close(%d): %s\r\n", \
 						program_invocation_short_name, io.controller, \
 						pty_slave, strerror(errno));
@@ -1884,48 +1886,48 @@ int main(int argc, char **argv){
 		}
 
 		/*  - Child: Initialize file descriptors. */
-		if((retval = close(pty_master)) == -1){
+		if(close(pty_master) == -1){
 			print_error(&io, "%s: %d: close(%d): %s\r\n", \
 					program_invocation_short_name, io.controller, \
 					pty_master, strerror(errno));
 			exit(-1);
 		}
-		if((retval = dup2(pty_slave, STDIN_FILENO)) == -1){
+		if(dup2(pty_slave, STDIN_FILENO) == -1){
 			print_error(&io, "%s: %d: dup2(%d, STDIN_FILENO): %s\r\n", \
 					program_invocation_short_name, io.controller, \
 					pty_slave, strerror(errno));
 			exit(-1);
 		}
 
-		if((retval = dup2(pty_slave, STDOUT_FILENO)) == -1){
+		if(dup2(pty_slave, STDOUT_FILENO) == -1){
 			print_error(&io, "%s: %d: dup2(%d, STDOUT_FILENO): %s\r\n", \
 					program_invocation_short_name, io.controller, \
 					pty_slave, strerror(errno));
 			exit(-1);
 		}
 
-		if((retval = dup2(pty_slave, STDERR_FILENO)) == -1){
+		if(dup2(pty_slave, STDERR_FILENO) == -1){
 			print_error(&io, "%s: %d: dup2(%d, %d): %s\r\n", \
 					program_invocation_short_name, io.controller, \
 					pty_slave, STDERR_FILENO, strerror(errno));
 			exit(-1);
 		}
 
-		if((retval = close(io.remote_fd)) == -1){
+		if(close(io.remote_fd) == -1){
 			print_error(&io, "%s: %d: close(%d): %s\r\n", \
 					program_invocation_short_name, io.controller, \
 					io.remote_fd, strerror(errno));
 			exit(-1);
 		}
 
-		if((retval = close(pty_slave)) == -1){
+		if(close(pty_slave) == -1){
 			print_error(&io, "%s: %d: close(%d): %s\r\n", \
 					program_invocation_short_name, io.controller, \
 					pty_slave, strerror(errno));
 			exit(-1);
 		}
 
-		if((retval = setsid()) == -1){
+		if(setsid() == -1){
 			print_error(&io, "%s: %d: setsid(): %s\r\n", \
 					program_invocation_short_name, io.controller, \
 					strerror(errno));
@@ -1933,7 +1935,7 @@ int main(int argc, char **argv){
 		} 
 
 		/*  - Child: Set the pty as controlling. */
-		if((retval = ioctl(STDIN_FILENO, TIOCSCTTY, 1)) == -1){
+		if(ioctl(STDIN_FILENO, TIOCSCTTY, 1) == -1){
 			print_error(&io, "%s: %d: ioctl(STDIN_FILENO, TIOCSCTTY, 1): %s\r\n", \
 					program_invocation_short_name, io.controller, \
 					strerror(errno));
