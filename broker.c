@@ -209,13 +209,13 @@ int broker(struct remote_io_helper *io){
 							goto CLEAN_UP;
 						}
 
-						if((io_bytes = snprintf(local_buff_head, buff_len, \
+						if((io_bytes = snprintf(local_buff_ptr, buff_len, \
 										"%c%c%hd %hd%c%c", (char) UTF8_HIGH, (char) APC, tty_winsize.ws_row, \
 										tty_winsize.ws_col, (char) UTF8_HIGH, (char) ST)) < 0){
 							print_error(io, \
 									"%s: %d: snprintf(%lx, %d, \"%%c%%hd %%hd%%c\", APC, %hd, %hd, ST): %s\r\n", \
 									program_invocation_short_name, io->controller, \
-									(unsigned long) local_buff_head, buff_len, \
+									(unsigned long) local_buff_ptr, buff_len, \
 									tty_winsize.ws_row, tty_winsize.ws_col, strerror(errno));
 							retval = -1;
 							goto CLEAN_UP;
@@ -234,14 +234,15 @@ int broker(struct remote_io_helper *io){
 
 				/*  Case 2: Data is ready on the local fd. */
 			}else if(FD_ISSET(io->local_in_fd, &fd_select)){
+				local_buff_ptr = remote_buff_head;
 
-				if((io_bytes = read(io->local_in_fd, local_buff_head, buff_len)) == -1){
+				if((io_bytes = read(io->local_in_fd, local_buff_ptr, buff_len)) == -1){
 					if(!io->controller && errno == EIO){
 						goto CLEAN_UP;
 					}
 					print_error(io, "%s: %d: broker(): read(%d, %lx, %d): %s\r\n", \
 							program_invocation_short_name, io->controller, \
-							io->local_in_fd, (unsigned long) local_buff_head, buff_len, strerror(errno));
+							io->local_in_fd, (unsigned long) local_buff_ptr, buff_len, strerror(errno));
 					retval = -1;
 					goto CLEAN_UP;
 				}
@@ -250,7 +251,7 @@ int broker(struct remote_io_helper *io){
 					retval = 0;
 					goto CLEAN_UP;
 				}
-				local_buff_tail = local_buff_head + io_bytes;
+				local_buff_tail = local_buff_ptr + io_bytes;
 
 
 				/*  Case 3: Data is ready on the remote fd. */

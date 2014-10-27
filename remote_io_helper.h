@@ -23,6 +23,5 @@ struct remote_io_helper {
 	/* We use pointers to functions here so we can invoke the appropriate function on the backend (crypto / no crypto). */
 	int (*remote_read)(struct remote_io_helper *io, void *buf, size_t count);
 	int (*remote_write)(struct remote_io_helper *io, void *buf, size_t count);
-	int (*remote_printf)(struct remote_io_helper *io, char *fmt, ...);
 
 };

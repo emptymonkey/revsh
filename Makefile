@@ -4,6 +4,7 @@ KEY_BITS = 2048
 OPENSSL = /usr/bin/openssl
 
 CC = /usr/bin/cc
+STRIP = /usr/bin/strip
 
 # Build normal.
 CFLAGS = -Wall -Wextra -std=c99 -pedantic -Os
@@ -49,6 +50,7 @@ revsh: revsh.c remote_io_helper.h common.h config.h $(OBJS) in_the_key_of_c
 		./in_the_key_of_c -c $(KEYS_DIR)/target_cert.pem >$(KEYS_DIR)/target_cert.c ; \
 	fi
 	$(CC) $(CFLAGS) $(OBJS) -o revsh revsh.c $(LIBS)
+	$(STRIP) ./revsh
 
 revsh_io: revsh_io.c remote_io_helper.h common.h config.h
 	$(CC) $(CFLAGS) -c -o revsh_io.o revsh_io.c

@@ -41,7 +41,7 @@
 
 
 
-char *CALLING_CARD = "@emptymonkey - https://github.com/emptymonkey";
+char *GLOBAL_calling_card = CALLING_CARD;
 
 
 
@@ -856,6 +856,7 @@ int main(int argc, char **argv){
 			io.interactive = 0;
 		}
 
+
 		if(!io.interactive){
 			retval = broker(&io);
 
@@ -1079,6 +1080,7 @@ int main(int argc, char **argv){
 
 
 		errno = 0;
+
 
 		/*  - Enter broker() for tty brokering. */
 		if(broker(&io) == -1){
@@ -1513,7 +1515,7 @@ int main(int argc, char **argv){
 		if(!buff_head[1]){
 			io.interactive = 0;
 		}
-
+	
 		if(!io.interactive){
 			retval = broker(&io);
 
