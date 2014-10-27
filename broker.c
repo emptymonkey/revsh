@@ -48,11 +48,11 @@ int broker(struct remote_io_helper *io){
 	struct sigaction act;
 	int current_sig;
 
-	struct winsize tty_winsize;
+	struct winsize *tty_winsize;
 	int winsize_buff_len;
 	char *winsize_buff_head = NULL, *winsize_buff_tail;
 	char **winsize_vec;
-	int sig_pid;
+	pid_t sig_pid = 0;
 
 	char tmp_char;
 
@@ -100,11 +100,19 @@ int broker(struct remote_io_helper *io){
 	/*  Also prepare one buffer specifically for dealing with serialization */
 	/*  and transmission / receipt of a struct winsize. */
 	if(io->interactive){
+		if((tty_winsize = (struct winsize *) calloc(1, sizeof(struct winsize))) == NULL){
+			print_error(io, "%s: %d: calloc(1, %d): %s\r\n", \
+					program_invocation_short_name, io->controller, \
+					(int) sizeof(struct winsize), strerror(errno));
+			retval = -1;
+			goto CLEAN_UP;
+		}
+
 		winsize_buff_len = WINSIZE_BUFF_LEN;
 		if((winsize_buff_head = (char *) calloc(winsize_buff_len, sizeof(char))) == NULL){
 			print_error(io, "%s: %d: calloc(%d, %d): %s\r\n", \
 					program_invocation_short_name, io->controller, \
-					winsize_buff_len, (int) sizeof(char));
+					winsize_buff_len, (int) sizeof(char), strerror(errno));
 			retval = -1;
 			goto CLEAN_UP;
 		}
@@ -202,21 +210,21 @@ int broker(struct remote_io_helper *io){
 				switch(current_sig){
 
 					case SIGWINCH:
-						if((retval = ioctl(io->local_out_fd, TIOCGWINSZ, &tty_winsize)) == -1){
+						if((retval = ioctl(io->local_out_fd, TIOCGWINSZ, tty_winsize)) == -1){
 							print_error(io, "%s: %d: ioctl(%d, TIOCGWINSZ, %lx): %s\r\n", \
 									program_invocation_short_name, io->controller, \
-									io->local_out_fd, (unsigned long) &tty_winsize, strerror(errno));
+									io->local_out_fd, (unsigned long) tty_winsize, strerror(errno));
 							goto CLEAN_UP;
 						}
 
 						if((io_bytes = snprintf(local_buff_ptr, buff_len, \
-										"%c%c%hd %hd%c%c", (char) UTF8_HIGH, (char) APC, tty_winsize.ws_row, \
-										tty_winsize.ws_col, (char) UTF8_HIGH, (char) ST)) < 0){
+										"%c%c%hd %hd%c%c", (char) UTF8_HIGH, (char) APC, tty_winsize->ws_row, \
+										tty_winsize->ws_col, (char) UTF8_HIGH, (char) ST)) < 0){
 							print_error(io, \
 									"%s: %d: snprintf(%lx, %d, \"%%c%%hd %%hd%%c\", APC, %hd, %hd, ST): %s\r\n", \
 									program_invocation_short_name, io->controller, \
 									(unsigned long) local_buff_ptr, buff_len, \
-									tty_winsize.ws_row, tty_winsize.ws_col, strerror(errno));
+									tty_winsize->ws_row, tty_winsize->ws_col, strerror(errno));
 							retval = -1;
 							goto CLEAN_UP;
 						}
@@ -458,14 +466,14 @@ int broker(struct remote_io_helper *io){
 
 									if(winsize_vec[0] == NULL){
 										print_error(io, \
-												"%s: %d: invalid initialization: tty_winsize.ws_row\r\n", \
+												"%s: %d: invalid initialization: tty_winsize->ws_row\r\n", \
 												program_invocation_short_name, io->controller);
 										retval = -1;
 										goto CLEAN_UP;
 									}
 
 									errno = 0;
-									tty_winsize.ws_row = (short) strtol(winsize_vec[0], NULL, 10);
+									tty_winsize->ws_row = (short) strtol(winsize_vec[0], NULL, 10);
 									if(errno){
 										print_error(io, "%s: %d: strtol(%s): %s\r\n", \
 												program_invocation_short_name, io->controller, \
@@ -476,14 +484,14 @@ int broker(struct remote_io_helper *io){
 
 									if(winsize_vec[1] == NULL){
 										print_error(io, \
-												"%s: %d: invalid initialization: tty_winsize.ws_col\r\n", \
+												"%s: %d: invalid initialization: tty_winsize->ws_col\r\n", \
 												program_invocation_short_name, io->controller);
 										retval = -1;
 										goto CLEAN_UP;
 									}
 
 									errno = 0;
-									tty_winsize.ws_col = (short) strtol(winsize_vec[1], NULL, 10);
+									tty_winsize->ws_col = (short) strtol(winsize_vec[1], NULL, 10);
 									if(errno){
 										print_error(io, "%s: %d: strtol(%s): %s\r\n", \
 												program_invocation_short_name, io->controller, \
@@ -492,10 +500,10 @@ int broker(struct remote_io_helper *io){
 										goto CLEAN_UP;
 									}
 
-									if((retval = ioctl(io->local_out_fd, TIOCSWINSZ, &tty_winsize)) == -1){
+									if((retval = ioctl(io->local_out_fd, TIOCSWINSZ, tty_winsize)) == -1){
 										print_error(io, "%s: %d: ioctl(%d, %d, %lx): %s\r\n", \
 												program_invocation_short_name, io->controller, \
-												io->local_out_fd, TIOCGWINSZ, (unsigned long) &tty_winsize, \
+												io->local_out_fd, TIOCGWINSZ, (unsigned long) tty_winsize, \
 												strerror(errno));
 										goto CLEAN_UP;
 									}

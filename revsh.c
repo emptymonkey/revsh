@@ -176,7 +176,7 @@ int main(int argc, char **argv){
 
 	int io_bytes;
 
-	struct winsize tty_winsize;
+	struct winsize *tty_winsize;
 
 	char tmp_char;
 	unsigned int tmp_uint;
@@ -223,7 +223,7 @@ int main(int argc, char **argv){
 	int keepalive = 0;
 
 	unsigned int timeout = TIMEOUT;
-	struct sigaction act;
+	struct sigaction *act;
 
 	char *retry_string = RETRY;
 	unsigned int retry_start, retry_stop, retry;
@@ -444,6 +444,20 @@ int main(int argc, char **argv){
 		exit(-1);
 	}
 
+	if((act = (struct sigaction *) calloc(1, sizeof(struct sigaction))) == NULL){
+		fprintf(stderr, "%s: %d: calloc(1, %d): %s\r\n", \
+				program_invocation_short_name, io.controller, \
+				(int) sizeof(struct sigaction), strerror(errno));
+		exit(-1);
+	}
+
+	if((tty_winsize = (struct winsize *) calloc(1, sizeof(struct winsize))) == NULL){
+		fprintf(stderr, "%s: %d: calloc(1, %d): %s\r\n", \
+				program_invocation_short_name, io.controller, \
+				(int) sizeof(struct winsize), strerror(errno));
+		exit(-1);
+	}
+
 
 	/*
 	 * Controller:
@@ -562,12 +576,12 @@ int main(int argc, char **argv){
 			}
 		}
 
-		act.sa_handler = catch_alarm;
+		act->sa_handler = catch_alarm;
 
-		if(sigaction(SIGALRM, &act, NULL) == -1){
+		if(sigaction(SIGALRM, act, NULL) == -1){
 			fprintf(stderr, "%s: %d: sigaction(%d, %lx, %p): %s\r\n", \
 					program_invocation_short_name, io.controller, \
-					SIGALRM, (unsigned long) &act, NULL, strerror(errno));
+					SIGALRM, (unsigned long) act, NULL, strerror(errno));
 			exit(-1);
 		}
 
@@ -666,12 +680,12 @@ int main(int argc, char **argv){
 			BIO_free(accept);
 		}
 
-		act.sa_handler = SIG_DFL;
+		act->sa_handler = SIG_DFL;
 
-		if(sigaction(SIGALRM, &act, NULL) == -1){
+		if(sigaction(SIGALRM, act, NULL) == -1){
 			fprintf(stderr, "%s: %d: sigaction(%d, %lx, %p): %s\r\n", \
 					program_invocation_short_name, io.controller, \
-					SIGALRM, (unsigned long) &act, NULL, strerror(errno));
+					SIGALRM, (unsigned long) act, NULL, strerror(errno));
 			exit(-1);
 		}
 
@@ -981,10 +995,10 @@ int main(int argc, char **argv){
 
 
 		/*  - Send initial termios data. */
-		if(ioctl(STDIN_FILENO, TIOCGWINSZ, &tty_winsize) == -1){
+		if(ioctl(STDIN_FILENO, TIOCGWINSZ, tty_winsize) == -1){
 			print_error(&io, "%s: %d: ioctl(STDIN_FILENO, TIOCGWINSZ, %lx): %s\n", \
 					program_invocation_short_name, io.controller, \
-					(unsigned long) &tty_winsize, strerror(errno));
+					(unsigned long) tty_winsize, strerror(errno));
 			exit(-1);
 		}
 
@@ -993,10 +1007,10 @@ int main(int argc, char **argv){
 		*(buff_tail++) = (char) APC;
 
 		if((retval = snprintf(buff_tail, buff_len - 2, "%hd %hd", \
-						tty_winsize.ws_row, tty_winsize.ws_col)) < 0){
+						tty_winsize->ws_row, tty_winsize->ws_col)) < 0){
 			print_error(&io, "%s: %d: snprintf(buff_head, buff_len, \"%%hd %%hd\", %hd, %hd): %s\n", \
 					program_invocation_short_name, io.controller, \
-					tty_winsize.ws_row, tty_winsize.ws_col, strerror(errno));
+					tty_winsize->ws_row, tty_winsize->ws_col, strerror(errno));
 			exit(-1);
 		}
 
@@ -1203,13 +1217,13 @@ int main(int argc, char **argv){
 			}
 		}
 
-		act.sa_handler = catch_alarm;
+		act->sa_handler = catch_alarm;
 
-		if(sigaction(SIGALRM, &act, NULL) == -1){
+		if(sigaction(SIGALRM, act, NULL) == -1){
 #ifdef DEBUG
 			fprintf(stderr, "%s: %d: sigaction(%d, %lx, %p): %s\r\n", \
 					program_invocation_short_name, io.controller, \
-					SIGALRM, (unsigned long) &act, NULL, strerror(errno));
+					SIGALRM, (unsigned long) act, NULL, strerror(errno));
 #endif
 			exit(-1);
 		}
@@ -1364,13 +1378,13 @@ int main(int argc, char **argv){
 			}
 		}
 
-		act.sa_handler = SIG_DFL;
+		act->sa_handler = SIG_DFL;
 
-		if(sigaction(SIGALRM, &act, NULL) == -1){
+		if(sigaction(SIGALRM, act, NULL) == -1){
 #ifdef DEBUG
 			fprintf(stderr, "%s: %d: sigaction(%d, %lx, %p): %s\r\n", \
 					program_invocation_short_name, io.controller, \
-					SIGALRM, (unsigned long) &act, NULL, strerror(errno));
+					SIGALRM, (unsigned long) act, NULL, strerror(errno));
 #endif
 			exit(-1);
 		}
@@ -1515,7 +1529,7 @@ int main(int argc, char **argv){
 		if(!buff_head[1]){
 			io.interactive = 0;
 		}
-	
+
 		if(!io.interactive){
 			retval = broker(&io);
 
@@ -1700,13 +1714,13 @@ int main(int argc, char **argv){
 		}
 
 		if(tmp_vector[0] == NULL){
-			print_error(&io, "%s: %d: invalid initialization: tty_winsize.ws_row\r\n", \
+			print_error(&io, "%s: %d: invalid initialization: tty_winsize->ws_row\r\n", \
 					program_invocation_short_name, io.controller);
 			exit(-1);
 		}
 
 		errno = 0;
-		tty_winsize.ws_row = strtol(tmp_vector[0], NULL, 10);
+		tty_winsize->ws_row = strtol(tmp_vector[0], NULL, 10);
 		if(errno){
 			print_error(&io, "%s: %d: strtol(%s): %s\r\n", \
 					program_invocation_short_name, io.controller, \
@@ -1715,13 +1729,13 @@ int main(int argc, char **argv){
 		}
 
 		if(tmp_vector[1] == NULL){
-			print_error(&io, "%s: %d: invalid initialization: tty_winsize.ws_col\r\n", \
+			print_error(&io, "%s: %d: invalid initialization: tty_winsize->ws_col\r\n", \
 					program_invocation_short_name, io.controller);
 			exit(-1);
 		}
 
 		errno = 0;
-		tty_winsize.ws_col = strtol(tmp_vector[1], NULL, 10);
+		tty_winsize->ws_col = strtol(tmp_vector[1], NULL, 10);
 		if(errno){
 			print_error(&io, "%s: %d: strtol(%s): %s\r\n", \
 					program_invocation_short_name, io.controller, \
@@ -1751,10 +1765,10 @@ int main(int argc, char **argv){
 			exit(-1);
 		}
 
-		if(ioctl(pty_master, TIOCSWINSZ, &tty_winsize) == -1){
+		if(ioctl(pty_master, TIOCSWINSZ, tty_winsize) == -1){
 			print_error(&io, "%s: %d: ioctl(%d, %d, %lx): %s\r\n", \
 					program_invocation_short_name, io.controller, \
-					pty_master, TIOCGWINSZ, (unsigned long) &tty_winsize, strerror(errno));
+					pty_master, TIOCGWINSZ, (unsigned long) tty_winsize, strerror(errno));
 			exit(-1);
 		}
 
