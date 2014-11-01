@@ -236,8 +236,11 @@ int main(int argc, char **argv){
 
 	/*  Normally I would use the Gnu version. However, this tool needs to be more portable. */
 	/*  Keeping the naming scheme, but setting it up myself. */
-	program_invocation_short_name = strrchr(argv[0], '/');
-	program_invocation_short_name++;
+	if((program_invocation_short_name = strrchr(argv[0], '/'))){
+		program_invocation_short_name++;
+	}else{
+		program_invocation_short_name = argv[0];
+	}
 
 	io.controller = 0;
 	io.encryption = EDH;
