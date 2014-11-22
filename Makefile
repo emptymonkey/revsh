@@ -11,7 +11,9 @@ CFLAGS = -Wall -Wextra -std=c99 -pedantic -Os
 LIBS = -lssl -lcrypto
 
 # Build FreeBSD
+# 	- Remember, the default shell of "/bin/bash" probably doesn't exist for you. Update config.h.
 #CFLAGS = -Wall -Wextra -std=c99 -pedantic -Os -DFREEBSD
+#LIBS = -lssl -lcrypto
 
 # Build "static". 
 # OpenSSL will be static, but it will still call some shared libs on the backend.
