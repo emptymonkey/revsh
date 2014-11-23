@@ -1,6 +1,4 @@
 
-/* #define DEBUG */
-
 /*  Default retry range. (Recur sometime between 5 and 20 min). */
 #define RETRY "600,1200"
 
@@ -29,3 +27,7 @@
 #define EDH_CIPHER "DHE-RSA-AES256-SHA"
 #define TARGET_CIPHER EDH_CIPHER ":" ADH_CIPHER
 #define CONTROLLER_CIPHER "!ADH" ":" EDH_CIPHER
+
+/* The calling card is a string that will be left in the binary. This may be useful for incorrect */
+/* attribution. However, I will use it as advertising space. */
+#define CALLING_CARD "@emptymonkey - https://github.com/emptymonkey"

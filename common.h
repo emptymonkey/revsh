@@ -56,6 +56,12 @@
 #define ST  0x9c
 
 /*
+	 The handshake will be three chars. Open with APC and close with ST. In between is a byte that 
+	 defines what we are trying to do.
+ */
+#define HANDSHAKE_LEN 3
+
+/*
 	 This should only need to be 16 chars long.
 	 4 control chars + 1 space + (2 * string length of winsize members).
 	 winsize members are unsigned shorts on my dev platform.
