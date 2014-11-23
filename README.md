@@ -8,7 +8,7 @@ A reverse shell is a network connection that grants [shell](http://en.wikipedia.
 
 **What is a "bind shell"?**
 
-A [bind shell](http://en.wikipedia.org/wiki/Shellcode#Remote) is a shell that is served from a normal forward network connection. _revsh_ supports both reverse and bind shells. To invoke a bind shell you can either invoke the _-b_ flag on both ends of the connection, or invoke the binary as '_bindsh_'.
+A [bind shell](http://en.wikipedia.org/wiki/Shellcode#Remote) is a shell that is served from a normal forward network connection. _revsh_ supports both reverse and bind shells. To invoke a bind shell, either call _revsh_ with the _-b_ flag on both ends of the connection, or call the binary as 'bindsh'.
 
 
 **Can't I just use [netcat](http://en.wikipedia.org/wiki/Netcat)?**
