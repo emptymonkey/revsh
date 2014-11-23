@@ -48,7 +48,7 @@ int broker(struct remote_io_helper *io){
 	struct sigaction act;
 	int current_sig;
 
-	struct winsize *tty_winsize;
+	struct winsize *tty_winsize = NULL;
 	int winsize_buff_len;
 	char *winsize_buff_head = NULL, *winsize_buff_tail;
 	char **winsize_vec;

