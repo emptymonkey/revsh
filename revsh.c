@@ -68,13 +68,13 @@ int posix_openpt(int flags){
  *
  **********************************************************************************************************************/
 void usage(){
-	fprintf(stderr, "\nusage:\t%s [-c [-a] [-s SHELL] [-d KEYS_DIR] [-f RC_FILE]] [-t SEC] [-r SEC1[,SEC2]] [-b [-k]] [-n] [-v] [ADDRESS:PORT]\n", \
+	fprintf(stderr, "\nusage:\t%s [-c [-a] [-d KEYS_DIR] [-f RC_FILE]] [-s SHELL] [-t SEC] [-r SEC1[,SEC2]] [-b [-k]] [-n] [-v] [ADDRESS:PORT]\n", \
 			program_invocation_short_name);
-	fprintf(stderr, "\n\t-c\t\tRun in controller mode.\t\t\t\t(Default is target mode.)\n");
+	fprintf(stderr, "\n\t-c\t\tRun in command and control mode.\t\t(Default is target mode.)\n");
 	fprintf(stderr, "\t-a\t\tEnable Anonymous Diffie-Hellman mode.\t\t(Default is \"%s\".)\n", CONTROLLER_CIPHER);
-	fprintf(stderr, "\t-s SHELL\tInvoke SHELL as the remote shell.\t\t(Default is \"%s\".)\n", DEFAULT_SHELL);
 	fprintf(stderr, "\t-d KEYS_DIR\tReference the keys in an alternate directory.\t(Default is \"%s\".)\n", KEYS_DIR);
 	fprintf(stderr, "\t-f RC_FILE\tReference an alternate rc file.\t\t\t(Default is \"%s\".)\n", RC_FILE);
+	fprintf(stderr, "\t-s SHELL\tInvoke SHELL as the remote shell.\t\t(Default is \"%s\".)\n", DEFAULT_SHELL);
 	fprintf(stderr, "\t-t SEC\t\tSet the connection timeout to SEC seconds.\t(Default is \"%d\".)\n", TIMEOUT);
 	fprintf(stderr, "\t-r SEC1,SEC2\tSet the retry time to be SEC1 seconds, or\t(Default is \"%s\".)\n\t\t\tto be random in the range from SEC1 to SEC2.\n", RETRY);
 	fprintf(stderr, "\t-b\t\tStart in bind shell mode.\t\t\t(Default is reverse shell mode.)\n");
@@ -885,16 +885,19 @@ int main(int argc, char **argv){
 
 
 		/*  - Send initial shell data. */
+		/* If the C2 hasn't been invoked with a specific shell, then let the client choose. */
+		/* We will indicated this by sending an empty string for the shell, indicated by APC/ST with */
+		/* nothing in between. */
 		memset(buff_head, 0, buff_len);
 		buff_tail = buff_head;
 		*(buff_tail++) = (char) APC;
+
+		tmp_len = 0;
 		if(shell){
 			tmp_len = strlen(shell);
 			memcpy(buff_tail, shell, tmp_len);
-		}else{
-			tmp_len = strlen(DEFAULT_SHELL);
-			memcpy(buff_tail, DEFAULT_SHELL, tmp_len);
 		}
+
 		buff_tail += tmp_len;
 
 		*(buff_tail++) = (char) ST;
@@ -1608,6 +1611,17 @@ int main(int argc, char **argv){
 		}
 
 		tmp_len = strlen(buff_head);
+
+		if(!tmp_len){
+			if(shell){
+				tmp_len = strlen(shell);
+				memcpy(buff_head, shell, tmp_len);
+			}else{
+				tmp_len = strlen(DEFAULT_SHELL);
+				memcpy(buff_head, DEFAULT_SHELL, tmp_len);
+			}
+		}
+
 		if((shell = (char *) calloc(tmp_len + 1, sizeof(char))) == NULL){
 			print_error(&io, "%s: %d: calloc(%d, %d): %s\r\n", \
 					program_invocation_short_name, io.controller, \

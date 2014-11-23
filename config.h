@@ -1,6 +1,4 @@
 
-/* #define DEBUG */
-
 /*  Default retry range. (Recur sometime between 5 and 20 min). */
 #define RETRY "600,1200"
 
