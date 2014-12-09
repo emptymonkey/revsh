@@ -29,7 +29,13 @@
 #define CONTROLLER_CIPHER "!ADH" ":" EDH_CIPHER
 
 /* CALLING_CARD is just a string that will be left sitting in the binary. I use it as advertising space. */
-/* Given the current state of APT attribution, you may want to change it to something that "looks Asian". */
 #define CALLING_CARD "@emptymonkey - https://github.com/emptymonkey"
+
+/* Given the current state of APT attribution, you may want to change CALLING_CARD to something that "looks Asian". */
+
+/* Chinese	"we are hongke" */
 /* #define CALLING_CARD "我们是红客" */
+
+/* Korean		"we are guardians of peace" */
 /* #define CALLING_CARD "우리는 평화의 수호자" */
+
