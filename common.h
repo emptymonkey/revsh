@@ -1,5 +1,5 @@
 
-/* #define DEBUG */
+#define DEBUG
 
 
 #ifndef FREEBSD
@@ -39,7 +39,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-#include "remote_io_helper.h"
+#include "helper_objects.h"
 
 #include "config.h"
 
@@ -96,6 +96,16 @@ int remote_write_encrypted(struct remote_io_helper *io, void *buf, size_t count)
 int remote_printf(struct remote_io_helper *io, char *fmt, ...);
 int print_error(struct remote_io_helper *io, char *fmt, ...);
 
+int do_control(struct remote_io_helper *io, struct configuration_helper *config);
+int do_target(struct remote_io_helper *io, struct configuration_helper *config);
 
-int broker(struct remote_io_helper *io);
+int broker(struct remote_io_helper *io, struct configuration_helper *config);
 void signal_handler(int signal);
+
+int dummy_verify_callback(int preverify_ok, X509_STORE_CTX* ctx);
+void catch_alarm(int signal);
+
+#ifndef FREEBSD
+int posix_openpt(int flags);
+#endif /* FREEBSD */
+

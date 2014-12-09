@@ -19,14 +19,14 @@ LIBS = -lssl -lcrypto
 #CFLAGS = -static -Wall -Wextra -std=c99 -pedantic -Os
 #LIBS = -lssl -lcrypto -ldl -lz
 
-OBJS = revsh_io.o string_to_vector.o broker.o
+OBJS = io.o broker.o control.o target.o
 
 KEYS_DIR = keys
 
 
 all: revsh
 
-revsh: revsh.c remote_io_helper.h common.h config.h $(OBJS) in_the_key_of_c
+revsh: revsh.c helper_objects.h common.h config.h $(OBJS) in_the_key_of_c
 	if [ ! -e $(KEYS_DIR) ]; then \
 		mkdir $(KEYS_DIR) ; \
 	fi
@@ -50,19 +50,23 @@ revsh: revsh.c remote_io_helper.h common.h config.h $(OBJS) in_the_key_of_c
 		./in_the_key_of_c -c $(KEYS_DIR)/target_cert.pem >$(KEYS_DIR)/target_cert.c ; \
 	fi
 	$(CC) $(CFLAGS) $(OBJS) -o revsh revsh.c $(LIBS)
-	$(STRIP) ./revsh
+#	$(STRIP) ./revsh
 
-revsh_io: revsh_io.c remote_io_helper.h common.h config.h
-	$(CC) $(CFLAGS) -c -o revsh_io.o revsh_io.c
-
-string_to_vector: string_to_vector.c common.h config.h
-	$(CC) $(CFLAGS) -c -o string_to_vector.o string_to_vector.c
+io: io.c helper_objects.h common.h config.h
+	$(CC) $(CFLAGS) -c -o io.o io.c
 
 broker: broker.c common.h config.h
 	$(CC) $(CFLAGS) -c -o broker.o broker.c
 
+control: control.c
+	$(CC) $(CFLAGS) -c -o control.o control.c
+
+target: target.c
+	$(CC) $(CFLAGS) -c -o target.o target.c
+
 in_the_key_of_c: in_the_key_of_c.c
 	$(CC) $(CFLAGS) -o in_the_key_of_c in_the_key_of_c.c $(LIBS)
+
 
 
 install:

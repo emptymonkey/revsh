@@ -15,7 +15,7 @@ volatile sig_atomic_t sig_found = 0;
  *	right thing when encountering a window resize event.
  *
  ******************************************************************************/
-int broker(struct remote_io_helper *io){
+int broker(struct remote_io_helper *io, struct configuration_helper *config){
 
 	int retval = -1;
 	fd_set fd_select;
@@ -48,7 +48,7 @@ int broker(struct remote_io_helper *io){
 	struct sigaction act;
 	int current_sig;
 
-	struct winsize *tty_winsize;
+	struct winsize *tty_winsize = NULL;
 	int winsize_buff_len;
 	char *winsize_buff_head = NULL, *winsize_buff_tail;
 	char **winsize_vec;
@@ -64,7 +64,7 @@ int broker(struct remote_io_helper *io){
 
 
 	/*  Prepare our signal handler. */
-	if(io->controller && io->interactive){
+	if(io->controller && config->interactive){
 		memset(&act, 0, sizeof(act));
 		act.sa_handler = signal_handler;
 
@@ -99,7 +99,7 @@ int broker(struct remote_io_helper *io){
 
 	/*  Also prepare one buffer specifically for dealing with serialization */
 	/*  and transmission / receipt of a struct winsize. */
-	if(io->interactive){
+	if(config->interactive){
 		if((tty_winsize = (struct winsize *) calloc(1, sizeof(struct winsize))) == NULL){
 			print_error(io, "%s: %d: calloc(1, %d): %s\r\n", \
 					program_invocation_short_name, io->controller, \
@@ -176,7 +176,7 @@ int broker(struct remote_io_helper *io){
 			/*  If the local buffer is empty, then we should try to fill the buffers. */
 		}else{
 
-			if(io->encryption){
+			if(config->encryption){
 				ssl_bytes_pending = SSL_pending(io->ssl);
 			}
 
@@ -198,7 +198,7 @@ int broker(struct remote_io_helper *io){
 			}
 
 			/*  Case 1: select() was interrupted by a signal that we handle. */
-			if(sig_found && io->interactive){
+			if(sig_found && config->interactive){
 
 				local_buff_ptr = local_buff_head;
 
@@ -283,7 +283,7 @@ int broker(struct remote_io_helper *io){
 				}
 				remote_buff_tail = remote_buff_head + io_bytes;
 
-				if(!io->controller && io->interactive){
+				if(!io->controller && config->interactive){
 					event_ptr = NULL;
 					while(remote_buff_ptr != remote_buff_tail){
 						if(*remote_buff_ptr == (char) UTF8_HIGH){
@@ -574,7 +574,7 @@ CLEAN_UP:
 	free(local_buff_head);
 	free(remote_buff_head);
 
-	if(io->interactive){
+	if(config->interactive){
 		free(winsize_buff_head);
 	}
 

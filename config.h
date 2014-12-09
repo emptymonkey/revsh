@@ -28,6 +28,8 @@
 #define TARGET_CIPHER EDH_CIPHER ":" ADH_CIPHER
 #define CONTROLLER_CIPHER "!ADH" ":" EDH_CIPHER
 
-/* The calling card is a string that will be left in the binary. This may be useful for incorrect */
-/* attribution. However, I will use it as advertising space. */
+/* CALLING_CARD is just a string that will be left sitting in the binary. I use it as advertising space. */
+/* Given the current state of APT attribution, you may want to change it to something that "looks Asian". */
 #define CALLING_CARD "@emptymonkey - https://github.com/emptymonkey"
+/* #define CALLING_CARD "我们是红客" */
+/* #define CALLING_CARD "우리는 평화의 수호자" */
