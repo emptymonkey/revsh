@@ -8,14 +8,14 @@ volatile sig_atomic_t sig_found = 0;
  *
  * broker()
  *
- * Input: A pointer to our remote_io_helper object.
+ * Input: A pointer to our io_helper object.
  * Output: 0 for EOF, -1 for errors.
  *
  * Purpose: Broker data between the terminal and the network socket. Do the 
  *	right thing when encountering a window resize event.
  *
  ******************************************************************************/
-int broker(struct remote_io_helper *io, struct configuration_helper *config){
+int broker(struct io_helper *io, struct configuration_helper *config){
 
 	int retval = -1;
 	fd_set fd_select;
@@ -176,11 +176,13 @@ int broker(struct remote_io_helper *io, struct configuration_helper *config){
 			/*  If the local buffer is empty, then we should try to fill the buffers. */
 		}else{
 
+#ifdef OPENSSL
 			if(config->encryption){
 				ssl_bytes_pending = SSL_pending(io->ssl);
 			}
 
 			if(!ssl_bytes_pending){
+#endif /* OPENSSL */
 				FD_ZERO(&fd_select);
 				FD_SET(io->local_in_fd, &fd_select);
 				FD_SET(io->remote_fd, &fd_select);
@@ -195,7 +197,9 @@ int broker(struct remote_io_helper *io, struct configuration_helper *config){
 							(unsigned long) &fd_select, strerror(errno));
 					goto CLEAN_UP;
 				}
+#ifdef OPENSSL
 			}
+#endif /* OPENSSL */
 
 			/*  Case 1: select() was interrupted by a signal that we handle. */
 			if(sig_found && config->interactive){

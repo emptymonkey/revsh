@@ -6,27 +6,39 @@ OPENSSL = /usr/bin/openssl
 CC = /usr/bin/cc
 STRIP = /usr/bin/strip
 
+OBJS = string_to_vector.o io.o control.o target.o broker.o
+
+
 # Build normal.
-CFLAGS = -Wall -Wextra -std=c99 -pedantic -Os
+CFLAGS = -Wall -Wextra -std=c99 -pedantic -Os -DOPENSSL
 LIBS = -lssl -lcrypto
+KEYS_DIR = keys
+KEY_OF_C = in_the_key_of_c
+IO_DEP = io_ssl.c
 
 # Build FreeBSD
-#CFLAGS = -Wall -Wextra -std=c99 -pedantic -Os -DFREEBSD
+#CFLAGS = -Wall -Wextra -std=c99 -pedantic -Os -DFREEBSD -DOPENSSL
 
 # Build "static". 
 # OpenSSL will be static, but it will still call some shared libs on the backend.
 # Also, the binary will be large. I recommend against this option unless necessary.
-#CFLAGS = -static -Wall -Wextra -std=c99 -pedantic -Os
+#CFLAGS = -static -Wall -Wextra -std=c99 -pedantic -Os -DOPENSSL
 #LIBS = -lssl -lcrypto -ldl -lz
 
-OBJS = io.o broker.o control.o target.o
-
-KEYS_DIR = keys
-
+# Build w/out OPENSSL
+#CFLAGS = -Wall -Wextra -std=c99 -pedantic -Os
+#LIBS = 
+#KEYS_DIR = 
+#KEY_OF_C = 
+#IO_DEP = io_nossl.c
 
 all: revsh
 
-revsh: revsh.c helper_objects.h common.h config.h $(OBJS) in_the_key_of_c
+revsh: revsh.c helper_objects.h common.h config.h $(KEY_OF_C) $(KEYS_DIR) $(OBJS)
+	$(CC) $(CFLAGS) $(OBJS) -o revsh revsh.c $(LIBS)
+#	$(STRIP) ./revsh
+
+keys:
 	if [ ! -e $(KEYS_DIR) ]; then \
 		mkdir $(KEYS_DIR) ; \
 	fi
@@ -49,14 +61,12 @@ revsh: revsh.c helper_objects.h common.h config.h $(OBJS) in_the_key_of_c
 	if [ ! -e $(KEYS_DIR)/target_cert.c ]; then \
 		./in_the_key_of_c -c $(KEYS_DIR)/target_cert.pem >$(KEYS_DIR)/target_cert.c ; \
 	fi
-	$(CC) $(CFLAGS) $(OBJS) -o revsh revsh.c $(LIBS)
-#	$(STRIP) ./revsh
 
-io: io.c helper_objects.h common.h config.h
+string_to_vector:
+	$(CC) $(CFLAGS) -c -o string_to_vector.o string_to_vector.c
+
+io: io.c $(IO_DEP) helper_objects.h common.h config.h
 	$(CC) $(CFLAGS) -c -o io.o io.c
-
-broker: broker.c common.h config.h
-	$(CC) $(CFLAGS) -c -o broker.o broker.c
 
 control: control.c
 	$(CC) $(CFLAGS) -c -o control.o control.c
@@ -64,9 +74,11 @@ control: control.c
 target: target.c
 	$(CC) $(CFLAGS) -c -o target.o target.c
 
+broker: broker.c common.h config.h
+	$(CC) $(CFLAGS) -c -o broker.o broker.c
+
 in_the_key_of_c: in_the_key_of_c.c
 	$(CC) $(CFLAGS) -o in_the_key_of_c in_the_key_of_c.c $(LIBS)
-
 
 
 install:
@@ -83,12 +95,10 @@ install:
 		fi \
 	fi
 
-# make clean will remove everything. Because dh_params_*.c will take awhile to recreate, I've added
-# a make dirty line which will remove everything except the dh_params_*.c file. This was quite useful
-# during dev. This makes a rebuild with new key / cert pairs go pretty quick.
-dirty:
-	rm revsh in_the_key_of_c $(KEYS_DIR)/target* $(KEYS_DIR)/controller* $(OBJS)
-
+# "make clean" removes the keys folder.
 clean:
-	rm revsh in_the_key_of_c $(KEYS_DIR)/* $(OBJS)
-	rmdir $(KEYS_DIR)
+	rm -r revsh $(OBJS) $(KEY_OF_C) $(KEYS_DIR)
+
+# "make dirty" does not.
+dirty:
+	rm revsh $(OBJS) $(KEY_OF_C) 

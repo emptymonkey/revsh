@@ -16,6 +16,7 @@
 #include <netdb.h>
 #include <pwd.h>
 #include <signal.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -28,10 +29,18 @@
 #include <arpa/inet.h>
 
 
+#ifdef OPENSSL
+
 #include <openssl/bio.h>
 #include <openssl/err.h>
 #include <openssl/rand.h>
 #include <openssl/ssl.h>
+
+#else
+
+#include <netdb.h>
+
+#endif /* OPENSSL */
 
 #include <sys/ioctl.h>
 #include <sys/select.h>
@@ -88,21 +97,30 @@ char *program_invocation_short_name;
 
 char **string_to_vector(char *command_string);
 
-int remote_read_plaintext(struct remote_io_helper *io, void *buf, size_t count);
-int remote_write_plaintext(struct remote_io_helper *io, void *buf, size_t count);
-int remote_read_encrypted(struct remote_io_helper *io, void *buf, size_t count);
-int remote_write_encrypted(struct remote_io_helper *io, void *buf, size_t count);
+int init_io_listen(struct io_helper *io, struct configuration_helper *config);
+int init_io_connect(struct io_helper *io, struct configuration_helper *config);
 
-int remote_printf(struct remote_io_helper *io, char *fmt, ...);
-int print_error(struct remote_io_helper *io, char *fmt, ...);
+int remote_read_plaintext(struct io_helper *io, void *buf, size_t count);
+int remote_write_plaintext(struct io_helper *io, void *buf, size_t count);
 
-int do_control(struct remote_io_helper *io, struct configuration_helper *config);
-int do_target(struct remote_io_helper *io, struct configuration_helper *config);
+#ifdef OPENSSL
 
-int broker(struct remote_io_helper *io, struct configuration_helper *config);
-void signal_handler(int signal);
+int remote_read_encrypted(struct io_helper *io, void *buf, size_t count);
+int remote_write_encrypted(struct io_helper *io, void *buf, size_t count);
 
 int dummy_verify_callback(int preverify_ok, X509_STORE_CTX* ctx);
+
+#endif /* OPENSSL */
+
+int remote_printf(struct io_helper *io, char *fmt, ...);
+int print_error(struct io_helper *io, char *fmt, ...);
+
+int do_control(struct io_helper *io, struct configuration_helper *config);
+int do_target(struct io_helper *io, struct configuration_helper *config);
+
+int broker(struct io_helper *io, struct configuration_helper *config);
+void signal_handler(int signal);
+
 void catch_alarm(int signal);
 
 #ifndef FREEBSD
