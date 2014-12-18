@@ -15,30 +15,28 @@ STRIP = /usr/bin/strip
 # Build specifications. Pick one and uncomment.
 ########################################################################################################################
 
-# Build normal.
+## Linux
 CFLAGS = -Wall -Wextra -std=c99 -pedantic -Os -DOPENSSL
 LIBS = -lssl -lcrypto
 KEYS_DIR = keys
 KEY_OF_C = in_the_key_of_c
 IO_DEP = io_ssl.c
 
-# Build FreeBSD
+## FreeBSD
 #CFLAGS = -Wall -Wextra -std=c99 -pedantic -Os -DFREEBSD -DOPENSSL
 #LIBS = -lssl -lcrypto
 #KEYS_DIR = keys
 #KEY_OF_C = in_the_key_of_c
 #IO_DEP = io_ssl.c
 
-# Build "static". 
-# OpenSSL will be static, but it will still call some shared libs on the backend.
-# Also, the binary will be large. I recommend against this option unless necessary.
+## Linux w/static libraries.
 #CFLAGS = -static -Wall -Wextra -std=c99 -pedantic -Os -DOPENSSL
 #LIBS = -lssl -lcrypto -ldl -lz
 #KEYS_DIR = keys
 #KEY_OF_C = in_the_key_of_c
 #IO_DEP = io_ssl.c
 
-# Build w/out OPENSSL. Aka, backward compatability mode.
+## Linux w/compatability mode. (No OpenSSL.)
 #CFLAGS = -Wall -Wextra -std=c99 -pedantic -Os
 #LIBS = 
 #KEYS_DIR = 
@@ -56,7 +54,7 @@ all: revsh
 
 revsh: revsh.c helper_objects.h common.h config.h $(KEY_OF_C) $(KEYS_DIR) $(OBJS)
 	$(CC) $(CFLAGS) $(OBJS) -o revsh revsh.c $(LIBS)
-#	$(STRIP) ./revsh
+	$(STRIP) ./revsh
 
 keys:
 	if [ ! -e $(KEYS_DIR) ]; then \
