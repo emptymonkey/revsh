@@ -4,7 +4,6 @@
 
 int do_control(struct io_helper *io, struct configuration_helper *config){
 
-
 	int i;
 	int retval;
 	int err_flag;
@@ -23,7 +22,6 @@ int do_control(struct io_helper *io, struct configuration_helper *config){
 
   int rc_fd;
   wordexp_t rc_file_exp;
-
 
 
 	buff_len = getpagesize();
@@ -59,22 +57,12 @@ int do_control(struct io_helper *io, struct configuration_helper *config){
 		return(-1);
 	}
 
-	if(config->bindshell){
-		if(init_io_connect(io, config) == -1){
-			fprintf(stderr, "%s: %d: init_io_connect(%lx, %lx): %s\r\n", \
-					program_invocation_short_name, io->controller, \
-					(unsigned long) io, (unsigned long) config, \
-					strerror(errno));
-			return(-1);
-		}
-	}else{
-		if(init_io_listen(io, config) == -1){
-			fprintf(stderr, "%s: %d: init_io_listen(%lx, %lx): %s\r\n", \
-					program_invocation_short_name, io->controller, \
-					(unsigned long) io, (unsigned long) config, \
-					strerror(errno));
-			return(-1);
-		}
+	if(init_io_controller(io, config) == -1){
+		fprintf(stderr, "%s: %d: init_io_listen(%lx, %lx): %s\r\n", \
+				program_invocation_short_name, io->controller, \
+				(unsigned long) io, (unsigned long) config, \
+				strerror(errno));
+		return(-1);
 	}
 
 

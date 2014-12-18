@@ -57,17 +57,23 @@ int remote_write_plaintext(struct io_helper *io, void *buff, size_t count){
 }
 
 
-
-
-
-
 /* The decision to use gethostbyname() in these next sections instead of getaddrinfo() is a design decision. */
 /* If the application is being built without SSL, then the target host is most likely a much older host with */
 /* equally old network libraries. The "no SSL" case would better be considered here as the "deprecated best */
 /* effort, only around for extreame backward compatability" case. */
 
 
-int init_io_listen(struct io_helper *io, struct configuration_helper *config){
+/***********************************************************************************************************************
+ *
+ * init_io_controller()
+ *
+ * Input:  A pointer to our io_helper object and a pointer to our configuration_helper object.
+ * Output: An int showing success (by returning the remote_fd) or failure (by returning -1).
+ *
+ * Purpose: To initialize a controller's network io interface.
+ *
+ **********************************************************************************************************************/
+int init_io_controller(struct io_helper *io, struct configuration_helper *config){
 
 	int tmp_sock;
 
@@ -85,6 +91,11 @@ int init_io_listen(struct io_helper *io, struct configuration_helper *config){
 	time_t epoch;
 
 
+	/* In the no ssl build, there is no difference between a controller in bindshell mode, and a target. */
+	/* As such, we'll just pass through to the other rather than repeat code. */
+	if(io->controller && config->bindshell){
+		return(init_io_target(io, config));
+	}
 
 	if((act = (struct sigaction *) calloc(1, sizeof(struct sigaction))) == NULL){
 		fprintf(stderr, "%s: %d: calloc(1, %d): %s\r\n", \
@@ -92,7 +103,6 @@ int init_io_listen(struct io_helper *io, struct configuration_helper *config){
 				(int) sizeof(struct sigaction), strerror(errno));
 		return(-1);
 	}
-
 
 	ip_address_len = strlen(config->ip_addr);
 	if((ip_address = calloc(ip_address_len + 1, sizeof(char))) == NULL){
@@ -214,17 +224,22 @@ int init_io_listen(struct io_helper *io, struct configuration_helper *config){
 		printf("\tConnected!\n");
 	}
 
-
 	free(ip_address);
 	return(io->remote_fd);
 }
 
 
-
-
-
-
-int init_io_connect(struct io_helper *io, struct configuration_helper *config){
+/***********************************************************************************************************************
+ *
+ * init_io_target()
+ *
+ * Input:  A pointer to our io_helper object and a pointer to our configuration_helper object.
+ * Output: An int showing success (by returning the remote_fd) or failure (by returning -1).
+ *
+ * Purpose: To initialize a target's network io interface.
+ *
+ **********************************************************************************************************************/
+int init_io_target(struct io_helper *io, struct configuration_helper *config){
 
 	int retval;
 
@@ -245,6 +260,12 @@ int init_io_connect(struct io_helper *io, struct configuration_helper *config){
 
 	time_t epoch;
 
+
+  /* In the no ssl build, there is no difference between a target in bindshell mode, and a controller. */
+  /* As such, we'll just pass through to the other rather than repeat code. */
+  if(!io->controller && config->bindshell){
+    return(init_io_controller(io, config));
+  }
 
 	if((act = (struct sigaction *) calloc(1, sizeof(struct sigaction))) == NULL){
 		if(config->verbose){
@@ -322,12 +343,13 @@ int init_io_connect(struct io_helper *io, struct configuration_helper *config){
 	}
 
 	while((retval = connect(tmp_sock, (struct sockaddr *) &name, sizeof(name))) && config->retry_start){
-
-		if(retval == -1 && !(errno == ECONNREFUSED && errno == ETIMEDOUT)){
+		
+		if(retval == -1 && !(errno == ECONNREFUSED || errno == ETIMEDOUT)){
 			fprintf(stderr, "%s: %d: connect(%d, %lx, %d): %s\n", \
 					program_invocation_short_name, io->controller, \
 					io->remote_fd, (unsigned long) &name, (int) sizeof(name), \
 					strerror(errno));
+			return(-1);
 		}
 
 		if(config->retry_stop){
@@ -367,7 +389,6 @@ int init_io_connect(struct io_helper *io, struct configuration_helper *config){
 	}
 
 	alarm(0);
-
 
 	if(config->verbose){
 		printf("\tConnected!\n");

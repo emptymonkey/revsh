@@ -57,7 +57,7 @@ char *GLOBAL_calling_card = CALLING_CARD;
  **********************************************************************************************************************/
 void usage(){
 #ifdef OPENSSL
-	fprintf(stderr, "\nusage:\t%s [-c [-a] [-d KEYS_DIR] [-f RC_FILE]] [-s SHELL] [-t SEC] [-r SEC1[,SEC2]] [-b [-k]] [-n] [-v] [ADDRESS:PORT]\n", program_invocation_short_name);
+	fprintf(stderr, "\nusage:\t%s [-c [-a] [-d KEYS_DIR] [-f RC_FILE]] [-s SHELL] [-t SEC] [-r SEC1[,SEC2]] [-b] [-n] [-k] [-v] [-h] [ADDRESS:PORT]\n", program_invocation_short_name);
 #else /* OPENSSL */
 	fprintf(stderr, "\nusage:\t%s [-c [-f RC_FILE]] [-s SHELL] [-t SEC] [-r SEC1[,SEC2]] [-b [-k]] [-n] [-v] [ADDRESS:PORT]\n", program_invocation_short_name);
 #endif /* OPENSSL */
@@ -71,8 +71,8 @@ void usage(){
 	fprintf(stderr, "\t-t SEC\t\tSet the connection timeout to SEC seconds.\t(Default is \"%d\".)\n", TIMEOUT);
 	fprintf(stderr, "\t-r SEC1,SEC2\tSet the retry time to be SEC1 seconds, or\t(Default is \"%s\".)\n\t\t\tto be random in the range from SEC1 to SEC2.\n", RETRY);
 	fprintf(stderr, "\t-b\t\tStart in bind shell mode.\t\t\t(Default is reverse shell mode.)\n");
-	fprintf(stderr, "\t-k\t\tStart the bind shell in keep-alive mode.\t(Ignored in reverse shell mode.)\n");
 	fprintf(stderr, "\t-n\t\tNon-interactive netcat style data broker.\t(Default is interactive w/remote tty.)\n\t\t\tNo tty. Useful for copying files.\n");
+	fprintf(stderr, "\t-k\t\tRun in keep-alive mode.\n");
 	fprintf(stderr, "\t-v\t\tVerbose output.\n");
 	fprintf(stderr, "\t-h\t\tPrint this help.\n");
 	fprintf(stderr, "\tADDRESS:PORT\tThe address and port of the listening socket.\t(Default is \"%s\".)\n", ADDRESS);
@@ -91,16 +91,6 @@ void usage(){
 	exit(-1);
 }
 
-
-/* 
-	 The man page for POSIX_OPENPT(3) states that for code that runs on older systems, you can define this yourself
-	 easily.
- */
-#ifndef FREEBSD
-int posix_openpt(int flags){
-	return open("/dev/ptmx", flags);
-}
-#endif /* FREEBSD */
 
 
 /***********************************************************************************************************************
@@ -132,16 +122,14 @@ int main(int argc, char **argv){
 	char *retry_string = RETRY;
 
 
-
 	/*
 	 * Basic initialization.
 	 */
 
 	io.local_in_fd = fileno(stdin);
 	io.local_out_fd = fileno(stdout);
-
-
 	io.controller = 0;
+
 	config.interactive = 1;
   config.shell = NULL;
   config.env_string = NULL;
@@ -260,19 +248,17 @@ int main(int argc, char **argv){
 	}
 
 
-#ifdef OPENSSL
-
 	/*  The joy of a struct with pointers to functions. We only call "io.remote_read()" and the */
 	/*  appropriate crypto / no crypto version is called on the backend. */
+	io.remote_read = &remote_read_plaintext;
+	io.remote_write = &remote_write_plaintext;
+
+#ifdef OPENSSL
+
 	if(config.encryption){
 		io.remote_read = &remote_read_encrypted;
 		io.remote_write = &remote_write_encrypted;
-
 		io.fingerprint_type = EVP_sha1();
-
-	}else{
-		io.remote_read = &remote_read_plaintext;
-		io.remote_write = &remote_write_plaintext;
 	}
 
 	switch(config.encryption){
@@ -289,12 +275,8 @@ int main(int argc, char **argv){
 	SSL_library_init();
 	SSL_load_error_strings();
 
-#else
-
-	io.remote_read = &remote_read_plaintext;
-	io.remote_write = &remote_write_plaintext;
-
 #endif /* OPENSSL */
+
 
 	/*  Prepare the retry timer values. */
 	errno = 0;
@@ -321,10 +303,24 @@ int main(int argc, char **argv){
 
 
 	if(io.controller){
-		retval = do_control(&io, &config);
+		do{
+			retval = do_control(&io, &config);
+		} while(retval != -1 && config.keepalive);
 	}else{
 		retval = do_target(&io, &config);
 	}
 
 	return(retval);
 }
+
+
+
+/* 
+	 The man page for POSIX_OPENPT(3) states that for code that runs on older systems, you can define this yourself
+	 easily.
+ */
+#ifndef FREEBSD
+int posix_openpt(int flags){
+	return open("/dev/ptmx", flags);
+}
+#endif /* FREEBSD */

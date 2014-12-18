@@ -3,7 +3,6 @@
 #include "keys/dh_params.c"
 
 
-
 /* The plaintext case for I/O is really easy. Call the openssl BIO_* functions and return. */
 
 /***********************************************************************************************************************
@@ -183,14 +182,28 @@ int remote_write_encrypted(struct io_helper *io, void *buff, size_t count){
 }
 
 
-
-int init_io_listen(struct io_helper *io, struct configuration_helper *config){
+/***********************************************************************************************************************
+ *
+ * init_io_controller()
+ *
+ * Input:  A pointer to our io_helper object and a pointer to our configuration_helper object.
+ * Output: An int showing success (by returning the remote_fd) or failure (by returning -1).
+ *
+ * Purpose: To initialize the controller's network io interface.
+ *
+ **********************************************************************************************************************/
+int init_io_controller(struct io_helper *io, struct configuration_helper *config){
 
 	int i;
+	int retval;
 
 	wordexp_t keys_dir_exp;
 
 	struct sigaction *act = NULL;
+
+	unsigned int tmp_uint;
+	unsigned int retry;
+	struct timespec req;
 
 	BIO *accept = NULL;
 
@@ -208,7 +221,6 @@ int init_io_listen(struct io_helper *io, struct configuration_helper *config){
 	FILE *target_fingerprint_fp;
 
 	char *allowed_cert_path_head, *allowed_cert_path_tail;
-
 
 
 	if(wordexp(config->keys_dir, &keys_dir_exp, 0)){
@@ -353,48 +365,97 @@ int init_io_listen(struct io_helper *io, struct configuration_helper *config){
 	alarm(config->timeout);
 
 
+	if(config->bindshell){
 
-	if(config->verbose){
-		printf("Listening on %s...", config->ip_addr);
-		fflush(stdout);
+		/*  - Open a network connection back to the target. */
+		if((io->connect = BIO_new_connect(config->ip_addr)) == NULL){
+			fprintf(stderr, "%s: %d: BIO_new_connect(%s): %s\n", \
+					program_invocation_short_name, io->controller, config->ip_addr, strerror(errno));
+			ERR_print_errors_fp(stderr);
+			return(-1);
+		}
+
+		if(config->verbose){
+			printf("Connecting to %s...", config->ip_addr);
+			fflush(stdout);
+		}
+
+		while(((retval = BIO_do_connect(io->connect)) != 1) && config->retry_start){
+
+			/*  Using RAND_pseudo_bytes() instead of RAND_bytes() because this is a best effort. We don't */
+			/*  actually want to die or print an error if there is a lack of entropy. */
+			if(config->retry_stop){
+				RAND_pseudo_bytes((unsigned char *) &tmp_uint, sizeof(tmp_uint));
+				retry = config->retry_start + (tmp_uint % (config->retry_stop - config->retry_start));
+			}else{
+				retry = config->retry_start;
+			}
+
+			if(config->verbose){
+				printf("No connection.\nRetrying in %d seconds...\n", retry);
+			}
+
+			req.tv_sec = retry;
+			req.tv_nsec = 0;
+			nanosleep(&req, NULL);
+
+			if(config->verbose){
+				printf("Connecting to %s...", config->ip_addr);
+				fflush(stdout);
+			}
+		}
+
+		if(retval != 1){
+			fprintf(stderr, "%s: %d: BIO_do_connect(%lx): %s\n", \
+					program_invocation_short_name, io->controller, (unsigned long) io->connect, strerror(errno));
+			ERR_print_errors_fp(stderr);
+			return(-1);
+		}
+
+	}else{
+
+		if(config->verbose){
+			printf("Listening on %s...", config->ip_addr);
+			fflush(stdout);
+		}
+
+		if((accept = BIO_new_accept(config->ip_addr)) == NULL){
+			fprintf(stderr, "%s: %d: BIO_new_accept(%s): %s\n", \
+					program_invocation_short_name, io->controller, config->ip_addr, strerror(errno));
+			ERR_print_errors_fp(stderr);
+			return(-1);
+		}
+
+		if(BIO_set_bind_mode(accept, BIO_BIND_REUSEADDR) <= 0){
+			fprintf(stderr, "%s: %d: BIO_set_bind_mode(%lx, BIO_BIND_REUSEADDR): %s\n", \
+					program_invocation_short_name, io->controller, (unsigned long) accept, strerror(errno));
+			ERR_print_errors_fp(stderr);
+			return(-1);
+		}
+
+		if(BIO_do_accept(accept) <= 0){
+			fprintf(stderr, "%s: %d: BIO_do_accept(%lx): %s\n", \
+					program_invocation_short_name, io->controller, (unsigned long) accept, strerror(errno));
+			ERR_print_errors_fp(stderr);
+			return(-1);
+		}
+
+		if(BIO_do_accept(accept) <= 0){
+			fprintf(stderr, "%s: %d: BIO_do_accept(%lx): %s\n", \
+					program_invocation_short_name, io->controller, (unsigned long) accept, strerror(errno));
+			ERR_print_errors_fp(stderr);
+			return(-1);
+		}
+
+		if((io->connect = BIO_pop(accept)) == NULL){
+			fprintf(stderr, "%s: %d: BIO_pop(%lx): %s\n", \
+					program_invocation_short_name, io->controller, (unsigned long) accept, strerror(errno));
+			ERR_print_errors_fp(stderr);
+			return(-1);
+		}
+
+		BIO_free(accept);
 	}
-
-	if((accept = BIO_new_accept(config->ip_addr)) == NULL){
-		fprintf(stderr, "%s: %d: BIO_new_accept(%s): %s\n", \
-				program_invocation_short_name, io->controller, config->ip_addr, strerror(errno));
-		ERR_print_errors_fp(stderr);
-		return(-1);
-	}
-
-	if(BIO_set_bind_mode(accept, BIO_BIND_REUSEADDR) <= 0){
-		fprintf(stderr, "%s: %d: BIO_set_bind_mode(%lx, BIO_BIND_REUSEADDR): %s\n", \
-				program_invocation_short_name, io->controller, (unsigned long) accept, strerror(errno));
-		ERR_print_errors_fp(stderr);
-		return(-1);
-	}
-
-	if(BIO_do_accept(accept) <= 0){
-		fprintf(stderr, "%s: %d: BIO_do_accept(%lx): %s\n", \
-				program_invocation_short_name, io->controller, (unsigned long) accept, strerror(errno));
-		ERR_print_errors_fp(stderr);
-		return(-1);
-	}
-
-	if(BIO_do_accept(accept) <= 0){
-		fprintf(stderr, "%s: %d: BIO_do_accept(%lx): %s\n", \
-				program_invocation_short_name, io->controller, (unsigned long) accept, strerror(errno));
-		ERR_print_errors_fp(stderr);
-		return(-1);
-	}
-
-	if((io->connect = BIO_pop(accept)) == NULL){
-		fprintf(stderr, "%s: %d: BIO_pop(%lx): %s\n", \
-				program_invocation_short_name, io->controller, (unsigned long) accept, strerror(errno));
-		ERR_print_errors_fp(stderr);
-		return(-1);
-	}
-
-	BIO_free(accept);
 
 	act->sa_handler = SIG_DFL;
 
@@ -544,7 +605,17 @@ int init_io_listen(struct io_helper *io, struct configuration_helper *config){
 }
 
 
-int init_io_connect(struct io_helper *io, struct configuration_helper *config){
+/***********************************************************************************************************************
+ *
+ * init_io_target()
+ *
+ * Input:  A pointer to our io_helper object and a pointer to our configuration_helper object.
+ * Output: An int showing success (by returning the remote_fd) or failure (by returning -1).
+ *
+ * Purpose: To initialize a target's network io interface.
+ *
+ **********************************************************************************************************************/
+int init_io_target(struct io_helper *io, struct configuration_helper *config){
 
 	int i;
 	int retval;
@@ -570,6 +641,8 @@ int init_io_connect(struct io_helper *io, struct configuration_helper *config){
 	unsigned char remote_fingerprint[EVP_MAX_MD_SIZE];
 
 	const SSL_CIPHER *current_cipher;
+
+	BIO *accept = NULL;
 
 
 	if((act = (struct sigaction *) calloc(1, sizeof(struct sigaction))) == NULL){
@@ -659,54 +732,153 @@ int init_io_connect(struct io_helper *io, struct configuration_helper *config){
 
 	alarm(config->timeout);
 
+	if(config->bindshell){
 
-	/*  - Open a network connection back to a controller. */
-	if((io->connect = BIO_new_connect(config->ip_addr)) == NULL){
-		if(config->verbose){
-			fprintf(stderr, "%s: %d: BIO_new_connect(%s): %s\n", \
-					program_invocation_short_name, io->controller, config->ip_addr, strerror(errno));
-			ERR_print_errors_fp(stderr);
-		}
-		return(-1);
-	}
+		/*  - Listen for a connection. */
 
-	if(config->verbose){
-		printf("Connecting to %s...", config->ip_addr);
-		fflush(stdout);
-	}
-
-	while(((retval = BIO_do_connect(io->connect)) != 1) && config->retry_start){
-
-		/*  Using RAND_pseudo_bytes() instead of RAND_bytes() because this is a best effort. We don't */
-		/*  actually want to die or print an error if there is a lack of entropy. */
-		if(config->retry_stop){
-			RAND_pseudo_bytes((unsigned char *) &tmp_uint, sizeof(tmp_uint));
-			retry = config->retry_start + (tmp_uint % (config->retry_stop - config->retry_start));
-		}else{
-			retry = config->retry_start;
+		if(config->keepalive){
+			if(signal(SIGCHLD, SIG_IGN) == SIG_ERR){
+				if(config->verbose){
+					fprintf(stderr, "%s: %d: signal(SIGCHLD, SIG_IGN): %s\n", \
+							program_invocation_short_name, io->controller, strerror(errno));
+					return(-1);
+				}
+			}
 		}
 
-		if(config->verbose){
-			printf("No connection.\r\nRetrying in %d seconds...\r\n", retry);
+		do{
+
+			if(config->verbose){
+				printf("Listening on %s...", config->ip_addr);
+				fflush(stdout);
+			}
+
+			if(accept){
+				BIO_free(accept);
+				alarm(config->timeout);
+			}
+
+			if((accept = BIO_new_accept(config->ip_addr)) == NULL){
+				if(config->verbose){
+					fprintf(stderr, "%s: %d: BIO_new_accept(%s): %s\n", \
+							program_invocation_short_name, io->controller, config->ip_addr, strerror(errno));
+					ERR_print_errors_fp(stderr);
+				}
+				return(-1);
+			}
+
+			if(BIO_set_bind_mode(accept, BIO_BIND_REUSEADDR) <= 0){
+				if(config->verbose){
+					fprintf(stderr, "%s: %d: BIO_set_bind_mode(%lx, BIO_BIND_REUSEADDR): %s\n", \
+							program_invocation_short_name, io->controller, (unsigned long) accept, strerror(errno));
+					ERR_print_errors_fp(stderr);
+				}
+				return(-1);
+			}
+
+			if(BIO_do_accept(accept) <= 0){
+				if(config->verbose){
+					fprintf(stderr, "%s: %d: BIO_do_accept(%lx): %s\n", \
+							program_invocation_short_name, io->controller, (unsigned long) accept, strerror(errno));
+					ERR_print_errors_fp(stderr);
+				}
+				return(-1);
+			}
+
+			if(BIO_do_accept(accept) <= 0){
+				if(config->verbose){
+					fprintf(stderr, "%s: %d: BIO_do_accept(%lx): %s\n", \
+							program_invocation_short_name, io->controller, (unsigned long) accept, strerror(errno));
+					ERR_print_errors_fp(stderr);
+				}
+				return(-1);
+			}
+
+			if((io->connect = BIO_pop(accept)) == NULL){
+				if(config->verbose){
+					fprintf(stderr, "%s: %d: BIO_pop(%lx): %s\n", \
+							program_invocation_short_name, io->controller, (unsigned long) accept, strerror(errno));
+					ERR_print_errors_fp(stderr);
+				}
+				return(-1);
+			}
+
+			BIO_free(accept);
+
+			retval = 0;
+			if(config->keepalive){
+				if((retval = fork()) == -1){
+					if(config->verbose){
+						fprintf(stderr, "%s: %d: fork(): %s\n", \
+								program_invocation_short_name, io->controller, strerror(errno));
+						ERR_print_errors_fp(stderr);
+					}
+					return(-1);
+				}
+			}
+
+		} while(config->keepalive && retval);
+
+		if(config->keepalive){
+			if(signal(SIGCHLD, SIG_DFL) == SIG_ERR){
+				if(config->verbose){
+					fprintf(stderr, "%s: %d: signal(SIGCHLD, SIG_IGN): %s\n", \
+							program_invocation_short_name, io->controller, strerror(errno));
+				}
+				return(-1);
+			}
 		}
 
-		req.tv_sec = retry;
-		req.tv_nsec = 0;
-		nanosleep(&req, NULL);
+	}else{
+
+		/*  - Open a network connection back to a controller. */
+		if((io->connect = BIO_new_connect(config->ip_addr)) == NULL){
+			if(config->verbose){
+				fprintf(stderr, "%s: %d: BIO_new_connect(%s): %s\n", \
+						program_invocation_short_name, io->controller, config->ip_addr, strerror(errno));
+				ERR_print_errors_fp(stderr);
+			}
+			return(-1);
+		}
 
 		if(config->verbose){
 			printf("Connecting to %s...", config->ip_addr);
 			fflush(stdout);
 		}
-	}
 
-	if(retval != 1){
-		if(config->verbose){
-			fprintf(stderr, "%s: %d: BIO_do_connect(%lx): %s\n", \
-					program_invocation_short_name, io->controller, (unsigned long) io->connect, strerror(errno));
-			ERR_print_errors_fp(stderr);
+		while(((retval = BIO_do_connect(io->connect)) != 1) && config->retry_start){
+
+			/*  Using RAND_pseudo_bytes() instead of RAND_bytes() because this is a best effort. We don't */
+			/*  actually want to die or print an error if there is a lack of entropy. */
+			if(config->retry_stop){
+				RAND_pseudo_bytes((unsigned char *) &tmp_uint, sizeof(tmp_uint));
+				retry = config->retry_start + (tmp_uint % (config->retry_stop - config->retry_start));
+			}else{
+				retry = config->retry_start;
+			}
+
+			if(config->verbose){
+				printf("No connection.\r\nRetrying in %d seconds...\r\n", retry);
+			}
+
+			req.tv_sec = retry;
+			req.tv_nsec = 0;
+			nanosleep(&req, NULL);
+
+			if(config->verbose){
+				printf("Connecting to %s...", config->ip_addr);
+				fflush(stdout);
+			}
 		}
-		return(-1);
+
+		if(retval != 1){
+			if(config->verbose){
+				fprintf(stderr, "%s: %d: BIO_do_connect(%lx): %s\n", \
+						program_invocation_short_name, io->controller, (unsigned long) io->connect, strerror(errno));
+				ERR_print_errors_fp(stderr);
+			}
+			return(-1);
+		}
 	}
 
 	act->sa_handler = SIG_DFL;
@@ -819,10 +991,8 @@ int init_io_connect(struct io_helper *io, struct configuration_helper *config){
 		}
 	}
 
-
 	return(io->remote_fd);
 }
-
 
 
 /***********************************************************************************************************************

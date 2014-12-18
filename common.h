@@ -97,8 +97,8 @@ char *program_invocation_short_name;
 
 char **string_to_vector(char *command_string);
 
-int init_io_listen(struct io_helper *io, struct configuration_helper *config);
-int init_io_connect(struct io_helper *io, struct configuration_helper *config);
+int init_io_controller(struct io_helper *io, struct configuration_helper *config);
+int init_io_target(struct io_helper *io, struct configuration_helper *config);
 
 int remote_read_plaintext(struct io_helper *io, void *buf, size_t count);
 int remote_write_plaintext(struct io_helper *io, void *buf, size_t count);

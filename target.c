@@ -22,13 +22,10 @@ int do_target(struct io_helper *io, struct configuration_helper *config){
 
 	char tmp_char;
 
-
 	struct passwd *passwd_entry;
 
 	struct sockaddr addr;
 	socklen_t addrlen = (socklen_t) sizeof(addr);
-
-
 
 
 	buff_len = getpagesize();
@@ -42,7 +39,6 @@ int do_target(struct io_helper *io, struct configuration_helper *config){
 		return(-1);
 	}
 
-
 	if((tty_winsize = (struct winsize *) calloc(1, sizeof(struct winsize))) == NULL){
 		if(config->verbose){
 			fprintf(stderr, "%s: %d: calloc(1, %d): %s\r\n", \
@@ -53,22 +49,12 @@ int do_target(struct io_helper *io, struct configuration_helper *config){
 	}
 
 
-	if(config->bindshell){
-		if(init_io_listen(io, config) == -1){
-			fprintf(stderr, "%s: %d: init_io_listen(%lx, %lx): %s\r\n", \
-					program_invocation_short_name, io->controller, \
-					(unsigned long) io, (unsigned long) config, \
-					strerror(errno));
-			return(-1);
-		}
-	}else{
-		if(init_io_connect(io, config) == -1){
-			fprintf(stderr, "%s: %d: init_io_connect(%lx, %lx): %s\r\n", \
-					program_invocation_short_name, io->controller, \
-					(unsigned long) io, (unsigned long) config, \
-					strerror(errno));
-			return(-1);
-		}
+	if(init_io_target(io, config) == -1){
+		fprintf(stderr, "%s: %d: init_io_connect(%lx, %lx): %s\r\n", \
+				program_invocation_short_name, io->controller, \
+				(unsigned long) io, (unsigned long) config, \
+				strerror(errno));
+		return(-1);
 	}
 
 
