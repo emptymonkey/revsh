@@ -7,25 +7,63 @@
  * remote_read_plaintext()
  *
  * Input: A pointer to our io_helper object, a pointer to the buffer we want to fill, and the count of characters
- *	we should try to read.
- * Output: The count of characters succesfully read, or an error code. (man BIO_read for more information.)
+ *	we need to read.
+ * Output: The count of characters succesfully read, or an error code.
  *
- * Purpose: Fill our buffer, but this is the simple plaintext wrapper case. Nothing fancy here.
+ * Purpose: Fill our buffer.
  *
  **********************************************************************************************************************/
 int remote_read_plaintext(struct io_helper *io, void *buff, size_t count){
 
 	int retval;
+	int io_bytes;
+	char *tmp_ptr;
 
-	if((retval = read(io->remote_fd, buff, count)) == -1){
-		fprintf(stderr, "%s: %d: read(%d, %lx, %d): %s\n", \
-				program_invocation_short_name, io->controller, \
-				io->remote_fd, (unsigned long) buff, (int) count, \
-				strerror(errno));
-		return(-1);
+	fd_set fd_select;
+
+	int seen = 0;
+
+
+	io_bytes = 0;
+	tmp_ptr = buff;
+
+	while(count){
+
+		/* Let's give the code a try to read() without select(), as that should be the normal case. */
+		if(seen){
+			FD_ZERO(&fd_select);
+			FD_SET(io->remote_fd, &fd_select);
+
+			if(select(io->remote_fd + 1, &fd_select, NULL, NULL, NULL) == -1){
+				return(-1);
+			}
+		}else{
+			seen = 1;
+		}
+
+		retval = read(io->remote_fd, tmp_ptr, count);
+
+		if(!retval){
+
+			io->eof = 1;
+			return(-1);
+
+		}else if(retval == -1){
+
+			if(!(errno == EINTR  || errno == EAGAIN)){
+				return(-1);
+			}
+
+		}else{
+
+			count -= retval;
+			io_bytes += retval;
+			tmp_ptr += retval;
+
+		}
 	}
 
-	return(retval);
+	return(io_bytes);
 }
 
 
@@ -34,26 +72,58 @@ int remote_read_plaintext(struct io_helper *io, void *buff, size_t count){
  * remote_write_plaintext()
  *
  * Input: A pointer to our io_helper object, a pointer to the buffer we want to empty, and the count of
- *	characters we should try to write.
- * Output: The count of characters succesfully written, or an error code. (man BIO_write for more information.)
+ *	characters we should write.
+ * Output: The count of characters succesfully written, or an error code.
  *
- * Purpose: Empty our buffer, but this is the simple plaintext wrapper case. Nothing fancy here.
+ * Purpose: Empty our buffer.
  *
  **********************************************************************************************************************/
 int remote_write_plaintext(struct io_helper *io, void *buff, size_t count){
 
 	int retval;
+	int io_bytes;
+	char *tmp_ptr;
 
-	if((retval = write(io->remote_fd, buff, count)) == -1){
-		fprintf(stderr, "%s: %d: write(%d, %lx, %d): %s\n", \
-				program_invocation_short_name, io->controller, \
-				io->remote_fd, (unsigned long) buff, (int) count, \
-				strerror(errno));
-		return(-1);
+	fd_set fd_select;
+
+	int seen = 0;
+
+
+	io_bytes = 0;
+	tmp_ptr = buff;
+
+	while(count){
+
+		/* Let's give the code a try to write() without select(), as that should be the normal case. */
+		if(seen){
+			FD_ZERO(&fd_select);
+			FD_SET(io->remote_fd, &fd_select);
+
+			if(select(io->remote_fd + 1, NULL, &fd_select, NULL, NULL) == -1){
+				return(-1);
+			}
+		}else{
+			seen = 1;
+		}
+
+		retval = write(io->remote_fd, tmp_ptr, count);
+
+		if(retval == -1){
+
+			if(!(errno == EINTR || errno == EAGAIN)){
+				return(-1);
+			}
+
+		}else{
+
+			count -= retval;
+			io_bytes += retval;
+			tmp_ptr += retval;
+
+		}
 	}
 
-	return(retval);
-
+	return(io_bytes);
 }
 
 
@@ -73,7 +143,7 @@ int remote_write_plaintext(struct io_helper *io, void *buff, size_t count){
  * Purpose: To initialize a controller's network io interface.
  *
  **********************************************************************************************************************/
-int init_io_controller(struct io_helper *io, struct configuration_helper *config){
+int init_io_controller(struct io_helper *io, struct config_helper *config){
 
 	int tmp_sock;
 
@@ -208,13 +278,13 @@ int init_io_controller(struct io_helper *io, struct configuration_helper *config
 		return(-1);
 	}
 
-
 	act->sa_handler = SIG_DFL;
 
 	if(sigaction(SIGALRM, act, NULL) == -1){
 		fprintf(stderr, "%s: %d: sigaction(%d, %lx, %p): %s\r\n", \
 				program_invocation_short_name, io->controller, \
-				SIGALRM, (unsigned long) act, NULL, strerror(errno));
+				SIGALRM, (unsigned long) act, NULL, \
+				strerror(errno));
 		return(-1);
 	}
 
@@ -225,6 +295,7 @@ int init_io_controller(struct io_helper *io, struct configuration_helper *config
 	}
 
 	free(ip_address);
+
 	return(io->remote_fd);
 }
 
@@ -239,7 +310,7 @@ int init_io_controller(struct io_helper *io, struct configuration_helper *config
  * Purpose: To initialize a target's network io interface.
  *
  **********************************************************************************************************************/
-int init_io_target(struct io_helper *io, struct configuration_helper *config){
+int init_io_target(struct io_helper *io, struct config_helper *config){
 
 	int retval;
 
@@ -261,11 +332,11 @@ int init_io_target(struct io_helper *io, struct configuration_helper *config){
 	time_t epoch;
 
 
-  /* In the no ssl build, there is no difference between a target in bindshell mode, and a controller. */
-  /* As such, we'll just pass through to the other rather than repeat code. */
-  if(!io->controller && config->bindshell){
-    return(init_io_controller(io, config));
-  }
+	/* In the no ssl build, there is no difference between a target in bindshell mode, and a controller. */
+	/* As such, we'll just pass through to the other rather than repeat code. */
+	if(!io->controller && config->bindshell){
+		return(init_io_controller(io, config));
+	}
 
 	if((act = (struct sigaction *) calloc(1, sizeof(struct sigaction))) == NULL){
 		if(config->verbose){
@@ -343,7 +414,7 @@ int init_io_target(struct io_helper *io, struct configuration_helper *config){
 	}
 
 	while((retval = connect(tmp_sock, (struct sockaddr *) &name, sizeof(name))) && config->retry_start){
-		
+
 		if(retval == -1 && !(errno == ECONNREFUSED || errno == ETIMEDOUT)){
 			fprintf(stderr, "%s: %d: connect(%d, %lx, %d): %s\n", \
 					program_invocation_short_name, io->controller, \
@@ -395,5 +466,6 @@ int init_io_target(struct io_helper *io, struct configuration_helper *config){
 	}
 
 	free(ip_address);
+
 	return(io->remote_fd);
 }

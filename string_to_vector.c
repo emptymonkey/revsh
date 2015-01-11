@@ -114,3 +114,19 @@ CLEAN_UP:
 	free(argv);
 	return(NULL);
 }
+
+void free_vector(char **vector){
+	
+	char **tmp_vector;
+	char *tmp_string;
+
+	tmp_vector = vector;
+	tmp_string = *(tmp_vector++);
+	
+	while(tmp_string){
+		free(tmp_string);
+		tmp_string = *(tmp_vector++);
+	}
+	
+	free(vector);
+}

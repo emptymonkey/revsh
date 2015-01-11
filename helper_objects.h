@@ -1,10 +1,21 @@
-struct configuration_helper {
 
-	int interactive;
+
+struct message_helper {
+	unsigned char data_type;
+	unsigned short data_len;
+
+	char *data;
+	unsigned short data_size;
+};
+
+
+struct config_helper {
+
+	unsigned char interactive;
+
 	int bindshell;
 	int verbose;
 
-	char *env_string;
 	char *ip_addr;
 	char *keys_dir;
 	char *rc_file;
@@ -39,6 +50,8 @@ struct io_helper {
 	int local_out_fd;
 	int remote_fd;
 
+	struct message_helper message;
+	int eof;
 
 #ifdef OPENSSL
 	BIO *connect;

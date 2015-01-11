@@ -48,7 +48,7 @@ IO_DEP = io_ssl.c
 # make directives - Not intended for modification.
 ########################################################################################################################
 
-OBJS = string_to_vector.o io.o control.o target.o broker.o
+OBJS = string_to_vector.o io.o control.o target.o broker.o message.o
 
 all: revsh
 
@@ -83,17 +83,20 @@ keys:
 string_to_vector.o:
 	$(CC) $(CFLAGS) -c -o string_to_vector.o string_to_vector.c
 
-io.o: $(IO_DEP) io.c helper_objects.h common.h config.h
+io.o: $(IO_DEP) io.c common.h config.h helper_objects.h
 	$(CC) $(CFLAGS) -c -o io.o io.c
 
-control.o: control.c
+control.o: control.c common.h config.h helper_objects.h
 	$(CC) $(CFLAGS) -c -o control.o control.c
 
-target.o: target.c
+target.o: target.c common.h config.h helper_objects.h
 	$(CC) $(CFLAGS) -c -o target.o target.c
 
-broker.o: broker.c common.h config.h
+broker.o: broker.c common.h config.h helper_objects.h
 	$(CC) $(CFLAGS) -c -o broker.o broker.c
+
+message.o: message.c common.h config.h helper_objects.h
+	$(CC) $(CFLAGS) -c -o message.o message.c
 
 in_the_key_of_c: in_the_key_of_c.c
 	$(CC) $(CFLAGS) -o in_the_key_of_c in_the_key_of_c.c $(LIBS)

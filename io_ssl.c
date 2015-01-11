@@ -17,7 +17,37 @@
  *
  **********************************************************************************************************************/
 int remote_read_plaintext(struct io_helper *io, void *buff, size_t count){
-	return(BIO_read(io->connect, buff, count));
+
+  int retval;
+  int io_bytes;
+  char *tmp_ptr;
+
+
+  io_bytes = 0;
+  tmp_ptr = buff;
+
+	while(count){
+
+		retval = BIO_read(io->connect, tmp_ptr, count);
+		if(!retval){
+
+			io->eof = 1;
+			return(-1);
+
+		}else if(retval == -1){
+
+			return(-1);
+
+		}else{
+
+			count -= retval;
+			io_bytes += retval;
+			tmp_ptr += retval;
+
+		}
+	}
+
+	return(io_bytes);
 }
 
 
@@ -33,7 +63,34 @@ int remote_read_plaintext(struct io_helper *io, void *buff, size_t count){
  *
  **********************************************************************************************************************/
 int remote_write_plaintext(struct io_helper *io, void *buff, size_t count){
-	return(BIO_write(io->connect, buff, count));
+
+  int retval;
+  int io_bytes;
+  char *tmp_ptr;
+
+
+  io_bytes = 0;
+  tmp_ptr = buff;
+
+	while(count){
+
+		retval = BIO_write(io->connect, tmp_ptr, count);
+		retval = write(io->remote_fd, tmp_ptr, count);
+
+		if(retval == -1){
+
+			return(-1);
+
+		}else{
+
+			count -= retval;
+			io_bytes += retval;
+			tmp_ptr += retval;
+
+		}
+	}
+
+	return(io_bytes);
 }
 
 
@@ -59,6 +116,10 @@ int remote_read_encrypted(struct io_helper *io, void *buff, size_t count){
 	int ssl_error = SSL_ERROR_NONE;	
 
 
+	if(!count){
+		return(count);
+	}
+
 	do{
 		/* We've already been through the loop once, but now we need to wait for the socket to be ready. */
 		if(ssl_error != SSL_ERROR_NONE){
@@ -67,17 +128,11 @@ int remote_read_encrypted(struct io_helper *io, void *buff, size_t count){
 
 			if(ssl_error == SSL_ERROR_WANT_READ){
 				if(select(io->remote_fd + 1, &fd_select, NULL, NULL, NULL) == -1){
-					print_error(io, "%s: %d: select(%d, %lx, NULL, NULL, NULL): %s\n", \
-							program_invocation_short_name, io->controller, \
-							io->remote_fd + 1, (unsigned long) &fd_select, strerror(errno));
 					return(-1);
 				}
 
 			}else /* if(ssl_error == SSL_ERROR_WANT_WRITE) */ {
 				if(select(io->remote_fd + 1, NULL, &fd_select, NULL, NULL) == -1){
-					print_error(io, "%s: %d: select(%d, NULL, %lx, NULL, NULL): %s\n", \
-							program_invocation_short_name, io->controller, \
-							io->remote_fd + 1, (unsigned long) &fd_select, strerror(errno));
 					return(-1);
 				}
 			}
@@ -87,10 +142,12 @@ int remote_read_encrypted(struct io_helper *io, void *buff, size_t count){
 
 		switch(SSL_get_error(io->ssl, retval)){
 
-			case SSL_ERROR_NONE:
 			case SSL_ERROR_ZERO_RETURN:
+				io->eof = 1;
+				return(-1);
+
+			case SSL_ERROR_NONE:
 				return(retval);
-				break;
 
 			case SSL_ERROR_WANT_READ:
 				ssl_error = SSL_ERROR_WANT_READ;
@@ -131,6 +188,10 @@ int remote_write_encrypted(struct io_helper *io, void *buff, size_t count){
 	int ssl_error = SSL_ERROR_NONE;	
 
 
+	if(!count){
+		return(count);
+	}
+
 	do{
 
 		/* We've already been through the loop once, but now we need to wait for the socket to be ready. */
@@ -158,12 +219,15 @@ int remote_write_encrypted(struct io_helper *io, void *buff, size_t count){
 
 		retval = SSL_write(io->ssl, buff, count);
 
+
 		switch(SSL_get_error(io->ssl, retval)){
 
-			case SSL_ERROR_NONE:
 			case SSL_ERROR_ZERO_RETURN:
+				io->eof = 1;
+				return(-1);
+
+			case SSL_ERROR_NONE:
 				return(retval);
-				break;
 
 			case SSL_ERROR_WANT_READ:
 				ssl_error = SSL_ERROR_WANT_READ;
@@ -178,6 +242,7 @@ int remote_write_encrypted(struct io_helper *io, void *buff, size_t count){
 		}
 	} while(ssl_error);
 
+	
 	return(-1);
 }
 
@@ -192,7 +257,7 @@ int remote_write_encrypted(struct io_helper *io, void *buff, size_t count){
  * Purpose: To initialize the controller's network io interface.
  *
  **********************************************************************************************************************/
-int init_io_controller(struct io_helper *io, struct configuration_helper *config){
+int init_io_controller(struct io_helper *io, struct config_helper *config){
 
 	int i;
 	int retval;
@@ -615,7 +680,7 @@ int init_io_controller(struct io_helper *io, struct configuration_helper *config
  * Purpose: To initialize a target's network io interface.
  *
  **********************************************************************************************************************/
-int init_io_target(struct io_helper *io, struct configuration_helper *config){
+int init_io_target(struct io_helper *io, struct config_helper *config){
 
 	int i;
 	int retval;

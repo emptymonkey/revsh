@@ -116,8 +116,8 @@ int main(int argc, char **argv){
 	int opt;
 	char *tmp_ptr;
 
-	struct io_helper io;
-	struct configuration_helper config;
+	struct io_helper *io;
+	struct config_helper *config;
 
 	char *retry_string = RETRY;
 
@@ -126,25 +126,41 @@ int main(int argc, char **argv){
 	 * Basic initialization.
 	 */
 
-	io.local_in_fd = fileno(stdin);
-	io.local_out_fd = fileno(stdout);
-	io.controller = 0;
+	if((io = (struct io_helper *) malloc(sizeof(struct io_helper))) == NULL){
+		fprintf(stderr, "%s: malloc(%d): %s\n", \
+				program_invocation_short_name, \
+				(int) sizeof(struct io_helper), \
+				strerror(errno));
+		return(-1);
+	}
 
-	config.interactive = 1;
-  config.shell = NULL;
-  config.env_string = NULL;
-  config.rc_file = RC_FILE;
-  config.keys_dir = KEYS_DIR;
-  config.bindshell = 0;
-  config.keepalive = 0;
-  config.timeout = TIMEOUT;
-  config.verbose = 0;
+	if((config = (struct config_helper *) malloc(sizeof(struct config_helper))) == NULL){
+		fprintf(stderr, "%s: malloc(%d): %s\n", \
+				program_invocation_short_name, \
+				(int) sizeof(struct config_helper), \
+				strerror(errno));
+		return(-1);
+	}
+
+	io->local_in_fd = fileno(stdin);
+	io->local_out_fd = fileno(stdout);
+	io->controller = 0;
+	io->eof = 0;
+
+	config->interactive = 1;
+	config->shell = NULL;
+	config->rc_file = RC_FILE;
+	config->keys_dir = KEYS_DIR;
+	config->bindshell = 0;
+	config->keepalive = 0;
+	config->timeout = TIMEOUT;
+	config->verbose = 0;
 
 #ifdef OPENSSL
-	io.fingerprint_type = NULL;
+	io->fingerprint_type = NULL;
 
-	config.encryption = EDH;
-  config.cipher_list = NULL;
+	config->encryption = EDH;
+	config->cipher_list = NULL;
 #endif /* OPENSSL */
 
 
@@ -166,37 +182,37 @@ int main(int argc, char **argv){
 			/*  This is provided for debugging purposes only. */
 #ifdef OPENSSL
 			case 'p':
-				config.encryption = PLAINTEXT;
+				config->encryption = PLAINTEXT;
 				break;
 
 			case 'a':
-				config.encryption = ADH;
+				config->encryption = ADH;
 				break;
 
 			case 'd':
-				config.keys_dir = optarg;
+				config->keys_dir = optarg;
 				break;
 #endif /* OPENSSL */
 
 				/*  bindshell */
 			case 'b':
-				config.bindshell = 1;
+				config->bindshell = 1;
 				break;
 
 			case 'k':
-				config.keepalive = 1;
+				config->keepalive = 1;
 				break;
 
 			case 'c':
-				io.controller = 1;
+				io->controller = 1;
 				break;
 
 			case 's':
-				config.shell = optarg;
+				config->shell = optarg;
 				break;
 
 			case 'f':
-				config.rc_file = optarg;
+				config->rc_file = optarg;
 				break;
 
 			case 'r':
@@ -205,21 +221,21 @@ int main(int argc, char **argv){
 
 			case 't':
 				errno = 0;
-				config.timeout = strtol(optarg, NULL, 10);
+				config->timeout = strtol(optarg, NULL, 10);
 				if(errno){
 					fprintf(stderr, "%s: %d: strtol(%s, NULL, 10): %s\r\n", \
-							program_invocation_short_name, io.controller, optarg, \
+							program_invocation_short_name, io->controller, optarg, \
 							strerror(errno));
 					usage();
 				}
 				break;
 
 			case 'n':
-				config.interactive = 0;
+				config->interactive = 0;
 				break;
 
 			case 'v':
-				config.verbose = 1;
+				config->verbose = 1;
 				break;
 
 			case 'h':
@@ -236,39 +252,39 @@ int main(int argc, char **argv){
 	}
 
 	if(!strncmp(tmp_ptr, "bindsh", 6)){
-		config.bindshell = 1;
+		config->bindshell = 1;
 	}
 
 	if((argc - optind) == 1){
-		config.ip_addr = argv[optind];
+		config->ip_addr = argv[optind];
 	}else if((argc - optind) == 0){
-		config.ip_addr = ADDRESS;
+		config->ip_addr = ADDRESS;
 	}else{
 		usage();
 	}
 
 
-	/*  The joy of a struct with pointers to functions. We only call "io.remote_read()" and the */
+	/*  The joy of a struct with pointers to functions. We only call "io->remote_read()" and the */
 	/*  appropriate crypto / no crypto version is called on the backend. */
-	io.remote_read = &remote_read_plaintext;
-	io.remote_write = &remote_write_plaintext;
+	io->remote_read = &remote_read_plaintext;
+	io->remote_write = &remote_write_plaintext;
 
 #ifdef OPENSSL
 
-	if(config.encryption){
-		io.remote_read = &remote_read_encrypted;
-		io.remote_write = &remote_write_encrypted;
-		io.fingerprint_type = EVP_sha1();
+	if(config->encryption){
+		io->remote_read = &remote_read_encrypted;
+		io->remote_write = &remote_write_encrypted;
+		io->fingerprint_type = EVP_sha1();
 	}
 
-	switch(config.encryption){
+	switch(config->encryption){
 
 		case ADH:
-			config.cipher_list = ADH_CIPHER;
+			config->cipher_list = ADH_CIPHER;
 			break;
 
 		case EDH:
-			config.cipher_list = CONTROLLER_CIPHER;
+			config->cipher_list = CONTROLLER_CIPHER;
 			break;
 	}
 
@@ -277,13 +293,14 @@ int main(int argc, char **argv){
 
 #endif /* OPENSSL */
 
+  pagesize = getpagesize();
 
 	/*  Prepare the retry timer values. */
 	errno = 0;
-	config.retry_start = strtol(retry_string, &tmp_ptr, 10);
+	config->retry_start = strtol(retry_string, &tmp_ptr, 10);
 	if(errno){
 		fprintf(stderr, "%s: %d: strtol(%s, %lx, 10): %s\r\n", \
-				program_invocation_short_name, io.controller, retry_string, \
+				program_invocation_short_name, io->controller, retry_string, \
 				(unsigned long) &tmp_ptr, strerror(errno));
 		exit(-1);
 	}
@@ -293,21 +310,25 @@ int main(int argc, char **argv){
 	}
 
 	errno = 0;
-	config.retry_stop = strtol(tmp_ptr, NULL, 10);
+	config->retry_stop = strtol(tmp_ptr, NULL, 10);
 	if(errno){
 		fprintf(stderr, "%s: %d: strtol(%s, NULL, 10): %s\r\n", \
-				program_invocation_short_name, io.controller, \
+				program_invocation_short_name, io->controller, \
 				tmp_ptr, strerror(errno));
 		exit(-1);
 	}
 
 
-	if(io.controller){
+	if(io->controller){
+
 		do{
-			retval = do_control(&io, &config);
-		} while(retval != -1 && config.keepalive);
+			retval = do_control(io, config);
+		} while(retval != -1 && config->keepalive);
+
 	}else{
-		retval = do_target(&io, &config);
+
+		retval = do_target(io, config);
+
 	}
 
 	return(retval);

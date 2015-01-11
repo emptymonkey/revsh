@@ -2,37 +2,26 @@
 #include "common.h"
 
 
-int do_control(struct io_helper *io, struct configuration_helper *config){
+int do_control(struct io_helper *io, struct config_helper *config){
 
 	int i;
 	int retval;
 	int err_flag;
 
 	struct termios saved_termios_attrs, new_termios_attrs;
-
 	char **exec_envp;
-
-	int buff_len, tmp_len;
-	char *buff_head = NULL, *buff_tail;
-	char *buff_ptr;
-
-	int io_bytes;
-
 	struct winsize *tty_winsize;
 
   int rc_fd;
   wordexp_t rc_file_exp;
+	
+	struct message_helper *message;
+	char *tmp_ptr;
+	int io_bytes;
 
 
-	buff_len = getpagesize();
-	if((buff_head = (char *) calloc(buff_len, sizeof(char))) == NULL){
-		fprintf(stderr, "%s: %d: calloc(%d, %d): %s\r\n", \
-				program_invocation_short_name, io->controller, \
-				buff_len, (int) sizeof(char), \
-				strerror(errno));
-		return(-1);
-	}
-
+	/* We will be using the internal message struct inside of io quite a bit, so this will be a nice shorthand. */
+	message = &io->message;
 
 	if((tty_winsize = (struct winsize *) calloc(1, sizeof(struct winsize))) == NULL){
 		fprintf(stderr, "%s: %d: calloc(1, %d): %s\r\n", \
@@ -65,6 +54,13 @@ int do_control(struct io_helper *io, struct configuration_helper *config){
 		return(-1);
 	}
 
+	if(negotiate_protocol(io) == -1){
+		fprintf(stderr, "%s: %d: negotiate_protocol(%lx): %s\r\n", \
+				program_invocation_short_name, io->controller, \
+				(unsigned long) io, \
+				strerror(errno));
+		return(-1);
+	}
 
 	if(config->verbose){
 		printf("Initializing...");
@@ -72,47 +68,36 @@ int do_control(struct io_helper *io, struct configuration_helper *config){
 
 
 	/*  - Agree on interactive / non-interactive mode. */
-	memset(buff_head, 0, buff_len);
-	buff_tail = buff_head;
-	*(buff_tail++) = (char) APC;
-	*(buff_tail++) = (char) config->interactive;
-	*(buff_tail) = (char) ST;
+	message->data_type = DT_INIT;
+	message->data_len = sizeof(config->interactive);
+	memcpy(message->data, &config->interactive, sizeof(config->interactive));
 
-	if((io_bytes = io->remote_write(io, buff_head, HANDSHAKE_LEN)) == -1){
-		fprintf(stderr, "%s: %d: io->remote_write(%lx, %lx, %d): %s\n", \
+	if(message_push(io) == -1){
+		fprintf(stderr, "%s: %d: message->push(%lx): %s\n", \
 				program_invocation_short_name, io->controller, \
-				(unsigned long) io, (unsigned long) buff_head, HANDSHAKE_LEN, strerror(errno));
+				(unsigned long) io, \
+				strerror(errno));
 		return(-1);
 	}
 
-	if(io_bytes != HANDSHAKE_LEN){
-		fprintf(stderr, "%s: %d: io->remote_write(%lx, %lx, %d): Unable to write entire string.\n", \
+	if(message_pull(io) == -1){
+		fprintf(stderr, "%s: %d: message_pull(%lx): %s\r\n", \
 				program_invocation_short_name, io->controller, \
-				(unsigned long) io, (unsigned long) buff_head, HANDSHAKE_LEN);
+				(unsigned long) io, \
+				strerror(errno));
 		return(-1);
 	}
 
-	memset(buff_head, 0, buff_len);
-	buff_tail = buff_head;
-	if((io_bytes = io->remote_read(io, buff_tail, HANDSHAKE_LEN)) == -1){
-		fprintf(stderr, "%s: %d: io->remote_read(%lx, %lx, %d): %s\r\n", \
-				program_invocation_short_name, io->controller, \
-				(unsigned long) io, (unsigned long) buff_tail, HANDSHAKE_LEN, strerror(errno));
-		return(-1);
-	}
-
-	if(io_bytes != HANDSHAKE_LEN){
-		fprintf(stderr, "%s: %d: io->remote_read(%lx, %lx, %d): Unable to write entire string.\n", \
-				program_invocation_short_name, io->controller, \
-				(unsigned long) io, (unsigned long) buff_tail, HANDSHAKE_LEN);
+	if(message->data_type != DT_INIT){
+		fprintf(stderr, "%s: %d: DT_INIT interactive: Protocol violation!\r\n", \
+				program_invocation_short_name, io->controller); 
 		return(-1);
 	}
 
 	/* Both sides must agree on interaction. If either one opts out, fall back to non-interactive data transfer. */	
-	if(!buff_head[1]){
+	if(!message->data[0]){
 		config->interactive = 0;
 	}
-
 
 	if(!config->interactive){
 		retval = broker(io, config);
@@ -128,119 +113,86 @@ int do_control(struct io_helper *io, struct configuration_helper *config){
 		return(retval);
 	}
 
-
 	/*  - Send initial shell data. */
 	/* If the C2 hasn't been invoked with a specific shell, then let the client choose. */
-	/* We will indicated this by sending an empty string for the shell, indicated by APC/ST with */
-	/* nothing in between. */
-	memset(buff_head, 0, buff_len);
-	buff_tail = buff_head;
-	*(buff_tail++) = (char) APC;
-
-	tmp_len = 0;
+	/* We will indicated this by sending an empty string for the shell. */
+	message->data_type = DT_INIT;
+	message->data_len = 0;
 	if(config->shell){
-		tmp_len = strlen(config->shell);
-		memcpy(buff_tail, config->shell, tmp_len);
+		message->data_len = strlen(config->shell);
+		memcpy(message->data, config->shell, message->data_len);
 	}
 
-	buff_tail += tmp_len;
-
-	*(buff_tail++) = (char) ST;
-
-	if((buff_tail - buff_head) >= buff_len){
-		print_error(io, "%s: %d: Environment string too long.\n", program_invocation_short_name, io->controller);
-		return(-1);
-	}
-
-	tmp_len = strlen(buff_head);
-	if((io_bytes = io->remote_write(io, buff_head, tmp_len)) == -1){
-		print_error(io, "%s: %d: io->remote_write(%lx, %lx, %d): %s\n", \
+	if(message_push(io) == -1){
+		print_error(io, "%s: %d: message_push(%lx): %s\n", \
 				program_invocation_short_name, io->controller, \
-				(unsigned long) io, (unsigned long) buff_head, tmp_len, strerror(errno));
-		return(-1);
-	}
-
-	if(io_bytes != (buff_tail - buff_head)){
-		print_error(io, "%s: %d: io->remote_write(%lx, %lx, %d): Unable to write entire string.\n", \
-				program_invocation_short_name, io->controller, \
-				(unsigned long) io, (unsigned long) buff_head, buff_len);
+				(unsigned long) io, \
+				strerror(errno));
 		return(-1);
 	}
 
 	/*  - Send initial environment data. */
-	tmp_len = strlen(DEFAULT_ENV);
-	if((config->env_string = (char *) calloc(tmp_len + 1, sizeof(char))) == NULL){
-		print_error(io, "%s: %d: calloc(strlen(%d, %d)): %s\n", \
-				program_invocation_short_name, io->controller, \
-				tmp_len + 1, (int) sizeof(char), strerror(errno));
-		return(-1);
-	}
-
-	memcpy(config->env_string, DEFAULT_ENV, tmp_len);
-
-	if((exec_envp = string_to_vector(config->env_string)) == NULL){
+	if((exec_envp = string_to_vector(DEFAULT_ENV)) == NULL){
 		print_error(io, "%s: %d: string_to_vector(%s): %s\n", \
 				program_invocation_short_name, io->controller, \
-				config->env_string, strerror(errno));
+				DEFAULT_ENV, \
+				strerror(errno));
 		return(-1);
 	}
 
-	free(config->env_string);
-
-	memset(buff_head, 0, buff_len);
-	buff_tail = buff_head;
-	*(buff_tail++) = (char) APC;
-
+	message->data_type = DT_INIT;
+	message->data_len = 0;
+	
+	/* First, calculate size. */
+	io_bytes = 0;
 	for(i = 0; exec_envp[i]; i++){
 
-		if((buff_tail - buff_head) >= buff_len){
-			print_error(io, "%s: %d: Environment string too long.\n", \
-					program_invocation_short_name, io->controller);
-			return(-1);
-		}else if(buff_tail != (buff_head + 1)){
-			*(buff_tail++) = ' ';
-		}
+		/* This will be the length of the env variable name, plus one char for '=' and one char for ' ' or '\0'. */
+		io_bytes += strlen(exec_envp[i]) + 2;
 
-		tmp_len = strlen(exec_envp[i]);
-		memcpy(buff_tail, exec_envp[i], tmp_len);
-
-		buff_tail += tmp_len;
-
-		*(buff_tail++) = '=';
-
-		if((buff_ptr = getenv(exec_envp[i])) == NULL){
-			fprintf(stderr, "%s: No such environment variable \"%s\". Ignoring.\n", \
-					program_invocation_short_name, exec_envp[i]);
-		}else{
-			tmp_len = strlen(buff_ptr);
-			memcpy(buff_tail, buff_ptr, tmp_len);
-			buff_tail += tmp_len;
+		/* Also, the length of any value assigned to that variable. */
+		if((tmp_ptr = getenv(exec_envp[i])) != NULL){
+			io_bytes += strlen(tmp_ptr);
 		}
 	}
 
-	*(buff_tail++) = (char) ST;
-
-	if((buff_tail - buff_head) >= buff_len){
-		print_error(io, "%s: %d: Environment string too long.\n", \
+	if(io_bytes > message->data_size){
+		print_error(io, "%s: %d: Environment string too long!\n", \
 				program_invocation_short_name, io->controller);
 		return(-1);
 	}
 
-	tmp_len = strlen(buff_head);
-	if((io_bytes = io->remote_write(io, buff_head, tmp_len)) == -1){
-		print_error(io, "%s: %d: io->remote_write(%lx, %lx, %d): %s\n", \
-				program_invocation_short_name, io->controller, \
-				(unsigned long) io, (unsigned long) buff_head, tmp_len, strerror(errno));
-		return(-1);
+	for(i = 0; exec_envp[i]; i++){
+
+		if(message->data_len){
+			*(message->data + message->data_len++) = ' ';
+		}
+
+		io_bytes = strlen(exec_envp[i]);
+		memcpy((message->data + message->data_len), exec_envp[i], io_bytes);
+		message->data_len += io_bytes;
+
+		*(message->data + message->data_len++) = '=';
+
+		if((tmp_ptr = getenv(exec_envp[i])) == NULL){
+			fprintf(stderr, "%s: No such environment variable \"%s\". Ignoring.\n", \
+					program_invocation_short_name, exec_envp[i]);
+		}else{
+			io_bytes = strlen(tmp_ptr);
+			memcpy((message->data + message->data_len), tmp_ptr, io_bytes);
+			message->data_len += io_bytes;
+		}
 	}
 
-	if(io_bytes != (buff_tail - buff_head)){
-		print_error(io, "%s: %d: io->remote_write(%lx, %lx, %d): Unable to write entire string.\n", \
+	free_vector(exec_envp);
+
+	if(message_push(io) == -1){
+		print_error(io, "%s: %d: message_push(%lx): %s\n", \
 				program_invocation_short_name, io->controller, \
-				(unsigned long) io, (unsigned long) buff_head, buff_len);
+				(unsigned long) io, \
+				strerror(errno));
 		return(-1);
 	}
-
 
 	/*  - Send initial termios data. */
 	if(ioctl(STDIN_FILENO, TIOCGWINSZ, tty_winsize) == -1){
@@ -250,33 +202,17 @@ int do_control(struct io_helper *io, struct configuration_helper *config){
 		return(-1);
 	}
 
-	memset(buff_head, 0, buff_len);
-	buff_tail = buff_head;
-	*(buff_tail++) = (char) APC;
+	message->data_type = DT_INIT;
+	*((unsigned short *) message->data) = htons(tty_winsize->ws_row);
+	message->data_len = sizeof(tty_winsize->ws_row);
+	*((unsigned short *) (message->data + message->data_len)) = htons(tty_winsize->ws_col);
+	message->data_len += sizeof(tty_winsize->ws_col);
 
-	if((retval = snprintf(buff_tail, buff_len - 2, "%hd %hd", \
-					tty_winsize->ws_row, tty_winsize->ws_col)) < 0){
-		print_error(io, "%s: %d: snprintf(buff_head, buff_len, \"%%hd %%hd\", %hd, %hd): %s\n", \
+	if(message_push(io) == -1){
+		print_error(io, "%s: %d: message_push(%lx): %s\n", \
 				program_invocation_short_name, io->controller, \
-				tty_winsize->ws_row, tty_winsize->ws_col, strerror(errno));
-		return(-1);
-	}
-
-	buff_tail += retval;
-	*(buff_tail) = (char) ST;
-
-	tmp_len = strlen(buff_head);
-	if((io_bytes = io->remote_write(io, buff_head, tmp_len)) == -1){
-		print_error(io, "%s: %d: io->remote_write(%lx, %lx, %d): %s\n", \
-				program_invocation_short_name, io->controller, \
-				(unsigned long) io, (unsigned long) buff_head, tmp_len, strerror(errno));
-		return(-1);
-	}
-
-	if(io_bytes != tmp_len){
-		print_error(io, "%s: %d: io->remote_write(%lx, %lx, %d): Unable to write entire string.\n", \
-				program_invocation_short_name, io->controller, \
-				(unsigned long) io, (unsigned long) buff_head, tmp_len);
+				(unsigned long) io, \
+				strerror(errno));
 		return(-1);
 	}
 
@@ -310,30 +246,28 @@ int do_control(struct io_helper *io, struct configuration_helper *config){
 		printf("\tDone!\r\n\n");
 	}
 
-
 	/*  - Send the commands in the rc file. */
-
 	if((rc_fd = open(rc_file_exp.we_wordv[0], O_RDONLY)) != -1){
 
-		buff_ptr = buff_head;
+		message->data_type = DT_TTY;
 
-		while((io_bytes = read(rc_fd, buff_head, buff_len))){
+		while((io_bytes = read(rc_fd, message->data, message->data_size))){
 			if(io_bytes == -1){
 				print_error(io, "%s: %d: read(%d, %lx, %d): %s\r\n", \
 						program_invocation_short_name, io->controller, \
-						rc_fd, (unsigned long) buff_head, buff_len, strerror(errno));
+						rc_fd, (unsigned long) message->data, message->data_size, \
+						strerror(errno));
 				return(-1);
 			}
-			buff_tail = buff_head + io_bytes;
 
-			while(buff_ptr != buff_tail){
-				if((retval = io->remote_write(io, buff_ptr, (buff_tail - buff_ptr))) == -1){
-					print_error(io, "%s: %d: io->remote_write(%lx, %lx, %d): %s\r\n", \
-							program_invocation_short_name, io->controller, \
-							(unsigned long) io, (unsigned long) buff_ptr, (buff_tail - buff_ptr), strerror(errno));
-					return(-1);
-				}
-				buff_ptr += retval;
+			message->data_len = io_bytes;
+
+			if(message_push(io) == -1){
+				print_error(io, "%s: %d: message_push(%lx): %s\r\n", \
+						program_invocation_short_name, io->controller, \
+						(unsigned long) io, \
+						strerror(errno));
+				return(-1);
 			}
 		}
 
@@ -341,20 +275,21 @@ int do_control(struct io_helper *io, struct configuration_helper *config){
 	}
 
 
-	errno = 0;
-
+	err_flag = 0;
 
 	/*  - Enter broker() for tty brokering. */
-	if(broker(io, config) == -1){
-		print_error(io, "%s: %d: broker(%lx, %lx): %s\r\n", \
-				program_invocation_short_name, io->controller, (unsigned long) io, \
-				(unsigned long) config, \
-				strerror(errno));
-	}
+	retval = broker(io, config);
 
-	err_flag = 0;
-	if(errno == ECONNRESET){
-		err_flag = errno;
+	if(retval == -1 && !io->eof){
+		
+		if(errno == ECONNRESET){
+			err_flag = errno;
+		}else{
+			print_error(io, "%s: %d: broker(%lx, %lx): %s\r\n", \
+					program_invocation_short_name, io->controller, \
+					(unsigned long) io, (unsigned long) config, \
+					strerror(errno));
+		}
 	}
 
 	/*  - Reset local term. */
@@ -363,10 +298,11 @@ int do_control(struct io_helper *io, struct configuration_helper *config){
 	/*  - Exit. */
 	if(!err_flag){
 		printf("Good-bye!\n");
-
 	}else{
-		while((retval = io->remote_read(io, buff_head, buff_len)) > 0){
-			write(STDERR_FILENO, buff_head, retval);
+		while(message_pull(io) > 0){
+			if(message->data_type == DT_TTY){
+				write(STDERR_FILENO, message->data, message->data_len);
+			}
 		}
 	}
 
@@ -380,6 +316,5 @@ int do_control(struct io_helper *io, struct configuration_helper *config){
 	}
 #endif /* OPENSSL */
 
-	free(buff_head);
 	return(0);
 }

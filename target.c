@@ -2,7 +2,7 @@
 #include "common.h"
 
 
-int do_target(struct io_helper *io, struct configuration_helper *config){
+int do_target(struct io_helper *io, struct config_helper *config){
 
 	int retval;
 
@@ -11,33 +11,21 @@ int do_target(struct io_helper *io, struct configuration_helper *config){
 
 	char **exec_argv;
 	char **exec_envp;
-	char **tmp_vector;
 
-	int buff_len, tmp_len;
-	char *buff_head = NULL, *buff_tail;
-
-	int io_bytes;
+	char *buff_head = NULL;
 
 	struct winsize *tty_winsize;
-
-	char tmp_char;
 
 	struct passwd *passwd_entry;
 
 	struct sockaddr addr;
 	socklen_t addrlen = (socklen_t) sizeof(addr);
 
+  struct message_helper *message;
 
-	buff_len = getpagesize();
-	if((buff_head = (char *) calloc(buff_len, sizeof(char))) == NULL){
-		if(config->verbose){
-			fprintf(stderr, "%s: %d: calloc(%d, %d): %s\r\n", \
-					program_invocation_short_name, io->controller, \
-					buff_len, (int) sizeof(char), \
-					strerror(errno));
-		}
-		return(-1);
-	}
+
+  /* We will be using the internal message struct inside of io quite a bit, so this will be a nice shorthand. */
+  message = &io->message;
 
 	if((tty_winsize = (struct winsize *) calloc(1, sizeof(struct winsize))) == NULL){
 		if(config->verbose){
@@ -57,53 +45,42 @@ int do_target(struct io_helper *io, struct configuration_helper *config){
 		return(-1);
 	}
 
+  if(negotiate_protocol(io) == -1){
+    fprintf(stderr, "%s: %d: negotiate_protocol(%lx): %s\r\n", \
+        program_invocation_short_name, io->controller, \
+        (unsigned long) io, \
+        strerror(errno));
+    return(-1);
+  }
 
 	/*  - Agree on interactive / non-interactive mode. */
-	memset(buff_head, 0, buff_len);
-	buff_tail = buff_head;
-	*(buff_tail++) = (char) APC;
-	*(buff_tail++) = (char) config->interactive;
-	*(buff_tail) = (char) ST;
+  message->data_type = DT_INIT;
+  message->data_len = sizeof(config->interactive);
+  memcpy(message->data, &config->interactive, sizeof(config->interactive));
 
-	if((io_bytes = io->remote_write(io, buff_head, HANDSHAKE_LEN)) == -1){
-		if(config->verbose){
-			fprintf(stderr, "%s: %d: io->remote_write(%lx, %lx, %d): %s\n", \
-					program_invocation_short_name, io->controller, \
-					(unsigned long) io, (unsigned long) buff_head, HANDSHAKE_LEN, strerror(errno));
-		}
+  if(message_push(io) == -1){
+    fprintf(stderr, "%s: %d: message->push(%lx): %s\n", \
+        program_invocation_short_name, io->controller, \
+        (unsigned long) io, \
+        strerror(errno));
+    return(-1);
+  }
+
+	if(message_pull(io) == -1){
+		fprintf(stderr, "%s: %d: message_pull(%lx): %s\r\n", \
+				program_invocation_short_name, io->controller, \
+				(unsigned long) io, \
+				strerror(errno));
 		return(-1);
 	}
 
-	if(io_bytes != HANDSHAKE_LEN){
-		if(config->verbose){
-			fprintf(stderr, "%s: %d: io->remote_write(%lx, %lx, %d): Unable to write entire string.\n", \
-					program_invocation_short_name, io->controller, \
-					(unsigned long) io, (unsigned long) buff_head, HANDSHAKE_LEN);
-		}
+	if(message->data_type != DT_INIT){
+		fprintf(stderr, "%s: %d: DT_INIT interactive: Protocol violation!\r\n", \
+				program_invocation_short_name, io->controller);
 		return(-1);
 	}
 
-	memset(buff_head, 0, buff_len);
-	buff_tail = buff_head;
-	if((io_bytes = io->remote_read(io, buff_tail, HANDSHAKE_LEN)) == -1){
-		if(config->verbose){
-			fprintf(stderr, "%s: %d: io->remote_read(%lx, %lx, %d): %s\r\n", \
-					program_invocation_short_name, io->controller, \
-					(unsigned long) io, (unsigned long) buff_tail, HANDSHAKE_LEN, strerror(errno));
-		}
-		return(-1);
-	}
-
-	if(io_bytes != HANDSHAKE_LEN){
-		if(config->verbose){
-			fprintf(stderr, "%s: %d: io->remote_read(%lx, %lx, %d): Unable to write entire string.\n", \
-					program_invocation_short_name, io->controller, \
-					(unsigned long) io, (unsigned long) buff_tail, HANDSHAKE_LEN);
-		}
-		return(-1);
-	}
-
-	if(!buff_head[1]){
+	if(!message->data[0]){
 		config->interactive = 0;
 	}
 
@@ -145,192 +122,89 @@ int do_target(struct io_helper *io, struct configuration_helper *config){
 
 	}
 
-
 	/*  - Receive and set the shell. */
-	if(io->remote_read(io, &tmp_char, 1) == -1){
-		print_error(io, "%s: %d: io->remote_read(%lx, %lx, %d): %s\r\n", \
-				program_invocation_short_name, io->controller, (unsigned long) io, (unsigned long) &tmp_char, 1, strerror(errno));
-		return(-1);
-	}
-
-	if(tmp_char != (char) APC){
-		print_error(io, "%s: %d: invalid initialization: shell\r\n", program_invocation_short_name, io->controller);
-		return(-1);
-	}
-
-	memset(buff_head, 0, buff_len);
-	buff_tail = buff_head;
-
-	if(io->remote_read(io, &tmp_char, 1) == -1){
-		print_error(io, "%s: %d: io->remote_read(%lx, %lx, 1): %s\r\n", \
+	if(message_pull(io) == -1){
+		fprintf(stderr, "%s: %d: message_pull(%lx): %s\r\n", \
 				program_invocation_short_name, io->controller, \
-				(unsigned long) io, (unsigned long) &tmp_char, strerror(errno));
+				(unsigned long) io, \
+				strerror(errno));
 		return(-1);
 	}
 
-	while(tmp_char != (char) ST){
-		*(buff_tail++) = tmp_char;
-
-		if((buff_tail - buff_head) >= buff_len){
-			print_error(io, "%s: %d: Shell string too long.\r\n", \
-					program_invocation_short_name, io->controller);
-			return(-1);
-		}
-
-		if(io->remote_read(io, &tmp_char, 1) == -1){
-			print_error(io, "%s: %d: io->remote_read(%lx, %lx, 1): %s\r\n", \
-					program_invocation_short_name, io->controller, \
-					(unsigned long) io, (unsigned long) &tmp_char, strerror(errno));
-			return(-1);
-		}
-	}
-
-	tmp_len = strlen(buff_head);
-
-	if(!tmp_len){
-		if(config->shell){
-			tmp_len = strlen(config->shell);
-			memcpy(buff_head, config->shell, tmp_len);
-		}else{
-			tmp_len = strlen(DEFAULT_SHELL);
-			memcpy(buff_head, DEFAULT_SHELL, tmp_len);
-		}
-	}
-
-	if((config->shell = (char *) calloc(tmp_len + 1, sizeof(char))) == NULL){
-		print_error(io, "%s: %d: calloc(%d, %d): %s\r\n", \
-				program_invocation_short_name, io->controller, \
-				tmp_len + 1, (int) sizeof(char), strerror(errno));
-		return(-1);
-	}
-	memcpy(config->shell, buff_head, tmp_len);
-
-
-	/*  - Receive and set the initial environment. */
-	if(io->remote_read(io, &tmp_char, 1) == -1){
-		print_error(io, "%s: %d: io->remote_read(%lx, %lx, 1): %s\r\n", \
-				program_invocation_short_name, io->controller, \
-				(unsigned long) io, (unsigned long) &tmp_char, strerror(errno));
-		return(-1);
-	}
-
-	if(tmp_char != (char) APC){
-		print_error(io, "%s: %d: invalid initialization: environment\r\n", \
+	if(message->data_type != DT_INIT){
+		print_error(io, "%s: %d: invalid initialization: shell: Protocol violation!\r\n", \
 				program_invocation_short_name, io->controller);
 		return(-1);
 	}
 
-	memset(buff_head, 0, buff_len);
-	buff_tail = buff_head;
 
-	if(io->remote_read(io, &tmp_char, 1) == -1){
-		print_error(io, "%s: %d: io->remote_read(%lx, %lx, 1): %s\r\n", \
+	if(!message->data_len){
+
+		if(!config->shell){
+			config->shell = DEFAULT_SHELL;
+		}
+
+	}else{
+
+		if((config->shell = (char *) calloc(message->data_len + 1, sizeof(char))) == NULL){
+			print_error(io, "%s: %d: calloc(%d, %d): %s\r\n", \
+					program_invocation_short_name, io->controller, \
+					message->data_len + 1, (int) sizeof(char), \
+					strerror(errno));
+			return(-1);
+		}
+		memcpy(config->shell, message->data, message->data_len);
+	}
+
+	/*  - Receive and set the initial environment. */
+	if(message_pull(io) == -1){
+		fprintf(stderr, "%s: %d: message_pull(%lx): %s\r\n", \
 				program_invocation_short_name, io->controller, \
-				(unsigned long) io, (unsigned long) &tmp_char, strerror(errno));
+				(unsigned long) io, \
+				strerror(errno));
 		return(-1);
 	}
 
-	while(tmp_char != (char) ST){
-		*(buff_tail++) = tmp_char;
-
-		if((buff_tail - buff_head) >= buff_len){
-			print_error(io, "%s: %d: Environment string too long.\r\n", \
-					program_invocation_short_name, io->controller);
-			return(-1);
-		}
-
-		if(io->remote_read(io, &tmp_char, 1) == -1){
-			print_error(io, "%s: %d: io->remote_read(%lx, %lx, 1): %s\r\n", \
-					program_invocation_short_name, io->controller, \
-					(unsigned long) io, (unsigned long) &tmp_char, strerror(errno));
-			return(-1);
-		}
+	if(message->data_type != DT_INIT){
+		fprintf(stderr, "%s: %d: DT_INIT environment: Protocol violation!\r\n", \
+				program_invocation_short_name, io->controller);
+		return(-1);
 	}
 
-	if((exec_envp = string_to_vector(buff_head)) == NULL){
+	/* I should learn to be more trusting. */
+	message->data[message->data_len] = '\0';
+
+	if((exec_envp = string_to_vector(message->data)) == NULL){
 		print_error(io, "%s: %d: string_to_vector(%s): %s\r\n", \
 				program_invocation_short_name, io->controller, \
-				buff_head, strerror(errno));
+				message->data, strerror(errno));
 		return(-1);
 	}
 
 	/*  - Receive and set the initial termios. */
-	if(io->remote_read(io, &tmp_char, 1) == -1){
-		print_error(io, "%s: %d: io->remote_read(%lx, %lx, 1): %s\r\n", \
+	if(message_pull(io) == -1){
+		fprintf(stderr, "%s: %d: message_pull(%lx): %s\r\n", \
 				program_invocation_short_name, io->controller, \
-				(unsigned long) io, (unsigned long) &tmp_char, strerror(errno));
-		return(-1);
-	}
-
-	if(tmp_char != (char) APC){
-		print_error(io, "%s: %d: invalid initialization: termios\r\n", \
-				program_invocation_short_name, io->controller);
-		return(-1);
-	}
-
-	memset(buff_head, 0, buff_len);
-	buff_tail = buff_head;
-
-	if(io->remote_read(io, &tmp_char, 1) == -1){
-		print_error(io, "%s: %d: io->remote_read(%lx, %lx, 1): %s\r\n", \
-				program_invocation_short_name, io->controller, \
-				(unsigned long) io, (unsigned long) &tmp_char, strerror(errno));
-		return(-1);
-	}
-
-	while(tmp_char != (char) ST){
-		*(buff_tail++) = tmp_char;
-
-		if((buff_tail - buff_head) >= buff_len){
-			print_error(io, "%s: %d: termios string too long.\r\n", \
-					program_invocation_short_name, io->controller);
-			return(-1);
-		}
-
-		if(io->remote_read(io, &tmp_char, 1) == -1){
-			print_error(io, "%s: %d: io->remote_read(%lx, %lx, 1): %s\r\n", \
-					program_invocation_short_name, io->controller, \
-					(unsigned long) io, (unsigned long) &tmp_char, strerror(errno));
-			return(-1);
-		}
-	}
-
-	if((tmp_vector = string_to_vector(buff_head)) == NULL){
-		print_error(io, "%s: %d: string_to_vector(%s): %s\r\n", \
-				program_invocation_short_name, io->controller, \
+				(unsigned long) io, \
 				strerror(errno));
 		return(-1);
 	}
 
-	if(tmp_vector[0] == NULL){
-		print_error(io, "%s: %d: invalid initialization: tty_winsize->ws_row\r\n", \
+	if(message->data_type != DT_INIT){
+		fprintf(stderr, "%s: %d: DT_INIT termios: Protocol violation!\r\n", \
 				program_invocation_short_name, io->controller);
 		return(-1);
 	}
 
-	errno = 0;
-	tty_winsize->ws_row = strtol(tmp_vector[0], NULL, 10);
-	if(errno){
-		print_error(io, "%s: %d: strtol(%s): %s\r\n", \
-				program_invocation_short_name, io->controller, \
-				strerror(errno));
-		return(-1);
-	}
-
-	if(tmp_vector[1] == NULL){
-		print_error(io, "%s: %d: invalid initialization: tty_winsize->ws_col\r\n", \
+	if(message->data_len != sizeof(tty_winsize->ws_row) + sizeof(tty_winsize->ws_col)){
+		fprintf(stderr, "%s: %d: DT_INIT termios: not enough data!\r\n", \
 				program_invocation_short_name, io->controller);
 		return(-1);
 	}
 
-	errno = 0;
-	tty_winsize->ws_col = strtol(tmp_vector[1], NULL, 10);
-	if(errno){
-		print_error(io, "%s: %d: strtol(%s): %s\r\n", \
-				program_invocation_short_name, io->controller, \
-				strerror(errno));
-		return(-1);
-	}
+	tty_winsize->ws_row = ntohs(*((unsigned short *) message->data));
+	tty_winsize->ws_col = ntohs(*((unsigned short *) (message->data + sizeof(unsigned short))));
+
 
 	/*  - Create a pseudo-terminal (pty). */
 	if((pty_master = posix_openpt(O_RDWR|O_NOCTTY)) == -1){
@@ -376,11 +250,20 @@ int do_target(struct io_helper *io, struct configuration_helper *config){
 	}
 
 	/*  - Send basic information back to the controller about the connecting host. */
-	memset(buff_head, 0, buff_len);
-	if(gethostname(buff_head, buff_len - 1) == -1){
+	if((buff_head = (char *) calloc(LOCAL_BUFF_SIZE, sizeof(char))) == NULL){
+		if(config->verbose){
+			fprintf(stderr, "%s: %d: calloc(%d, %d): %s\r\n", \
+					program_invocation_short_name, io->controller, \
+					LOCAL_BUFF_SIZE, (int) sizeof(char), \
+					strerror(errno));
+		}
+		return(-1);
+	}
+
+	if(gethostname(buff_head, LOCAL_BUFF_SIZE - 1) == -1){
 		print_error(io, "%s: %d: gethostname(%lx, %d): %s\r\n", \
 				program_invocation_short_name, io->controller, \
-				(unsigned long) buff_head, buff_len - 1, strerror(errno));
+				(unsigned long) buff_head, LOCAL_BUFF_SIZE - 1, strerror(errno));
 		return(-1);
 	}
 
@@ -390,8 +273,8 @@ int do_target(struct io_helper *io, struct configuration_helper *config){
 
 	remote_printf(io, "# ip address: ");
 	if(getsockname(io->remote_fd, &addr, &addrlen) != -1){
-		memset(buff_head, 0, buff_len);
-		if(inet_ntop(addr.sa_family, addr.sa_data + 2, buff_head, buff_len - 1)){
+		memset(buff_head, 0, LOCAL_BUFF_SIZE);
+		if(inet_ntop(addr.sa_family, addr.sa_data + 2, buff_head, LOCAL_BUFF_SIZE - 1)){
 			remote_printf(io, "%s", buff_head);
 		}
 	}
@@ -473,7 +356,7 @@ int do_target(struct io_helper *io, struct configuration_helper *config){
 
 		retval = broker(io, config);
 
-		if(retval == -1){
+		if(retval == -1 && !io->eof){
 			print_error(io, "%s: %d: broker(%lx, %lx): %s\r\n", \
 					program_invocation_short_name, io->controller, \
 					(unsigned long) io, (unsigned long) config, strerror(errno));
@@ -557,12 +440,7 @@ int do_target(struct io_helper *io, struct configuration_helper *config){
 		return(-1);
 	}
 
-	free(config->shell);
-
 	execve(exec_argv[0], exec_argv, exec_envp);
-	print_error(io, "%s: %d: execve(%s, %lx, NULL): Shouldn't be here!\r\n", \
-			program_invocation_short_name, io->controller, \
-			exec_argv[0], (unsigned long) exec_argv);
 
 	return(-1);
 }
