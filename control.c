@@ -1,7 +1,17 @@
 
 #include "common.h"
 
-
+/***********************************************************************************************************************
+ *
+ * do_control()
+ *
+ * Input: Our io and config helper objects.
+ *
+ * Output: 0 for success, -1 on error.
+ *
+ * Purpose: This is the defining function for a control node.
+ *
+ **********************************************************************************************************************/
 int do_control(struct io_helper *io, struct config_helper *config){
 
 	int i;
@@ -12,27 +22,27 @@ int do_control(struct io_helper *io, struct config_helper *config){
 	char **exec_envp;
 	struct winsize *tty_winsize;
 
-  int rc_fd;
-  wordexp_t rc_file_exp;
-	
+	int rc_fd;
+	wordexp_t rc_file_exp;
+
 	struct message_helper *message;
 	char *tmp_ptr;
 	int io_bytes;
 
 
-	/* We will be using the internal message struct inside of io quite a bit, so this will be a nice shorthand. */
+  /* We use this as a shorthand to make message syntax more readable. */
 	message = &io->message;
 
+	/* Initialize the structures we will leverage. */
 	if((tty_winsize = (struct winsize *) calloc(1, sizeof(struct winsize))) == NULL){
-		fprintf(stderr, "%s: %d: calloc(1, %d): %s\r\n", \
+		print_error(io, "%s: %d: calloc(1, %d): %s\r\n", \
 				program_invocation_short_name, io->controller, \
 				(int) sizeof(struct winsize), strerror(errno));
 		return(-1);
 	}
 
-
 	if(wordexp(config->rc_file, &rc_file_exp, 0)){
-		fprintf(stderr, "%s: %d: wordexp(%s, %lx, 0): %s\r\n", \
+		print_error(io, "%s: %d: wordexp(%s, %lx, 0): %s\r\n", \
 				program_invocation_short_name, io->controller, \
 				config->rc_file, (unsigned long)  &rc_file_exp, \
 				strerror(errno));
@@ -40,32 +50,34 @@ int do_control(struct io_helper *io, struct config_helper *config){
 	}
 
 	if(rc_file_exp.we_wordc != 1){
-		fprintf(stderr, "%s: %d: Invalid path: %s\r\n", \
+		print_error(io, "%s: %d: Invalid path: %s\r\n", \
 				program_invocation_short_name, io->controller, \
 				config->rc_file);
 		return(-1);
 	}
 
+	/* Set up the network connection. */
 	if(init_io_controller(io, config) == -1){
-		fprintf(stderr, "%s: %d: init_io_listen(%lx, %lx): %s\r\n", \
+		print_error(io, "%s: %d: init_io_listen(%lx, %lx): %s\r\n", \
 				program_invocation_short_name, io->controller, \
 				(unsigned long) io, (unsigned long) config, \
 				strerror(errno));
 		return(-1);
 	}
 
+	/* Prepare the message buffer. */
 	if(negotiate_protocol(io) == -1){
-		fprintf(stderr, "%s: %d: negotiate_protocol(%lx): %s\r\n", \
+		print_error(io, "%s: %d: negotiate_protocol(%lx): %s\r\n", \
 				program_invocation_short_name, io->controller, \
 				(unsigned long) io, \
 				strerror(errno));
 		return(-1);
 	}
 
-	if(config->verbose){
+	/* Start conversing with the remote partner to agree on the shape of this session. */
+	if(verbose){
 		printf("Initializing...");
 	}
-
 
 	/*  - Agree on interactive / non-interactive mode. */
 	message->data_type = DT_INIT;
@@ -73,7 +85,7 @@ int do_control(struct io_helper *io, struct config_helper *config){
 	memcpy(message->data, &config->interactive, sizeof(config->interactive));
 
 	if(message_push(io) == -1){
-		fprintf(stderr, "%s: %d: message->push(%lx): %s\n", \
+		print_error(io, "%s: %d: message->push(%lx): %s\n", \
 				program_invocation_short_name, io->controller, \
 				(unsigned long) io, \
 				strerror(errno));
@@ -81,7 +93,7 @@ int do_control(struct io_helper *io, struct config_helper *config){
 	}
 
 	if(message_pull(io) == -1){
-		fprintf(stderr, "%s: %d: message_pull(%lx): %s\r\n", \
+		print_error(io, "%s: %d: message_pull(%lx): %s\r\n", \
 				program_invocation_short_name, io->controller, \
 				(unsigned long) io, \
 				strerror(errno));
@@ -89,7 +101,7 @@ int do_control(struct io_helper *io, struct config_helper *config){
 	}
 
 	if(message->data_type != DT_INIT){
-		fprintf(stderr, "%s: %d: DT_INIT interactive: Protocol violation!\r\n", \
+		print_error(io, "%s: %d: DT_INIT interactive: Protocol violation!\r\n", \
 				program_invocation_short_name, io->controller); 
 		return(-1);
 	}
@@ -142,7 +154,7 @@ int do_control(struct io_helper *io, struct config_helper *config){
 
 	message->data_type = DT_INIT;
 	message->data_len = 0;
-	
+
 	/* First, calculate size. */
 	io_bytes = 0;
 	for(i = 0; exec_envp[i]; i++){
@@ -175,7 +187,7 @@ int do_control(struct io_helper *io, struct config_helper *config){
 		*(message->data + message->data_len++) = '=';
 
 		if((tmp_ptr = getenv(exec_envp[i])) == NULL){
-			fprintf(stderr, "%s: No such environment variable \"%s\". Ignoring.\n", \
+			print_error(io, "%s: No such environment variable \"%s\". Ignoring.\n", \
 					program_invocation_short_name, exec_envp[i]);
 		}else{
 			io_bytes = strlen(tmp_ptr);
@@ -220,7 +232,8 @@ int do_control(struct io_helper *io, struct config_helper *config){
 	if(tcgetattr(STDIN_FILENO, &saved_termios_attrs) == -1){
 		print_error(io, "%s: %d: tcgetattr(STDIN_FILENO, %lx): %s\n", \
 				program_invocation_short_name, io->controller, \
-				(unsigned long) &saved_termios_attrs, strerror(errno));
+				(unsigned long) &saved_termios_attrs, \
+				strerror(errno));
 		return(-1);
 	}
 
@@ -242,7 +255,7 @@ int do_control(struct io_helper *io, struct config_helper *config){
 		return(-1);
 	}	
 
-	if(config->verbose){
+	if(verbose){
 		printf("\tDone!\r\n\n");
 	}
 
@@ -274,14 +287,13 @@ int do_control(struct io_helper *io, struct config_helper *config){
 		close(rc_fd);
 	}
 
-
 	err_flag = 0;
 
 	/*  - Enter broker() for tty brokering. */
 	retval = broker(io, config);
 
 	if(retval == -1 && !io->eof){
-		
+
 		if(errno == ECONNRESET){
 			err_flag = errno;
 		}else{
@@ -293,11 +305,18 @@ int do_control(struct io_helper *io, struct config_helper *config){
 	}
 
 	/*  - Reset local term. */
-	tcsetattr(STDIN_FILENO, TCSANOW, &saved_termios_attrs);
+	if(tcsetattr(STDIN_FILENO, TCSANOW, &saved_termios_attrs) == -1){
+		print_error(io, "%s: %d: tcsetattr(STDIN_FILENO, TCSANOW, %lx): %s\r\n", \
+				program_invocation_short_name, io->controller, \
+				(unsigned long) &saved_termios_attrs, \
+				strerror(errno));
+	}
 
 	/*  - Exit. */
 	if(!err_flag){
-		printf("Good-bye!\n");
+		if(verbose){
+			printf("Good-bye!\n");
+		}
 	}else{
 		while(message_pull(io) > 0){
 			if(message->data_type == DT_TTY){

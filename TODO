@@ -1,8 +1,0 @@
-
-Redo all comments.
-Fix broken error reporting.
-Fill out CODEMAP file with an overview of the code structure.
-Fix plaintext with SSL case.
-
-Done ->  Redo messaging all together. Set up an error message Data Type. Revamp print_error() to be just a message.
-Done -> All code should leverage the message api, and message code should use the io api.

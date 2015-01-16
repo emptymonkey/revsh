@@ -9,6 +9,7 @@
  *
  * 2013-07-17: Original release.
  * 2014-08-22: Complete overhaul w/SSL support.
+ * 2015-01-16: YACO (Yet another complete overhaul.) Added the internal messaging interface.
  *
  *
  * The revsh binary is intended to be used both on the local control host as well as the remote target host. It is
@@ -100,17 +101,10 @@ void usage(){
  * Inputs: The usual argument count followed by the argument vector.
  * Outputs: 0 on success. -1 on error.
  *
- * Purpose: main() runs the show.
- *
- * Notes:
- *	main() can be broken into three sections:
- *		1) Basic initialization.
- *		2) Setup the controller and call broker().
- *		3) Setup the target and call broker().
+ * Purpose: main() parses the configuration and calls the appropriate conductor function.
  *
  **********************************************************************************************************************/
 int main(int argc, char **argv){
-
 
 	int retval;
 	int opt;
@@ -126,22 +120,16 @@ int main(int argc, char **argv){
 	 * Basic initialization.
 	 */
 
+	/* We will not print errors here, as verbose status has not yet been set. */
 	if((io = (struct io_helper *) malloc(sizeof(struct io_helper))) == NULL){
-		fprintf(stderr, "%s: malloc(%d): %s\n", \
-				program_invocation_short_name, \
-				(int) sizeof(struct io_helper), \
-				strerror(errno));
-		return(-1);
+		return(-2);
 	}
 
 	if((config = (struct config_helper *) malloc(sizeof(struct config_helper))) == NULL){
-		fprintf(stderr, "%s: malloc(%d): %s\n", \
-				program_invocation_short_name, \
-				(int) sizeof(struct config_helper), \
-				strerror(errno));
-		return(-1);
+		return(-3);
 	}
 
+	/* Set defaults. */
 	io->local_in_fd = fileno(stdin);
 	io->local_out_fd = fileno(stdout);
 	io->controller = 0;
@@ -154,7 +142,8 @@ int main(int argc, char **argv){
 	config->bindshell = 0;
 	config->keepalive = 0;
 	config->timeout = TIMEOUT;
-	config->verbose = 0;
+
+	verbose = 0;
 
 #ifdef OPENSSL
 	io->fingerprint_type = NULL;
@@ -172,11 +161,10 @@ int main(int argc, char **argv){
 		program_invocation_short_name = argv[0];
 	}
 
+	/* Grab the configuration from the command line. */
 	while((opt = getopt(argc, argv, "pbkacs:d:f:r:ht:nv")) != -1){
 		switch(opt){
 
-			/*  plaintext */
-			/*  */
 			/*  The plaintext case is an undocumented "feature" which should be difficult to use. */
 			/*  You will need to pass the -p switch from both ends in order for it to work. */
 			/*  This is provided for debugging purposes only. */
@@ -222,12 +210,6 @@ int main(int argc, char **argv){
 			case 't':
 				errno = 0;
 				config->timeout = strtol(optarg, NULL, 10);
-				if(errno){
-					fprintf(stderr, "%s: %d: strtol(%s, NULL, 10): %s\r\n", \
-							program_invocation_short_name, io->controller, optarg, \
-							strerror(errno));
-					usage();
-				}
 				break;
 
 			case 'n':
@@ -235,7 +217,7 @@ int main(int argc, char **argv){
 				break;
 
 			case 'v':
-				config->verbose = 1;
+				verbose = 1;
 				break;
 
 			case 'h':
@@ -244,6 +226,7 @@ int main(int argc, char **argv){
 		}
 	}
 
+	/* Check for bindshell mode from name. */
 	tmp_ptr = strrchr(argv[0], '/');	
 	if(!tmp_ptr){
 		tmp_ptr = argv[0];
@@ -255,6 +238,7 @@ int main(int argc, char **argv){
 		config->bindshell = 1;
 	}
 
+	/* Grab the ip address. */
 	if((argc - optind) == 1){
 		config->ip_addr = argv[optind];
 	}else if((argc - optind) == 0){
@@ -263,46 +247,45 @@ int main(int argc, char **argv){
 		usage();
 	}
 
-
 	/*  The joy of a struct with pointers to functions. We only call "io->remote_read()" and the */
 	/*  appropriate crypto / no crypto version is called on the backend. */
 	io->remote_read = &remote_read_plaintext;
 	io->remote_write = &remote_write_plaintext;
 
 #ifdef OPENSSL
-
 	if(config->encryption){
 		io->remote_read = &remote_read_encrypted;
 		io->remote_write = &remote_write_encrypted;
 		io->fingerprint_type = EVP_sha1();
-	}
 
-	switch(config->encryption){
+		switch(config->encryption){
 
-		case ADH:
-			config->cipher_list = ADH_CIPHER;
-			break;
+			case ADH:
+				config->cipher_list = ADH_CIPHER;
+				break;
 
-		case EDH:
-			config->cipher_list = CONTROLLER_CIPHER;
-			break;
+			case EDH:
+				config->cipher_list = CONTROLLER_CIPHER;
+				break;
+		}
 	}
 
 	SSL_library_init();
 	SSL_load_error_strings();
-
 #endif /* OPENSSL */
 
-  pagesize = getpagesize();
+	pagesize = getpagesize();
 
 	/*  Prepare the retry timer values. */
 	errno = 0;
 	config->retry_start = strtol(retry_string, &tmp_ptr, 10);
 	if(errno){
-		fprintf(stderr, "%s: %d: strtol(%s, %lx, 10): %s\r\n", \
-				program_invocation_short_name, io->controller, retry_string, \
-				(unsigned long) &tmp_ptr, strerror(errno));
-		exit(-1);
+		if(verbose){
+			fprintf(stderr, "%s: %d: strtol(%s, %lx, 10): %s\r\n", \
+					program_invocation_short_name, io->controller, retry_string, \
+					(unsigned long) &tmp_ptr, strerror(errno));
+		}
+		return(-1);
 	}
 
 	if(*tmp_ptr != '\0'){
@@ -312,23 +295,21 @@ int main(int argc, char **argv){
 	errno = 0;
 	config->retry_stop = strtol(tmp_ptr, NULL, 10);
 	if(errno){
-		fprintf(stderr, "%s: %d: strtol(%s, NULL, 10): %s\r\n", \
-				program_invocation_short_name, io->controller, \
-				tmp_ptr, strerror(errno));
-		exit(-1);
+		if(verbose){
+			fprintf(stderr, "%s: %d: strtol(%s, NULL, 10): %s\n", \
+					program_invocation_short_name, io->controller, \
+					tmp_ptr, strerror(errno));
+		}
+		return(-1);
 	}
 
-
+	/* Call the appropriate conductor. */
 	if(io->controller){
-
 		do{
 			retval = do_control(io, config);
 		} while(retval != -1 && config->keepalive);
-
 	}else{
-
 		retval = do_target(io, config);
-
 	}
 
 	return(retval);

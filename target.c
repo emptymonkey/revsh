@@ -2,6 +2,17 @@
 #include "common.h"
 
 
+/***********************************************************************************************************************
+ *
+ * do_target()
+ *
+ * Input: Our io and config helper objects.
+ *
+ * Output: 0 for success, -1 on error.
+ *
+ * Purpose: This is the defining function for a target node.
+ *
+ **********************************************************************************************************************/
 int do_target(struct io_helper *io, struct config_helper *config){
 
 	int retval;
@@ -21,62 +32,75 @@ int do_target(struct io_helper *io, struct config_helper *config){
 	struct sockaddr addr;
 	socklen_t addrlen = (socklen_t) sizeof(addr);
 
-  struct message_helper *message;
+	struct message_helper *message;
 
 
-  /* We will be using the internal message struct inside of io quite a bit, so this will be a nice shorthand. */
-  message = &io->message;
+	/* We will be using the internal message struct inside of io quite a bit, so this will be a nice shorthand. */
+	message = &io->message;
 
+	/* Initialize the structures we will be using. */
 	if((tty_winsize = (struct winsize *) calloc(1, sizeof(struct winsize))) == NULL){
-		if(config->verbose){
+		if(verbose){
 			fprintf(stderr, "%s: %d: calloc(1, %d): %s\r\n", \
 					program_invocation_short_name, io->controller, \
-					(int) sizeof(struct winsize), strerror(errno));
+					(int) sizeof(struct winsize), \
+					strerror(errno));
 		}
 		return(-1);
 	}
 
-
+	/* Set up the network layer. */
 	if(init_io_target(io, config) == -1){
-		fprintf(stderr, "%s: %d: init_io_connect(%lx, %lx): %s\r\n", \
-				program_invocation_short_name, io->controller, \
-				(unsigned long) io, (unsigned long) config, \
-				strerror(errno));
+		if(verbose){
+			fprintf(stderr, "%s: %d: init_io_connect(%lx, %lx): %s\r\n", \
+					program_invocation_short_name, io->controller, \
+					(unsigned long) io, (unsigned long) config, \
+					strerror(errno));
+		}
 		return(-1);
 	}
 
-  if(negotiate_protocol(io) == -1){
-    fprintf(stderr, "%s: %d: negotiate_protocol(%lx): %s\r\n", \
-        program_invocation_short_name, io->controller, \
-        (unsigned long) io, \
-        strerror(errno));
-    return(-1);
-  }
+	/* Set up the messaging layer. */
+	if(negotiate_protocol(io) == -1){
+		if(verbose){
+			fprintf(stderr, "%s: %d: negotiate_protocol(%lx): %s\r\n", \
+					program_invocation_short_name, io->controller, \
+					(unsigned long) io, \
+					strerror(errno));
+		}
+		return(-1);
+	}
 
 	/*  - Agree on interactive / non-interactive mode. */
-  message->data_type = DT_INIT;
-  message->data_len = sizeof(config->interactive);
-  memcpy(message->data, &config->interactive, sizeof(config->interactive));
+	message->data_type = DT_INIT;
+	message->data_len = sizeof(config->interactive);
+	memcpy(message->data, &config->interactive, sizeof(config->interactive));
 
-  if(message_push(io) == -1){
-    fprintf(stderr, "%s: %d: message->push(%lx): %s\n", \
-        program_invocation_short_name, io->controller, \
-        (unsigned long) io, \
-        strerror(errno));
-    return(-1);
-  }
+	if(message_push(io) == -1){
+		if(verbose){
+			fprintf(stderr, "%s: %d: message->push(%lx): %s\n", \
+					program_invocation_short_name, io->controller, \
+					(unsigned long) io, \
+					strerror(errno));
+		}
+		return(-1);
+	}
 
 	if(message_pull(io) == -1){
-		fprintf(stderr, "%s: %d: message_pull(%lx): %s\r\n", \
-				program_invocation_short_name, io->controller, \
-				(unsigned long) io, \
-				strerror(errno));
+		if(verbose){
+			fprintf(stderr, "%s: %d: message_pull(%lx): %s\r\n", \
+					program_invocation_short_name, io->controller, \
+					(unsigned long) io, \
+					strerror(errno));
+		}
 		return(-1);
 	}
 
 	if(message->data_type != DT_INIT){
-		fprintf(stderr, "%s: %d: DT_INIT interactive: Protocol violation!\r\n", \
-				program_invocation_short_name, io->controller);
+		if(verbose){
+			fprintf(stderr, "%s: %d: DT_INIT interactive: Protocol violation!\r\n", \
+					program_invocation_short_name, io->controller);
+		}
 		return(-1);
 	}
 
@@ -98,13 +122,11 @@ int do_target(struct io_helper *io, struct config_helper *config){
 		return(retval);
 	}
 
-
-	if(!config->verbose){
+	if(!verbose){
 		/*  - Become a daemon. */
 		umask(0);
 
 		retval = fork();
-
 
 		if(retval == -1){
 			return(-1);
@@ -119,15 +141,16 @@ int do_target(struct io_helper *io, struct config_helper *config){
 		if(chdir("/") == -1){
 			return(-1);
 		}
-
 	}
 
 	/*  - Receive and set the shell. */
 	if(message_pull(io) == -1){
-		fprintf(stderr, "%s: %d: message_pull(%lx): %s\r\n", \
-				program_invocation_short_name, io->controller, \
-				(unsigned long) io, \
-				strerror(errno));
+		if(verbose){
+			fprintf(stderr, "%s: %d: message_pull(%lx): %s\r\n", \
+					program_invocation_short_name, io->controller, \
+					(unsigned long) io, \
+					strerror(errno));
+		}
 		return(-1);
 	}
 
@@ -158,16 +181,20 @@ int do_target(struct io_helper *io, struct config_helper *config){
 
 	/*  - Receive and set the initial environment. */
 	if(message_pull(io) == -1){
-		fprintf(stderr, "%s: %d: message_pull(%lx): %s\r\n", \
-				program_invocation_short_name, io->controller, \
-				(unsigned long) io, \
-				strerror(errno));
+		if(verbose){
+			fprintf(stderr, "%s: %d: message_pull(%lx): %s\r\n", \
+					program_invocation_short_name, io->controller, \
+					(unsigned long) io, \
+					strerror(errno));
+		}
 		return(-1);
 	}
 
 	if(message->data_type != DT_INIT){
-		fprintf(stderr, "%s: %d: DT_INIT environment: Protocol violation!\r\n", \
-				program_invocation_short_name, io->controller);
+		if(verbose){
+			fprintf(stderr, "%s: %d: DT_INIT environment: Protocol violation!\r\n", \
+					program_invocation_short_name, io->controller);
+		}
 		return(-1);
 	}
 
@@ -183,22 +210,28 @@ int do_target(struct io_helper *io, struct config_helper *config){
 
 	/*  - Receive and set the initial termios. */
 	if(message_pull(io) == -1){
-		fprintf(stderr, "%s: %d: message_pull(%lx): %s\r\n", \
-				program_invocation_short_name, io->controller, \
-				(unsigned long) io, \
-				strerror(errno));
+		if(verbose){
+			fprintf(stderr, "%s: %d: message_pull(%lx): %s\r\n", \
+					program_invocation_short_name, io->controller, \
+					(unsigned long) io, \
+					strerror(errno));
+		}
 		return(-1);
 	}
 
 	if(message->data_type != DT_INIT){
-		fprintf(stderr, "%s: %d: DT_INIT termios: Protocol violation!\r\n", \
-				program_invocation_short_name, io->controller);
+		if(verbose){
+			fprintf(stderr, "%s: %d: DT_INIT termios: Protocol violation!\r\n", \
+					program_invocation_short_name, io->controller);
+		}
 		return(-1);
 	}
 
 	if(message->data_len != sizeof(tty_winsize->ws_row) + sizeof(tty_winsize->ws_col)){
-		fprintf(stderr, "%s: %d: DT_INIT termios: not enough data!\r\n", \
-				program_invocation_short_name, io->controller);
+		if(verbose){
+			fprintf(stderr, "%s: %d: DT_INIT termios: not enough data!\r\n", \
+					program_invocation_short_name, io->controller);
+		}
 		return(-1);
 	}
 
@@ -251,12 +284,10 @@ int do_target(struct io_helper *io, struct config_helper *config){
 
 	/*  - Send basic information back to the controller about the connecting host. */
 	if((buff_head = (char *) calloc(LOCAL_BUFF_SIZE, sizeof(char))) == NULL){
-		if(config->verbose){
-			fprintf(stderr, "%s: %d: calloc(%d, %d): %s\r\n", \
-					program_invocation_short_name, io->controller, \
-					LOCAL_BUFF_SIZE, (int) sizeof(char), \
-					strerror(errno));
-		}
+		print_error(io, "%s: %d: calloc(%d, %d): %s\r\n", \
+				program_invocation_short_name, io->controller, \
+				LOCAL_BUFF_SIZE, (int) sizeof(char), \
+				strerror(errno));
 		return(-1);
 	}
 
@@ -322,7 +353,7 @@ int do_target(struct io_helper *io, struct config_helper *config){
 		return(-1);
 	}
 
-	if(!config->verbose){
+	if(!verbose){
 		if(close(STDERR_FILENO) == -1){
 			print_error(io, "%s: %d: close(STDERR_FILENO): %s\r\n", \
 					program_invocation_short_name, io->controller, \
@@ -436,12 +467,16 @@ int do_target(struct io_helper *io, struct config_helper *config){
 	if((exec_argv = string_to_vector(config->shell)) == NULL){
 		print_error(io, "%s: %d: string_to_vector(%s): %s\r\n", \
 				program_invocation_short_name, io->controller, \
-				config->shell, strerror(errno));
+				config->shell, \
+				strerror(errno));
 		return(-1);
 	}
 
 	execve(exec_argv[0], exec_argv, exec_envp);
 
+	print_error(io, "%s: %d: execve(%s, %lx, %lx): %s\r\n", \
+			program_invocation_short_name, io->controller, \
+			exec_argv[0], (unsigned long) message->data_type, (unsigned long) exec_envp, \
+			strerror(errno));
 	return(-1);
 }
-

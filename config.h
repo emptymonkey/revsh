@@ -31,7 +31,7 @@
 /* CALLING_CARD is just a string that will be left sitting in the binary. I use it as advertising space. */
 #define CALLING_CARD "@emptymonkey - https://github.com/emptymonkey"
 
-/* Given the current state of APT attribution, you may want to change CALLING_CARD to something that "looks Asian". */
+/* CALLING_CARD may also be used as a mechanism for false attribution. Be creative. */
 
 /* Chinese	"we are hongke" */
 /* #define CALLING_CARD "我们是红客" */

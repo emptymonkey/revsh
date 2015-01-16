@@ -1,5 +1,5 @@
 
-
+/* An object to assist in sending and recieving messages. */
 struct message_helper {
 	unsigned char data_type;
 	unsigned short data_len;
@@ -9,12 +9,12 @@ struct message_helper {
 };
 
 
+/* An object acting as a collection of different configuration states. */
 struct config_helper {
 
 	unsigned char interactive;
 
 	int bindshell;
-	int verbose;
 
 	char *ip_addr;
 	char *keys_dir;
@@ -35,8 +35,7 @@ struct config_helper {
 };
 
 
-/* Basic object for organizing I/O structures and interfaces. */
-
+/* An object for organizing I/O structures and interfaces. */
 struct io_helper {
 
 	/* Denote whether this instance is on the control node or the target node. */

@@ -1,7 +1,4 @@
 
-#define DEBUG
-
-
 #ifndef FREEBSD
 # define _POSIX_C_SOURCE 199309L
 # define _BSD_SOURCE
@@ -52,33 +49,21 @@
 #define CONTROLLER_CERT_FILE "controller_cert.pem"
 #define CONTROLLER_KEY_FILE "controller_key.pem"
 
-/*
-	 This should only need to be 16 chars long.
-	 4 control chars + 1 space + (2 * string length of winsize members).
-	 winsize members are unsigned shorts on my dev platform.
-	 There are four members total in a winsize object, but the second two are ignored.
- */
-#define WINSIZE_BUFF_LEN  16
-
-/* State definitions. */
-#define NO_EVENT        0
-#define APC_HIGH_FOUND  1
-#define DATA_FOUND      2
-#define ST_HIGH_FOUND   3
-
 /* Encryption definitions. */
 #define PLAINTEXT 0
 #define ADH 1
 #define EDH 2
 
-#define MINIMUM_MESSAGE_SIZE	1024
 #define LOCAL_BUFF_SIZE	128
 
 
 /* We will set this up ourselves for portability. */
 char *program_invocation_short_name;
 
+/* These variables are global because they won't change (once initialized) */
+/* and any given part of the code may need to reference them. */
 int pagesize;
+int verbose;
 
 char **string_to_vector(char *command_string);
 void free_vector(char **vector);
@@ -122,7 +107,7 @@ int posix_openpt(int flags);
  *
  *	Header:
  *		- header_len		: unsigned short (network order)
- *				This is the size of the *remaining* header data.
+ *				This is the size of the remaining header data.
  *		- data_type			:	unsigned char
  *		- data_len			:	unsigned short (network order)
  *		- Other data_type specific headers, as needed.
@@ -131,6 +116,10 @@ int posix_openpt(int flags);
  *		- data					:	void *
  *
  **********************************************************************************************************************/
+
+/* This is the smallest message size we will respect when asked by the remote connection. */
+#define MINIMUM_MESSAGE_SIZE	1024
+
 
 /* Data Types */
 
