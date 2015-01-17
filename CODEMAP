@@ -9,13 +9,13 @@ Minor helper functions will be ommited from the descriptions.
 - revsh.c
 	-- main()
 		--- Perform basic initialization.
-		--- Calls the appropriate conductor, either do_control() or do_target() depending as appropriate.
+		--- Calls the appropriate conductor, either do_control() or do_target() as appropriate.
 
 - control.c
 	-- do_control()
 		--- Acts as the conductor for control nodes.
 		--- Calls init_io_controller() to setup the networking layer.
-		--- Calls negotiate_protocol() to set up the messaging layer.
+		--- Calls negotiate_protocol() to setup the messaging layer.
 		--- Talks with the remote partner to syncronize the revsh environment.
 		--- Calls broker().
 		--- Performs cleanup and exits.
@@ -31,8 +31,18 @@ Minor helper functions will be ommited from the descriptions.
 		--- Calls broker().
 		--- Performs cleanup and exits.
 
+- broker.c
+	-- Uses message_pull() and message_push() to read and write data.
+	-- Reads data from either the local or remote file descriptor, then writes it down the other.
+
+- message.c
+	-- message_pull()
+		--- Uses remote_read() to pull data from the socket, and fills out the appropriate message data structures.
+	-- message_push()
+		--- Reads from the appropriate message data structures, and uses remote_write() to push data down the socket.
+
 - io.c
-	-- Include either io_ssl.c or io_nossl.c, as appropriate.
+	-- Includes either the io_ssl.c or io_nossl.c code, as appropriate.
 	-- remote_printf()
 		--- Provide a printf() style interface that uses our messaging layer.
 	-- print_error()
@@ -51,12 +61,6 @@ Minor helper functions will be ommited from the descriptions.
 		--- Setup the network layer for the control node.
 	-- init_io_target()
 		--- Setup the network layer for the target node.
-
-- message.c
-	-- message_pull()
-		--- remote_read() from the socket, and fill out the appropriate message data structures.
-	-- message_push()
-		--- Read from the appropriate message data structures, and remote_write() it to the socket.
 
 
 Note: the remote_read_*() and remote_write_*() functions are called through function pointers 
