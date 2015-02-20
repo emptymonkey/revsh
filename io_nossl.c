@@ -230,7 +230,6 @@ int init_io_controller(struct io_helper *io, struct config_helper *config){
 
 	memset(&name, 0, sizeof(name));
 	name.sin_family = AF_INET;
-	//name.sin_addr.s_addr = *((unsigned long *) host->h_addr);
 	name.sin_port = htons(strtol(ip_port, NULL, 10));
 
 	if((tmp_sock = socket(AF_INET, SOCK_STREAM, 0)) == -1){
@@ -421,7 +420,6 @@ int init_io_target(struct io_helper *io, struct config_helper *config){
 
 	memset(&name, 0, sizeof(name));
 	name.sin_family = AF_INET;
-	//name.sin_addr.s_addr = *((unsigned long *) host->h_addr);
 	name.sin_port = htons(strtol(ip_port, NULL, 10));
 
 	if((tmp_sock = socket(AF_INET, SOCK_STREAM, 0)) == -1){

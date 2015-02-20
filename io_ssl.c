@@ -586,7 +586,7 @@ int init_io_controller(struct io_helper *io, struct config_helper *config){
 		while(((retval = BIO_do_connect(io->connect)) != 1) && config->retry_start){
 
 			if(config->retry_stop){
-				tmp_ulong = random();
+				tmp_ulong = rand();
 				retry = config->retry_start + (tmp_ulong % (config->retry_stop - config->retry_start));
 			}else{
 				retry = config->retry_start;

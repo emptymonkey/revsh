@@ -115,6 +115,9 @@ int main(int argc, char **argv){
 
 	char *retry_string = RETRY;
 
+	unsigned int seed;
+	int tmp_fd;
+
 
 	/*
 	 * Basic initialization.
@@ -247,6 +250,30 @@ int main(int argc, char **argv){
 	}else{
 		usage();
 	}
+
+	/* Grab some entropy and seed rand(). */
+	if((tmp_fd = open("/dev/random", O_RDONLY)) == -1){
+    if(verbose){
+      fprintf(stderr, "%s: %d: open(\"/dev/random\", O_RDONLY): %s\r\n", \
+          program_invocation_short_name, io->controller, \
+					strerror(errno));
+    }
+    return(-1);
+	}
+
+	if((retval = read(tmp_fd, &seed, sizeof(seed))) != sizeof(seed)){
+    if(verbose){
+      fprintf(stderr, "%s: %d: read(%d, %lx, %d): Unable to fill seed!\r\n", \
+          program_invocation_short_name, io->controller, \
+					tmp_fd, (unsigned long) &seed, (int) sizeof(seed));
+    }
+    return(-1);
+	}
+
+	close(tmp_fd);
+
+	srand(seed);
+	
 
 	/*  The joy of a struct with pointers to functions. We only call "io->remote_read()" and the */
 	/*  appropriate crypto / no crypto version is called on the backend. */
