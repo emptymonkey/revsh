@@ -34,6 +34,8 @@ int do_target(struct io_helper *io, struct config_helper *config){
 
 	struct message_helper *message;
 
+  struct utsname uname_info;
+
 
 	/* We will be using the internal message struct inside of io quite a bit, so this will be a nice shorthand. */
 	message = &io->message;
@@ -291,51 +293,58 @@ int do_target(struct io_helper *io, struct config_helper *config){
 		return(-1);
 	}
 
-	if(gethostname(buff_head, LOCAL_BUFF_SIZE - 1) == -1){
-		print_error(io, "%s: %d: gethostname(%lx, %d): %s\r\n", \
-				program_invocation_short_name, io->controller, \
-				(unsigned long) buff_head, LOCAL_BUFF_SIZE - 1, strerror(errno));
-		return(-1);
-	}
+  if(uname(&uname_info) == -1){
+    if(verbose){
+      fprintf(stderr, "%s: uname(%lx): %s\r\n", \
+          program_invocation_short_name, \
+          (unsigned long) &uname, \
+          strerror(errno));
+    }
+    return(-1);
+  }
 
-	remote_printf(io, "################################\r\n");
-	remote_printf(io, "# hostname: %s\r\n", buff_head);
+  remote_printf(io, "################################################################################\r\n");
+  remote_printf(io, "# Hostname:\t\t%s\r\n", uname_info.nodename);
+  remote_printf(io, "# OS Name:\t\t%s\r\n", uname_info.sysname);
+  remote_printf(io, "# OS Release:\t\t%s\r\n", uname_info.release);
+  remote_printf(io, "# OS Version:\t\t%s\r\n", uname_info.version);
+  remote_printf(io, "# Arch:\t\t\t%s\r\n", uname_info.machine);
 
 
-	remote_printf(io, "# ip address: ");
-	if(getsockname(io->remote_fd, &addr, &addrlen) != -1){
-		memset(buff_head, 0, LOCAL_BUFF_SIZE);
-		if(inet_ntop(addr.sa_family, addr.sa_data + 2, buff_head, LOCAL_BUFF_SIZE - 1)){
-			remote_printf(io, "%s", buff_head);
-		}
-	}
+  remote_printf(io, "# IP Address:\t\t");
+  if(getsockname(io->remote_fd, &addr, &addrlen) != -1){
+    memset(buff_head, 0, LOCAL_BUFF_SIZE);
+    if(inet_ntop(addr.sa_family, addr.sa_data + 2, buff_head, LOCAL_BUFF_SIZE - 1)){
+      remote_printf(io, "%s", buff_head);
+    }
+  }
 
-	if(!buff_head[0]){
-		remote_printf(io, "I have no address!");
-	}
-	remote_printf(io, "\r\n");
+  if(!buff_head[0]){
+    remote_printf(io, "I have no address!");
+  }
+  remote_printf(io, "\r\n");
 
-	/*  if the uid doesn't match an entry in /etc/passwd, we don't want to crash. */
-	/*  Borrowed the "I have no name!" convention from bash. */
-	passwd_entry = getpwuid(getuid());
-	remote_printf(io, "# real user: ");
-	if(passwd_entry && passwd_entry->pw_name){
-		remote_printf(io, "%s", passwd_entry->pw_name);
-	}else{
-		remote_printf(io, "I have no name!");
-	}
-	remote_printf(io, "\r\n");
+  /*  if the uid doesn't match an entry in /etc/passwd, we don't want to crash. */
+  /*  Borrowed the "I have no name!" convention from bash. */
+  passwd_entry = getpwuid(getuid());
+  remote_printf(io, "# Real User:\t\t");
+  if(passwd_entry && passwd_entry->pw_name){
+    remote_printf(io, "%s", passwd_entry->pw_name);
+  }else{
+    remote_printf(io, "I have no name!");
+  }
+  remote_printf(io, "\r\n");
 
-	passwd_entry = getpwuid(geteuid());
-	remote_printf(io, "# effective user: ");
-	if(passwd_entry && passwd_entry->pw_name){
-		remote_printf(io, "%s", passwd_entry->pw_name);
-	}else{
-		remote_printf(io, "I have no name!");
-	}
-	remote_printf(io, "\r\n");
+  passwd_entry = getpwuid(geteuid());
+  remote_printf(io, "# Effective User:\t");
+  if(passwd_entry && passwd_entry->pw_name){
+    remote_printf(io, "%s", passwd_entry->pw_name);
+  }else{
+    remote_printf(io, "I have no name!");
+  }
+  remote_printf(io, "\r\n");
 
-	remote_printf(io, "################################\r\n");
+  remote_printf(io, "################################################################################\r\n");
 
 	free(buff_head);
 
@@ -373,6 +382,8 @@ int do_target(struct io_helper *io, struct config_helper *config){
 	}
 
 	if(retval){
+
+		io->child_sid = retval;
 
 		/*  - Parent: Enter broker() and broker tty. */
 		if(close(pty_slave) == -1){

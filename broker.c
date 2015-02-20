@@ -225,16 +225,7 @@ int broker(struct io_helper *io, struct config_helper *config){
 							goto CLEAN_UP;
 						}
 
-						if((sig_pid = tcgetsid(io->local_out_fd)) == -1){
-							print_error(io, "%s: %d: tcgetsid(%d): %s\n", \
-									program_invocation_short_name, io->controller, \
-									io->local_out_fd, \
-									strerror(errno));
-							retval = -1;
-							goto CLEAN_UP;
-						}
-
-						if((retval = kill(-sig_pid, SIGWINCH)) == -1){
+						if((retval = kill(-(io->child_sid), SIGWINCH)) == -1){
 							print_error(io, "%s: %d: kill(%d, SIGWINCH): %s\n", \
 									program_invocation_short_name, io->controller, \
 									-sig_pid, \

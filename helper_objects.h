@@ -40,6 +40,7 @@ struct io_helper {
 
 	/* Denote whether this instance is on the control node or the target node. */
 	int controller;
+	int child_sid;
 
 	/* We use pointers to functions here so we can invoke the appropriate function on the backend (crypto / no crypto). */
 	int (*remote_read)(struct io_helper *io, void *buf, size_t count);

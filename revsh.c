@@ -134,6 +134,7 @@ int main(int argc, char **argv){
 	io->local_out_fd = fileno(stdout);
 	io->controller = 0;
 	io->eof = 0;
+	io->child_sid = 0;
 
 	config->interactive = 1;
 	config->shell = NULL;
@@ -274,7 +275,7 @@ int main(int argc, char **argv){
 	SSL_load_error_strings();
 #endif /* OPENSSL */
 
-	pagesize = getpagesize();
+	pagesize = sysconf(_SC_PAGESIZE);
 
 	/*  Prepare the retry timer values. */
 	errno = 0;
