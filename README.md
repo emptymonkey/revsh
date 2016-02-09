@@ -148,7 +148,7 @@ Currently working on:
 
 Features planned for future releases:
 * Curses interface.
-* Escape character support. (Similar to SSH's 
+* Escape character support. (Similar to SSH's '~' escape character suite.)
 * Escape character command line. (Similar to SSH's '~C'.) Commands will include:
     * File upload / download.
     * Proxy creation.
