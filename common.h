@@ -120,9 +120,7 @@ int posix_openpt(int flags);
 /* This is the smallest message size we will respect when asked by the remote connection. */
 #define MINIMUM_MESSAGE_SIZE	1024
 
-
 /* Data Types */
-
 /* DT_INIT: Initialization sequence data. */
 #define DT_INIT				1
 

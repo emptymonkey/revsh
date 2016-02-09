@@ -129,6 +129,21 @@ Remote target host:
 	vi rc              # Add your favorite startup commands to really customize the feel of your remote shell.
 	./revsh -h
 
+## Roadmap ##
+
+Currently working on:
+* Local / Remote static port forwarding support.
+* SOCKS 5 proxy dynamic port forwarding support.
+
+Features planned for future releases:
+* Curses interface.
+* Escape character support. (Similar to SSH's 
+* Escape character command line. (Similar to SSH's '~C'.) Commands will include:
+    * File upload / download.
+    * Proxy creation.
+    * Node mapping.
+* Rearrange communication into a mesh topology. 
+
 ## A Quick Note on Ethics ##
 
 I write and release these tools with the intention of educating the larger [IT](http://en.wikipedia.org/wiki/Information_technology) community and empowering legitimate pentesters. If I can write these tools in my spare time, then rest assured that the dedicated malicious actors have already developed versions of their own.
