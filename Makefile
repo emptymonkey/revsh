@@ -48,7 +48,7 @@ IO_DEP = io_ssl.c
 # make directives - Not intended for modification.
 ########################################################################################################################
 
-OBJS = string_to_vector.o io.o control.o target.o broker.o message.o
+OBJS = string_to_vector.o io.o control.o target.o broker.o message.o proxy.o
 
 all: revsh
 
@@ -97,6 +97,9 @@ broker.o: broker.c common.h config.h helper_objects.h
 
 message.o: message.c common.h config.h helper_objects.h
 	$(CC) $(CFLAGS) -c -o message.o message.c
+
+proxy.o: proxy.c common.h config.h helper_objects.h
+	$(CC) $(CFLAGS) -c -o proxy.o proxy.c
 
 in_the_key_of_c: in_the_key_of_c.c
 	$(CC) $(CFLAGS) -o in_the_key_of_c in_the_key_of_c.c $(LIBS)

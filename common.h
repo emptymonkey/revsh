@@ -56,6 +56,11 @@
 
 #define LOCAL_BUFF_SIZE	128
 
+/* Proxy types */
+#define PROXY_LOCAL 0
+#define PROXY_DYNAMIC 1
+
+#define DEFAULT_PROXY_ADDR "127.0.0.1"
 
 /* We will set this up ourselves for portability. */
 char *program_invocation_short_name;
@@ -100,6 +105,13 @@ void catch_alarm(int signal);
 int posix_openpt(int flags);
 #endif /* FREEBSD */
 
+struct proxy_node *proxy_node_new(char *proxy_string, int proxy_type);
+int proxy_listen(struct proxy_node *cur_proxy_node);
+int proxy_connect(char *rhost_rport);
+struct connection_node *connection_node_create(struct connection_node **head);
+int connection_node_delete(unsigned short origin, unsigned short id, struct connection_node **head);
+struct connection_node *connection_node_find(unsigned short origin, unsigned short id, struct connection_node **head);
+
 
 /**********************************************************************************************************************
  *
@@ -111,6 +123,10 @@ int posix_openpt(int flags);
  *		- data_type			:	unsigned char
  *		- data_len			:	unsigned short (network order)
  *		- Other data_type specific headers, as needed.
+ *
+ *	Other headers for DT_PROXY and DT_CONNECTION:
+ *		- header_type		: unsigned short (network order)
+ *		- header_id			: unsigned long (network order)
  *
  *	Body:
  *		- data					:	void *
@@ -130,6 +146,13 @@ int posix_openpt(int flags);
 /* DT_WINRESIZE: Window re-size event data. */
 #define DT_WINRESIZE	3
 
-/* DT_PROXY: SOCKS proxy networking data. */
-/*#define DT_PROXY			4*/
+/* DT_PROXY: Proxy meta-data. (e.g. setup, teardown, etc.) */
+#define DT_PROXY			4
+#define DT_PROXY_HT_CREATE	1
+#define DT_PROXY_HT_DESTROY	2
 
+/* DT_CONNECTION: Proxy data for established connections. */
+#define DT_CONNECTION	5
+
+/* DT_NOP: No Operation dummy message used for keep-alive. */
+#define DT_NOP	6

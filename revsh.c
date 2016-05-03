@@ -58,9 +58,9 @@ char *GLOBAL_calling_card = CALLING_CARD;
  **********************************************************************************************************************/
 void usage(){
 #ifdef OPENSSL
-	fprintf(stderr, "\nusage:\t%s [-c [-a] [-d KEYS_DIR] [-f RC_FILE]] [-s SHELL] [-t SEC] [-r SEC1[,SEC2]] [-b] [-n] [-k] [-v] [-h] [ADDRESS:PORT]\n", program_invocation_short_name);
+	fprintf(stderr, "\nusage:\t%s\t[-c [-a] [-d KEYS_DIR] [-f RC_FILE] [-L [LHOST:]LPORT:RHOST:RPORT] [-D [LHOST:]LPORT]\n\t\t[-s SHELL] [-t SEC] [-r SEC1[,SEC2]] [-b] [-n] [-k] [-v] [-h] [ADDRESS:PORT]\n", program_invocation_short_name);
 #else /* OPENSSL */
-	fprintf(stderr, "\nusage:\t%s [-c [-f RC_FILE]] [-s SHELL] [-t SEC] [-r SEC1[,SEC2]] [-b [-k]] [-n] [-v] [ADDRESS:PORT]\n", program_invocation_short_name);
+	fprintf(stderr, "\nusage:\t%s\t[-c [-f RC_FILE]] [-s SHELL] [-t SEC] [-r SEC1[,SEC2][-L [LHOST:]LPORT:RHOST:RPORT] [-D [LHOST:]LPORT]]\n\t\t[-b [-k]] [-n] [-v] [ADDRESS:PORT]\n", program_invocation_short_name);
 #endif /* OPENSSL */
 	fprintf(stderr, "\n\t-c\t\tRun in command and control mode.\t\t(Default is target mode.)\n");
 #ifdef OPENSSL
@@ -68,6 +68,8 @@ void usage(){
 	fprintf(stderr, "\t-d KEYS_DIR\tReference the keys in an alternate directory.\t(Default is \"%s\".)\n", KEYS_DIR);
 #endif /* OPENSSL */
 	fprintf(stderr, "\t-f RC_FILE\tReference an alternate rc file.\t\t\t(Default is \"%s\".)\n", RC_FILE);
+	fprintf(stderr, "\t-L\t\tLocal Forward:\n\t\t\tOpen a listening port locally on LHOST:LPORT.\n\t\t\tForward traffic to RHOST:RPORT.\n"); 
+	fprintf(stderr, "\t-D\t\tDynamic Forward:\n\t\t\tOpen a listening port locally on LHOST:LPORT.\n\t\t\tForward traffic to RHOST:RPORT.\n"); 
 	fprintf(stderr, "\t-s SHELL\tInvoke SHELL as the remote shell.\t\t(Default is \"%s\".)\n", DEFAULT_SHELL);
 	fprintf(stderr, "\t-t SEC\t\tSet the connection timeout to SEC seconds.\t(Default is \"%d\".)\n", TIMEOUT);
 	fprintf(stderr, "\t-r SEC1,SEC2\tSet the retry time to be SEC1 seconds, or\t(Default is \"%s\".)\n\t\t\tto be random in the range from SEC1 to SEC2.\n", RETRY);
@@ -110,6 +112,9 @@ int main(int argc, char **argv){
 	int opt;
 	char *tmp_ptr;
 
+	struct proxy_request_node *tmp_proxy_ptr = NULL;
+	struct proxy_request_node *cur_proxy_ptr = NULL;
+
 	struct io_helper *io;
 	struct config_helper *config;
 
@@ -132,12 +137,15 @@ int main(int argc, char **argv){
 		return(-3);
 	}
 
+
 	/* Set defaults. */
 	io->local_in_fd = fileno(stdin);
 	io->local_out_fd = fileno(stdout);
 	io->controller = 0;
 	io->eof = 0;
 	io->child_sid = 0;
+	io->proxy_head = NULL;
+	io->proxy_tail = NULL;
 
 	config->interactive = 1;
 	config->shell = NULL;
@@ -166,7 +174,7 @@ int main(int argc, char **argv){
 	}
 
 	/* Grab the configuration from the command line. */
-	while((opt = getopt(argc, argv, "pbkacs:d:f:r:ht:nv")) != -1){
+	while((opt = getopt(argc, argv, "pbkacs:d:f:L:R:D:r:ht:nv")) != -1){
 		switch(opt){
 
 			/*  The plaintext case is an undocumented "feature" which should be difficult to use. */
@@ -207,6 +215,27 @@ int main(int argc, char **argv){
 				config->rc_file = optarg;
 				break;
 
+			case 'L':
+			case 'D':
+				if((tmp_proxy_ptr = calloc(1, sizeof(struct proxy_node))) == NULL){
+					return(-4);
+				}
+
+				if(!cur_proxy_ptr){
+					cur_proxy_ptr = tmp_proxy_ptr;
+					config->proxy_request_head = cur_proxy_ptr;
+				}else{
+					cur_proxy_ptr->next = tmp_proxy_ptr;
+					cur_proxy_ptr = tmp_proxy_ptr;
+				}
+				cur_proxy_ptr->request_string = optarg;
+
+				cur_proxy_ptr->type = PROXY_LOCAL;
+				if(opt == 'D'){
+					cur_proxy_ptr->type = PROXY_DYNAMIC;
+				}
+				break;
+			
 			case 'r':
 				retry_string = optarg;
 				break;

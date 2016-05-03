@@ -31,6 +31,9 @@ int broker(struct io_helper *io, struct config_helper *config){
 
 	struct message_helper *message;
 
+	struct proxy_node *cur_proxy_node;
+	struct connection_node *cur_connection_node, *tmp_connection_node;
+
 
 	/* We use this as a shorthand to make message syntax more readable. */
 	message = &io->message;
@@ -65,8 +68,25 @@ int broker(struct io_helper *io, struct config_helper *config){
 		FD_ZERO(&fd_select);
 		FD_SET(io->local_in_fd, &fd_select);
 		FD_SET(io->remote_fd, &fd_select);
-
 		fd_max = (io->local_in_fd > io->remote_fd) ? io->local_in_fd : io->remote_fd;
+
+		cur_proxy_node = io->proxy_head;
+		while(cur_proxy_node){
+			FD_SET(cur_proxy_node->fd, &fd_select);
+			if(cur_proxy_node->fd > fd_max){
+				fd_max = cur_proxy_node->fd;
+			}
+			cur_proxy_node = cur_proxy_node->next;
+		}
+
+		cur_connection_node = io->connection_head;
+		while(cur_connection_node){
+			FD_SET(cur_connection_node->fd, &fd_select);
+			if(cur_connection_node->fd > fd_max){
+				fd_max = cur_connection_node->fd;
+			}
+			cur_connection_node = cur_connection_node->next;
+		}
 
 		if(((retval = select(fd_max + 1, &fd_select, NULL, NULL, NULL)) == -1) \
 				&& !sig_found){
@@ -236,10 +256,236 @@ int broker(struct io_helper *io, struct config_helper *config){
 
 					break;
 
+				case DT_PROXY:
+
+					if(message->header_type == DT_PROXY_HT_DESTROY){
+						if(message->header_errno){
+							print_error(io, "%s: %d: Proxy unable to connect to '%s': %s\n", \
+									program_invocation_short_name, io->controller, \
+									message->data, \
+									strerror(message->header_errno));
+						}
+						connection_node_delete(message->header_origin, message->header_id, &(io->connection_head));
+
+					}else if(message->header_type == DT_PROXY_HT_CREATE){
+						if((cur_connection_node = connection_node_find(message->header_origin, message->header_id, &(io->connection_head)))){
+							connection_node_delete(message->header_origin, message->header_id, &(io->connection_head));
+						}
+
+						if((tmp_connection_node = connection_node_create(&(io->connection_head))) == NULL){
+							print_error(io, "%s: %d: calloc(1, %d): %s\n", \
+									program_invocation_short_name, io->controller, \
+									(int) sizeof(struct connection_node), \
+									strerror(errno));
+							goto CLEAN_UP;
+						}
+
+						count = message->data_len;
+						if((tmp_connection_node->rhost_rport = (char *) calloc(message->data_len + 1, sizeof(char))) == NULL){
+							print_error(io, "%s: %d: calloc(%d, %d): %s\n", \
+									program_invocation_short_name, io->controller, \
+									message->data_len + 1, (int) sizeof(char), \
+									strerror(errno));
+							goto CLEAN_UP;
+						}
+						memcpy(tmp_connection_node->rhost_rport, message->data, message->data_len);
+						tmp_connection_node->origin = message->header_origin;
+						tmp_connection_node->id = message->header_id;
+
+						errno = 0;
+						if((tmp_connection_node->fd = proxy_connect(tmp_connection_node->rhost_rport)) == -1){
+							message->header_type = DT_PROXY_HT_DESTROY;
+							message->header_errno = errno;
+							if((retval = message_push(io)) == -1){
+								if(verbose){
+									fprintf(stderr, "%s: %d: message_push(%lx): %s\n", \
+											program_invocation_short_name, io->controller, \
+											(unsigned long) io, \
+											strerror(errno));
+								}
+								goto CLEAN_UP;
+							}
+							connection_node_delete(message->header_origin, message->header_id, &(io->connection_head));
+						}
+
+					}else{
+						// Malformed request.
+						print_error(io, "%s: %d: Unknown Proxy Header Type: %d\n", \
+								program_invocation_short_name, io->controller, \
+								message->header_type);
+						goto CLEAN_UP;
+					}
+					break;
+
+				case DT_CONNECTION:
+
+					if((cur_connection_node = connection_node_find(message->header_origin, message->header_id, &(io->connection_head))) == NULL){
+
+						message->data_type = DT_PROXY;
+						message->header_type = DT_PROXY_HT_DESTROY;
+						message->header_errno = EBADF;
+
+						if((retval = message_push(io)) == -1){
+							if(verbose){
+								fprintf(stderr, "%s: %d: message_push(%lx): %s\n", \
+										program_invocation_short_name, io->controller, \
+										(unsigned long) io, \
+										strerror(errno));
+							}
+							goto CLEAN_UP;
+						}
+					}
+
+					io_bytes = 0;
+					tmp_ptr = message->data;
+					count = message->data_len;
+
+					while(count){
+						if((retval = write(cur_connection_node->fd, tmp_ptr, count)) == -1){
+							print_error(io, "%s: %d: write(%d, %lx, %d): %s\n", \
+									program_invocation_short_name, io->controller, \
+									io->local_out_fd, (unsigned long) tmp_ptr, count, \
+									strerror(errno));
+
+							message->data_type = DT_PROXY;
+							message->header_type = DT_PROXY_HT_DESTROY;
+							message->header_origin = cur_connection_node->origin;
+							message->header_id = cur_connection_node->id;
+							message->header_errno = EBADF;
+
+							if((retval = message_push(io)) == -1){
+								if(verbose){
+									fprintf(stderr, "%s: %d: message_push(%lx): %s\n", \
+											program_invocation_short_name, io->controller, \
+											(unsigned long) io, \
+											strerror(errno));
+								}
+								goto CLEAN_UP;
+							}
+							connection_node_delete(cur_connection_node->origin, cur_connection_node->id, &(io->connection_head));
+
+						}else{
+							count -= retval;
+							io_bytes += retval;
+							tmp_ptr += retval;
+						}
+					}
+
+
+					break;
+
+
 					/* Ignore anything malformed. */
 				default:
 					break;
+			}
 
+			/* Deal with other proxies / connections being recieved locally. */
+		}else{
+
+			cur_proxy_node = io->proxy_head;
+			while(cur_proxy_node){
+
+				if(FD_ISSET(cur_proxy_node->fd, &fd_select)){
+
+					/* Create a new connection object. */
+					if((tmp_connection_node = connection_node_create(&(io->connection_head))) == NULL){
+						print_error(io, "%s: %d: calloc(1, %d): %s\n", \
+								program_invocation_short_name, io->controller, \
+								(int) sizeof(struct connection_node), \
+								strerror(errno));
+						goto CLEAN_UP;
+					}
+
+					count = strlen(cur_proxy_node->rhost_rport);
+					if((tmp_connection_node->rhost_rport = (char *) calloc(count + 1, sizeof(char))) == NULL){
+						print_error(io, "%s: %d: calloc(%d, %d): %s\n", \
+								program_invocation_short_name, io->controller, \
+								count + 1, (int) sizeof(char), \
+								strerror(errno));
+						goto CLEAN_UP;
+					}
+					memcpy(tmp_connection_node->rhost_rport, cur_proxy_node, count);
+					if((tmp_connection_node->fd = accept(cur_proxy_node->fd, NULL, NULL)) == -1){
+						print_error(io, "%s: %d: accept(%d, NULL, NULL): %s\n", \
+								program_invocation_short_name, io->controller, \
+								cur_proxy_node->fd, \
+								strerror(errno));
+						goto CLEAN_UP;
+					}
+					tmp_connection_node->origin = io->controller;
+					tmp_connection_node->id = tmp_connection_node->fd;
+
+					if(cur_proxy_node->type == PROXY_LOCAL){
+						message->data_type = DT_PROXY;
+						message->header_type = DT_PROXY_HT_CREATE;
+						message->header_origin = tmp_connection_node->origin;
+						message->header_id = tmp_connection_node->id;
+
+						memset(message->data, '\0', message->data_size);
+						count = strlen(cur_proxy_node->rhost_rport);
+						count = count < message->data_size ? count : message->data_size;
+						memcpy(message->data, cur_proxy_node->rhost_rport, count);
+						message->data_len = count;
+
+
+						if((retval = message_push(io)) == -1){
+							if(verbose){
+								fprintf(stderr, "%s: %d: message_push(%lx): %s\n", \
+										program_invocation_short_name, io->controller, \
+										(unsigned long) io, \
+										strerror(errno));
+							}
+							goto CLEAN_UP;
+						}	
+
+						break;
+					}else{
+						// XXX PROXY_SOCKS case goes here.
+					}
+				}
+				cur_proxy_node = cur_proxy_node->next;		
+			}
+
+			// Wasn't a socks listener. Let's try the connections.
+			if(!cur_proxy_node){
+				tmp_connection_node = io->connection_head;
+				while(tmp_connection_node){
+
+					if(FD_ISSET(tmp_connection_node->fd, &fd_select)){
+
+						message->data_type = DT_CONNECTION;
+						message->header_origin = tmp_connection_node->origin;
+						message->header_id = tmp_connection_node->id;
+
+						// XXX fix the error checking and report. 
+						if((retval = read(tmp_connection_node->fd, message->data, message->data_size)) < 1){
+							if(retval){
+								print_error(io, "%s: %d: read(%d, %lx, %d): %s\n", \
+										program_invocation_short_name, io->controller, \
+										io->local_in_fd, (unsigned long) message->data, message->data_size, \
+										strerror(errno));
+							}
+							message->data_type = DT_PROXY;
+							message->header_type = DT_PROXY_HT_DESTROY;
+							message->header_errno = errno;
+							connection_node_delete(tmp_connection_node->origin, tmp_connection_node->id, &(io->connection_head));
+						}
+
+						message->data_len = retval;
+						if((retval = message_push(io)) == -1){
+							if(verbose){
+								fprintf(stderr, "%s: %d: message_push(%lx): %s\n", \
+										program_invocation_short_name, io->controller, \
+										(unsigned long) io, \
+										strerror(errno));
+							}
+							goto CLEAN_UP;
+						}
+					}
+
+					tmp_connection_node = tmp_connection_node->next;
+				}
 			}
 		}
 

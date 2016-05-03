@@ -29,6 +29,8 @@ int do_control(struct io_helper *io, struct config_helper *config){
 	char *tmp_ptr;
 	int io_bytes;
 
+	struct proxy_request_node *cur_proxy_req_node;
+	struct proxy_node *cur_proxy_node;
 
   /* We use this as a shorthand to make message syntax more readable. */
 	message = &io->message;
@@ -285,6 +287,31 @@ int do_control(struct io_helper *io, struct config_helper *config){
 		}
 
 		close(rc_fd);
+	}
+
+	/* Set up proxies requested during launch. */
+	// XXX Maybe if we do this in main() it will work from either end (control/target) as invoked from the commandline. (target commandline would open backwards...?)
+	cur_proxy_req_node = config->proxy_request_head;	
+	while(cur_proxy_req_node){
+
+		cur_proxy_node = proxy_node_new(cur_proxy_req_node->request_string, cur_proxy_req_node->type);	
+
+		if(!cur_proxy_node){
+			print_error(io, "%s: %d: proxy_node_new(%s, %d): %s\r\n", \
+					program_invocation_short_name, io->controller, \
+					cur_proxy_req_node->request_string, cur_proxy_req_node->type, \
+					strerror(errno));
+		}else{
+
+			if(!io->proxy_head){
+				io->proxy_head = cur_proxy_node;
+				io->proxy_tail = cur_proxy_node;
+			}else{
+				io->proxy_tail->next = cur_proxy_node;
+				io->proxy_tail = cur_proxy_node;
+			}
+		}
+		cur_proxy_req_node = cur_proxy_req_node->next;
 	}
 
 	err_flag = 0;
