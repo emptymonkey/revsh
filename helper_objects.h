@@ -79,6 +79,25 @@ struct connection_node {
 	// May be useful for debugging stats.
 	// unsigned long data_count;
 
+	// socks raw data.
+	// head points to the start of the buffer.
+	// ptr is used to track the current end of the buffer.
+	char *socks_buffer_head;
+	char *socks_buffer_ptr;
+	unsigned int buffer_len;
+	unsigned int socks_flag;
+	
+	unsigned char ver;
+	unsigned char cmd;
+	unsigned char auth_method;
+
+	/* Use these when implementing rfc1929.
+		 char ulen;
+		 char *uname;
+		 char plen;
+		 char *passwd;
+	 */
+
 	struct connection_node *next;
 	struct connection_node *prev;
 };
