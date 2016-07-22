@@ -14,7 +14,8 @@ struct message_helper {
 	unsigned short header_errno;
 
 	char *data;
-	unsigned short data_size;
+
+	struct message_helper *next;
 };
 
 /* This struct allows for tracking of proxies being requested on the command line. They may or may not become real proxies later on. */
@@ -79,13 +80,15 @@ struct connection_node {
 	// May be useful for debugging stats.
 	// unsigned long data_count;
 
-	// socks raw data.
-	// head points to the start of the buffer.
-	// ptr is used to track the current end of the buffer.
-	char *socks_buffer_head;
-	char *socks_buffer_ptr;
-	unsigned int buffer_len;
-	unsigned int socks_flag;
+	// This buffer is used for socks raw data during socks setup.
+	char *buffer_head;
+	char *buffer_ptr;
+	char *buffer_tail;
+	unsigned int buffer_size;
+
+	// Used during the connection initialization to track the state of the socks handshake.
+	// Used after initialization to track active vs domrmant mode of a connection. 
+	unsigned int state;
 	
 	unsigned char ver;
 	unsigned char cmd;
@@ -97,6 +100,13 @@ struct connection_node {
 		 char plen;
 		 char *passwd;
 	 */
+
+	// This will allow for write queues.
+	struct message_helper *write_head;
+	//  Note, no write_tail element. Iterate through every time you want to add an element, thus calculating the message depth dynamically.
+  //  If MAX_MESSAGE_DEPTH is hit, do the needful.
+
+	unsigned short dormant_flag;
 
 	struct connection_node *next;
 	struct connection_node *prev;
@@ -117,8 +127,16 @@ struct io_helper {
 	int local_out_fd;
 	int remote_fd;
 
+	// Fixed size of all message->data buffers. 
+	unsigned short message_data_size;
+
+	// this message_helper node is used internally by the io_helper for the processing of the message bus.
 	struct message_helper message;
 	int eof;
+
+	// this message_helper node is used for the write buffer queue for the tty/shell.
+	struct message_helper *tty_write_head;
+
 
 #ifdef OPENSSL
 	BIO *connect;
@@ -133,5 +151,9 @@ struct io_helper {
 	struct proxy_node *proxy_tail;
 
 	struct connection_node *connection_head;
+	struct connection_node *connection_tail;
+
+	struct winsize *tty_winsize;
+
 };
 

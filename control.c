@@ -170,7 +170,7 @@ int do_control(struct io_helper *io, struct config_helper *config){
 		}
 	}
 
-	if(io_bytes > message->data_size){
+	if(io_bytes > io->message_data_size){
 		print_error(io, "%s: %d: Environment string too long!\n", \
 				program_invocation_short_name, io->controller);
 		return(-1);
@@ -266,11 +266,11 @@ int do_control(struct io_helper *io, struct config_helper *config){
 
 		message->data_type = DT_TTY;
 
-		while((io_bytes = read(rc_fd, message->data, message->data_size))){
+		while((io_bytes = read(rc_fd, message->data, io->message_data_size))){
 			if(io_bytes == -1){
 				print_error(io, "%s: %d: read(%d, %lx, %d): %s\r\n", \
 						program_invocation_short_name, io->controller, \
-						rc_fd, (unsigned long) message->data, message->data_size, \
+						rc_fd, (unsigned long) message->data, io->message_data_size, \
 						strerror(errno));
 				return(-1);
 			}

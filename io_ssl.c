@@ -2,6 +2,8 @@
 #include "common.h"
 #include "keys/dh_params.c"
 
+extern sig_atomic_t sig_found;
+
 
 /***********************************************************************************************************************
  *
@@ -19,6 +21,8 @@ int remote_read_plaintext(struct io_helper *io, void *buff, size_t count){
   int io_bytes;
   char *tmp_ptr;
 
+	int current_sig = 0;
+
   fd_set fd_select;
 
   int seen = 0;
@@ -34,15 +38,21 @@ int remote_read_plaintext(struct io_helper *io, void *buff, size_t count){
       FD_ZERO(&fd_select);
       FD_SET(io->remote_fd, &fd_select);
 
-      if(select(io->remote_fd + 1, &fd_select, NULL, NULL, NULL) == -1){
+      if((select(io->remote_fd + 1, &fd_select, NULL, NULL, NULL) == -1) && !sig_found){
         if(verbose){
-          fprintf(stderr, "%s: %d: select(%d, %lx, NULL, NULL, NULL): %s\r\n", \
+          fprintf(stderr, "%s: %d: remote_read_plaintext(): select(%d, %lx, NULL, NULL, NULL): %s\r\n", \
               program_invocation_short_name, io->controller, \
               io->remote_fd + 1, (unsigned long) &fd_select, \
               strerror(errno));
         }
         return(-1);
       }
+
+			if(sig_found){
+				current_sig = sig_found;
+				sig_found = 0;
+				continue;
+			}
     }else{
       seen = 1;
     }
@@ -71,6 +81,9 @@ int remote_read_plaintext(struct io_helper *io, void *buff, size_t count){
     }
   }
 
+	if(current_sig){
+		sig_found = current_sig;
+	}
   return(io_bytes);
 }
 
@@ -96,6 +109,7 @@ int remote_write_plaintext(struct io_helper *io, void *buff, size_t count){
 
   int seen = 0;
 
+	int current_sig = 0;
 
   io_bytes = 0;
   tmp_ptr = buff;
@@ -107,15 +121,21 @@ int remote_write_plaintext(struct io_helper *io, void *buff, size_t count){
       FD_ZERO(&fd_select);
       FD_SET(io->remote_fd, &fd_select);
 
-      if(select(io->remote_fd + 1, NULL, &fd_select, NULL, NULL) == -1){
+      if((select(io->remote_fd + 1, NULL, &fd_select, NULL, NULL) == -1) && !sig_found){
         if(verbose){
-          fprintf(stderr, "%s: %d: select(%d, NULL, %lx, NULL, NULL): %s\r\n", \
+          fprintf(stderr, "%s: %d: remote_write_plaintext(): select(%d, NULL, %lx, NULL, NULL): %s\r\n", \
               program_invocation_short_name, io->controller, \
               io->remote_fd + 1, (unsigned long) &fd_select, \
               strerror(errno));
         }
         return(-1);
       }
+
+			if(sig_found){
+				current_sig = sig_found;
+				sig_found = 0;
+				continue;
+			}
     }else{
       seen = 1;
     }
@@ -140,6 +160,9 @@ int remote_write_plaintext(struct io_helper *io, void *buff, size_t count){
     }
   }
 
+	if(current_sig){
+		sig_found = current_sig;
+	}
   return(io_bytes);
 }
 
@@ -166,6 +189,7 @@ int remote_read_encrypted(struct io_helper *io, void *buff, size_t count){
 	fd_set fd_select;
 	int ssl_error = SSL_ERROR_NONE;	
 
+	int current_sig = 0;
 
 	if(!count){
 		return(count);
@@ -178,9 +202,9 @@ int remote_read_encrypted(struct io_helper *io, void *buff, size_t count){
 			FD_SET(io->remote_fd, &fd_select);
 
 			if(ssl_error == SSL_ERROR_WANT_READ){
-				if(select(io->remote_fd + 1, &fd_select, NULL, NULL, NULL) == -1){
+				if((select(io->remote_fd + 1, &fd_select, NULL, NULL, NULL) == -1) && !sig_found){
 					if(verbose){
-						fprintf(stderr, "%s: %d: select(%d, %lx, NULL, NULL, NULL): %s\r\n", \
+						fprintf(stderr, "%s: %d: remote_read_encrypted(): select(%d, %lx, NULL, NULL, NULL): %s\r\n", \
 								program_invocation_short_name, io->controller, \
 								io->remote_fd + 1, (unsigned long) &fd_select, \
 								strerror(errno));
@@ -188,15 +212,27 @@ int remote_read_encrypted(struct io_helper *io, void *buff, size_t count){
 					return(-1);
 				}
 
+				if(sig_found){
+					current_sig = sig_found;
+					sig_found = 0;
+					continue;
+				}
+
 			}else /* if(ssl_error == SSL_ERROR_WANT_WRITE) */ {
-				if(select(io->remote_fd + 1, NULL, &fd_select, NULL, NULL) == -1){
+				if((select(io->remote_fd + 1, NULL, &fd_select, NULL, NULL) == -1) && !sig_found){
 					if(verbose){
-						fprintf(stderr, "%s: %d: select(%d, NULL, %lx, NULL, NULL): %s\r\n", \
+						fprintf(stderr, "%s: %d: remote_read_encrypted(): select(%d, NULL, %lx, NULL, NULL): %s\r\n", \
 								program_invocation_short_name, io->controller, \
 								io->remote_fd + 1, (unsigned long) &fd_select, \
 								strerror(errno));
 					}
 					return(-1);
+				}
+
+				if(sig_found){
+					current_sig = sig_found;
+					sig_found = 0;
+					continue;
 				}
 			}
 		}
@@ -210,6 +246,9 @@ int remote_read_encrypted(struct io_helper *io, void *buff, size_t count){
 				return(-1);
 
 			case SSL_ERROR_NONE:
+				if(current_sig){
+					sig_found = current_sig;
+				}
 				return(retval);
 
 			case SSL_ERROR_WANT_READ:
@@ -260,6 +299,7 @@ int remote_write_encrypted(struct io_helper *io, void *buff, size_t count){
 	fd_set fd_select;
 	int ssl_error = SSL_ERROR_NONE;	
 
+	int current_sig = 0;
 
 	if(!count){
 		return(count);
@@ -273,9 +313,26 @@ int remote_write_encrypted(struct io_helper *io, void *buff, size_t count){
 			FD_SET(io->remote_fd, &fd_select);
 
 			if(ssl_error == SSL_ERROR_WANT_READ){
-				if(select(io->remote_fd + 1, &fd_select, NULL, NULL, NULL) == -1){
+				if((select(io->remote_fd + 1, &fd_select, NULL, NULL, NULL) == -1) && !sig_found){
 					if(verbose){
-						fprintf(stderr, "%s: %d: select(%d, %lx, NULL, NULL, NULL): %s\n", \
+						fprintf(stderr, "%s: %d: remote_write_encrypted(): select(%d, %lx, NULL, NULL, NULL): %s\n", \
+								program_invocation_short_name, io->controller, \
+								io->remote_fd + 1, (unsigned long) &fd_select, \
+								strerror(errno));
+					}
+					return(-1);
+				}
+	
+				if(sig_found){
+					current_sig = sig_found;
+					sig_found = 0;
+					continue;
+				}
+
+			}else /* if(ssl_error == SSL_ERROR_WANT_WRITE) */ {
+				if((select(io->remote_fd + 1, NULL, &fd_select, NULL, NULL) == -1) && !sig_found){
+					if(verbose){
+						fprintf(stderr, "%s: %d: remote_write_encrypted(): select(%d, NULL, %lx, NULL, NULL): %s\n", \
 								program_invocation_short_name, io->controller, \
 								io->remote_fd + 1, (unsigned long) &fd_select, \
 								strerror(errno));
@@ -283,16 +340,12 @@ int remote_write_encrypted(struct io_helper *io, void *buff, size_t count){
 					return(-1);
 				}
 
-			}else /* if(ssl_error == SSL_ERROR_WANT_WRITE) */ {
-				if(select(io->remote_fd + 1, NULL, &fd_select, NULL, NULL) == -1){
-					if(verbose){
-						fprintf(stderr, "%s: %d: select(%d, NULL, %lx, NULL, NULL): %s\n", \
-								program_invocation_short_name, io->controller, \
-								io->remote_fd + 1, (unsigned long) &fd_select, \
-								strerror(errno));
-					}
-					return(-1);
+				if(sig_found){
+					current_sig = sig_found;
+					sig_found = 0;
+					continue;
 				}
+
 			}
 		}
 
@@ -305,6 +358,7 @@ int remote_write_encrypted(struct io_helper *io, void *buff, size_t count){
 				return(-1);
 
 			case SSL_ERROR_NONE:
+				sig_found = current_sig;
 				return(retval);
 
 			case SSL_ERROR_WANT_READ:

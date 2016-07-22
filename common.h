@@ -62,30 +62,15 @@
 
 #define DEFAULT_PROXY_ADDR "127.0.0.1"
 
-/*
-	The maximum size buffer needed to handle any single side of a socks 
-	protocol conversation is the Username / Password negotiation.
-		+----+------+----------+------+----------+
-		|VER | ULEN |  UNAME   | PLEN |  PASSWD  |
-		+----+------+----------+------+----------+
-		| 1  |  1   | 1 to 255 |  1   | 1 to 255 |
-		+----+------+----------+------+----------+
+/* Connection states for proxy connections. */
+#define CON_SOCKS_NO_HANDSHAKE	0
+#define CON_SOCKS_V5_AUTH	1
+#define CON_READY 2
+#define CON_ACTIVE 3
+#define CON_DORMANT 4
 
-	1 + 1 + 255 + 1 + 255 
-	= 513
-
-	All other requests / responses are smaller than this. (Some exceptions,
-	such as UDP are being overlooked here as we have no plans to implement
-	the UDP portion of the protocol.)
-*/
-#define MAX_SOCKS_BUFFER_SIZE	513
-
-#define SOCKS_NO_HANDSHAKE	0
-#define SOCKS_V4_COMPLETE 1
-#define SOCKS_V4A_COMPLETE 2
-#define SOCKS_V5_AUTH	3
-#define SOCKS_V5_COMPLETE	4
-
+/* The max number of messages we will queue for delivery before requesting the remote client to throttle the connection. */
+#define MESSAGE_DEPTH_MAX	64
 
 /* We will set this up ourselves for portability. */
 char *program_invocation_short_name;
@@ -113,6 +98,8 @@ int dummy_verify_callback(int preverify_ok, X509_STORE_CTX* ctx);
 
 int message_pull(struct io_helper *io);
 int message_push(struct io_helper *io);
+struct message_helper *message_helper_create(char *data, unsigned short data_len, unsigned short message_data_size);
+void message_helper_destroy(struct message_helper *mh);
 
 int remote_printf(struct io_helper *io, char *fmt, ...);
 int print_error(struct io_helper *io, char *fmt, ...);
@@ -140,25 +127,43 @@ int parse_socks_request(struct connection_node *cur_connection_node);
 char *addr_to_string(int atype, char *addr, char *port, int len);
 int proxy_response(int sock, char ver, char cmd, char *buffer, int buffer_size);
 
+int handle_signal_sigwinch(struct io_helper *io);
+int handle_local_write(struct io_helper *io);
+int handle_local_read(struct io_helper *io);
+int handle_message_dt_tty(struct io_helper *io);
+int handle_message_dt_winresize(struct io_helper *io);
+int handle_message_dt_proxy_ht_destroy(struct io_helper *io);
+int handle_message_dt_proxy_ht_create(struct io_helper *io);
+int handle_message_dt_proxy_ht_response(struct io_helper *io);
+int handle_message_dt_connection(struct io_helper *io);
+int handle_proxy_read(struct io_helper *io, struct proxy_node *cur_proxy_node);
+int handle_connection_write(struct io_helper *io, struct connection_node *cur_connection_node);
+int handle_connection_read(struct io_helper *io, struct connection_node *cur_connection_node);
+
 
 
 /**********************************************************************************************************************
  *
- * Protocol Specification:
+ * Message Bus Protocol Specification:
  *
  *	Header:
  *		- header_len		: unsigned short (network order)
- *				This is the size of the remaining header data.
+ *			-- This is the size of the remaining header data.
  *		- data_type			:	unsigned char
  *		- data_len			:	unsigned short (network order)
  *		- Other data_type specific headers, as needed.
  *
- *	Other headers for DT_PROXY and DT_CONNECTION:
+ *	Other headers used with DT_PROXY and DT_CONNECTION:
  *		- header_type		: unsigned short (network order)
  *		- header_id			: unsigned long (network order)
  *
  *	Body:
  *		- data					:	void *
+ *
+ *
+ *	The naming convetion below is DT for "Data Type" and HT for "Header Type".
+ *	E.g. DT_PROXY_HT_CREATE denotes a message where the data type is that of a proxy, but the header will have
+ *  additional information relating to the type of request, in this case "create" the proxy.
  *
  **********************************************************************************************************************/
 
@@ -187,7 +192,19 @@ int proxy_response(int sock, char ver, char cmd, char *buffer, int buffer_size);
 
 /* DT_CONNECTION: Proxy data for established connections. */
 #define DT_CONNECTION	5
+/*
+	DT_CONNECTION_HT_DORMANT: used when a local fd would block for writting, and our message queue is getting deep.
+		Tells the other side to stop reading from the associated remote fd until otherwise notified. Reset to normal
+		withDT_CONNECTION_HT_ACTIVE. 
+*/
+#define DT_CONNECTION_HT_DATA	0
+#define DT_CONNECTION_HT_DORMANT	1
+#define DT_CONNECTION_HT_ACTIVE	2
 
 /* DT_NOP: No Operation dummy message used for keep-alive. */
 // XXX implement this!
 #define DT_NOP	6
+
+/* DT_DEBUG: Send me your debug queue! */
+// XXX implement this!
+#define DT_DEBUG	7

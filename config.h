@@ -1,4 +1,9 @@
 
+/*
+ * This file consists of entries that the user may want to tweak.
+ * Edit away to your heart's content.
+*/
+
 /*  Default retry range. (Recur sometime between 5 and 20 min). */
 #define RETRY "600,1200"
 

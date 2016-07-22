@@ -18,12 +18,13 @@ int message_pull(struct io_helper *io){
 
 	int retval;
 
-
+//	fprintf(stderr, "\rDEBUG: inside message_pull()\n");
   /* We use this as a shorthand to make message syntax more readable. */
 	message = &io->message;
 
-	memset(message->data, '\0', message->data_size);
+	memset(message->data, '\0', io->message_data_size);
 
+//	fprintf(stderr, "\rDEBUG: 0\n");
 	/* Grab the header. */
 	if((retval = io->remote_read(io, &header_len, sizeof(header_len))) == -1){
 
@@ -38,6 +39,7 @@ int message_pull(struct io_helper *io){
 	}
 	header_len = ntohs(header_len);
 
+//	fprintf(stderr, "\rDEBUG: 1\n");
 	if((retval = io->remote_read(io, &message->data_type, sizeof(message->data_type))) == -1){
 		if(verbose){
 			fprintf(stderr, "%s: %d: remote_read(%lx, %lx, %d): %s\n", \
@@ -49,6 +51,7 @@ int message_pull(struct io_helper *io){
 	}	
 	header_len -= sizeof(message->data_type);
 
+//	fprintf(stderr, "\rDEBUG: 2\n");
 	if((retval = io->remote_read(io, &message->data_len, sizeof(message->data_len))) == -1){
 		if(verbose){
 			fprintf(stderr, "%s: %d: remote_read(%lx, %lx, %d): %s\n", \
@@ -61,7 +64,7 @@ int message_pull(struct io_helper *io){
 	message->data_len = ntohs(message->data_len);
 	header_len -= sizeof(message->data_len);
 
-	if(header_len > message->data_size){
+	if(header_len > io->message_data_size){
 		if(verbose){
 			fprintf(stderr, "%s: %d: message: remote header too long!\n", \
 					program_invocation_short_name, io->controller);
@@ -69,7 +72,8 @@ int message_pull(struct io_helper *io){
 		return(-1);
 	}
 
-
+//	fprintf(stderr, "\rDEBUG: message->data_type: %d\n", message->data_type);
+//	fprintf(stderr, "\rDEBUG: message->header_type: %d\n", message->header_type);
 	if(message->data_type == DT_PROXY || message->data_type == DT_CONNECTION){
 
 		if((retval = io->remote_read(io, &message->header_type, sizeof(message->header_type))) == -1){
@@ -136,7 +140,7 @@ int message_pull(struct io_helper *io){
 	}
 
 	/* Grab the data. */
-	if(message->data_len > message->data_size){
+	if(message->data_len > io->message_data_size){
 		if(verbose){
 			fprintf(stderr, "%s: %d: message: remote data too long!\n", \
 					program_invocation_short_name, io->controller);
@@ -187,7 +191,7 @@ int message_push(struct io_helper *io){
 		header_len += sizeof(message->header_type) + sizeof(message->header_origin) + sizeof(message->header_id) + sizeof(message->header_errno);
 	}
 
-	if(header_len > message->data_size){
+	if(header_len > io->message_data_size){
 		if(verbose){
 			fprintf(stderr, "%s: %d: message: local header too long!\n", \
 					program_invocation_short_name, io->controller);
@@ -217,7 +221,7 @@ int message_push(struct io_helper *io){
 	}	
 
 	/* Send the data. */
-	if(message->data_len > message->data_size){
+	if(message->data_len > io->message_data_size){
 		if(verbose){
 			fprintf(stderr, "%s: %d: message: local data too long!\n", \
 					program_invocation_short_name, io->controller);
@@ -293,4 +297,39 @@ int message_push(struct io_helper *io){
 	}	
 
 	return(0);
+}
+
+struct message_helper *message_helper_create(char *data, unsigned short data_len, unsigned short message_data_size){
+	// just the malloc and setup of a new message_helper node.
+
+	struct message_helper *new_mh;
+
+	new_mh = (struct message_helper *) calloc(1, sizeof(struct message_helper));	
+	if(!new_mh && verbose){
+      fprintf(stderr, "%s: calloc(1, %d): %s\n", \
+          program_invocation_short_name, \
+					(int) sizeof(struct message_helper), \
+          strerror(errno));
+    return(NULL);
+	}
+
+	new_mh->data = (char *) calloc(message_data_size, sizeof(char));	
+	if(!new_mh->data && verbose){
+      fprintf(stderr, "%s: calloc(1, %d): %s\n", \
+          program_invocation_short_name, \
+					(int) sizeof(struct message_helper), \
+          strerror(errno));
+		free(new_mh);	
+    return(NULL);
+	}
+
+	memcpy(new_mh->data, data, data_len);
+	new_mh->data_len = data_len;
+
+	return(new_mh);
+}
+
+void message_helper_destroy(struct message_helper *mh){
+	free(mh->data);
+	free(mh);
 }

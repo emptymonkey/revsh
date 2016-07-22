@@ -1,0 +1,123 @@
+
+This document is intended as an overview of the structure of the revsh codebase.
+Minor helper functions will be ommited from the descriptions.
+
+################################################################################
+# revsh
+################################################################################
+
+
+# Headers:
+
+- common.h
+  -- A header file with all the common defines, includes, and protocol definitions.
+
+- config.h
+  -- A header file with all the defines that the user will probably want to tweek.
+
+- helper.h
+  -- A header file to define the "helper" objects.
+    --- These are just structs that allow for organization of the topics the help with.
+      ---- E.g. struct message_helper is an object that encases everything needed when
+           dealing with passing a message over the message bus. 
+  -- The io_helper struct is invoked once and represents the state of the I/O at any given point.
+
+
+# Code: 
+
+- revsh.c
+	-- main()
+		--- Perform basic initialization.
+		--- Calls the appropriate conductor, either do_control() or do_target() as appropriate.
+
+- control.c
+	-- do_control()
+		--- Acts as the conductor for control nodes.
+		--- Calls init_io_controller() to setup the networking layer.
+		--- Calls negotiate_protocol() to setup the messaging layer.
+		--- Talks with the remote partner to syncronize the revsh environment.
+		--- Calls broker().
+		--- Performs cleanup and exits.
+
+- target.c
+	-- do_target()
+		--- Acts as the conductor for target nodes.
+		--- Calls init_io_target() to setup the networking layer.
+		--- Calls negotiate_protocol() to set up the messaging layer.
+		--- Talks with the remote partner to syncronize the revsh environment.
+		--- Sets up a pty.
+		--- fork()s a child which exec()s a shell.
+		--- Calls broker().
+		--- Performs cleanup and exits.
+
+- broker.c
+	-- Uses message_pull() and message_push() to read and write data.
+	-- Reads data from either the local or remote file descriptor, then writes it down the other.
+  -- Local data falls into three catagories:
+    --- Data to/from the local stdin connection (tty / shell).
+    --- Data from a local proxy listener. (This data is used to create a data connection.)
+    --- Data to / from an establised proxy data connection.
+  -- Remote data is only of one type:
+    --- Data to / from the message bus.
+
+- handler.c
+  -- Contains code to "handle" all of the various cases found within the broker() loop.
+  -- Everything in handler.c was once flat inside the broker() loop. This was a giant mess.
+     It was broken out, case by case, into it's own file. Things are much cleaner now.
+  -- Naming convetion for these functions are "handle_FROM-WHERE_DO-WHAT()".
+    --- E.g. handle_message_dt_proxy_ht_create() will handle data:
+      ---- Coming from the message bus.
+      ---- Requesting the creation of a corresponding proxy node.
+
+- proxy.c
+  -- Contains helper code related to the establishing and tearing down of proxies and their data connections.
+
+- message.c
+  -- messages are atomic and have priority over all other socket activity.
+    --- This is achieved with a second independent select() call inside of the messaging code. Because everything
+        relies on the message bus, if messages can't be sent / recieved, then nothing else happens until they can.
+	-- message_pull()
+		--- Uses remote_read() to pull data from the socket, and fills out the appropriate message data structures.
+	-- message_push()
+		--- Reads from the appropriate message data structures, and uses remote_write() to push data down the socket.
+
+- io.c
+	-- Includes either the io_ssl.c or io_nossl.c code, as appropriate.
+	-- remote_printf()
+		--- Provide a printf() style interface that uses our messaging layer.
+	-- print_error()
+		--- Determine if we are control or target and print either locally or w/remote_printf().
+
+- io_ssl.c / io_nossl.c
+	-- remote_read_plaintext()
+		--- read() from our socket, w/out SSL involvement.
+	-- remote_write_plaintext()
+		--- write() to our socket, w/out SSL involvement.
+	-- remote_read_encrypted()
+		--- read() from our socket, w/SSL involvement.
+	-- remote_write_encrypted()
+		--- write() to our socket, w/SSL involvement.
+	-- init_io_controller()
+		--- Setup the network layer for the control node.
+	-- init_io_target()
+		--- Setup the network layer for the target node.
+
+Note: the remote_read_*() and remote_write_*() functions are called through function pointers 
+	named remote_read() and remote_write() which are setup during initialization.
+
+- string_to_vector.c
+  -- Contains uninteresting but useful code for parsing strings.
+  -- Takes a string and parses it based on whitespace into a null terminated array of null terminated strings.
+    --- E.g. "foo bar baz" would become an array of four elements: "foo\0", "bar\0", "baz\0", and \0.
+
+
+
+################################################################################
+# in_the_key_of_c
+################################################################################
+
+- in_the_key_of_c.c
+  -- During initial compilation, takes RSA keypair data and converts it into C source code representations.
+    --- This is useful for including the keypair data in the revsh source code, and baking the crypto
+        into the binary. (This is a bad tactic for enterprise software. This is a very useful tactic for 
+        a hostile binary.)

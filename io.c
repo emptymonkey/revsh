@@ -36,19 +36,19 @@ int remote_printf(struct io_helper *io, char *fmt, ...){
 
   va_start(list_ptr, fmt);
 
-  if((retval = vsnprintf(message->data, message->data_size, fmt, list_ptr)) < 0){
+  if((retval = vsnprintf(message->data, io->message_data_size, fmt, list_ptr)) < 0){
 		if(verbose){
 			fprintf(stderr, "%s: %d: vsnprintf(%lx, %d, %lx, %lx): %s\n", \
 					program_invocation_short_name, io->controller, \
-					(unsigned long) message->data, message->data_size, (unsigned long) fmt, (unsigned long) list_ptr, \
+					(unsigned long) message->data, io->message_data_size, (unsigned long) fmt, (unsigned long) list_ptr, \
 					strerror(errno));
 		}
 		return(-1);
 	}
 
 	va_end(list_ptr);
-	if(retval == message->data_size){
-		message->data[message->data_size - 1] = '\0';
+	if(retval == io->message_data_size){
+		message->data[io->message_data_size - 1] = '\0';
 	}
 
 	message->data_len = retval;
@@ -107,19 +107,19 @@ int print_error(struct io_helper *io, char *fmt, ...){
 		message->data_type = DT_TTY;
 		va_start(list_ptr, fmt);
 
-		if((retval = vsnprintf(message->data, message->data_size, fmt, list_ptr)) < 0){
+		if((retval = vsnprintf(message->data, io->message_data_size, fmt, list_ptr)) < 0){
 			if(verbose){
 				fprintf(stderr, "%s: %d: vsnprintf(%lx, %d, %lx, %lx): %s\n", \
 						program_invocation_short_name, io->controller, \
-						(unsigned long) message->data, message->data_size, (unsigned long) fmt, (unsigned long) list_ptr, \
+						(unsigned long) message->data, io->message_data_size, (unsigned long) fmt, (unsigned long) list_ptr, \
 						strerror(errno));
 			}
 			return(-1);
 		}
 
 		va_end(list_ptr);
-		if(retval == message->data_size){
-			message->data[message->data_size - 1] = '\0';
+		if(retval == io->message_data_size){
+			message->data[io->message_data_size - 1] = '\0';
 		}
 
 		message->data_len = retval;
@@ -161,11 +161,11 @@ int negotiate_protocol(struct io_helper *io){
 
 	message = &io->message;
 
-	message->data_size = 0;
-	message->data_size--;
+	io->message_data_size = 0;
+	io->message_data_size--;
 
 	/* Make sure that the data_size variable will be able to hold the pagesize on this platform. */
-	if(pagesize > message->data_size){
+	if(pagesize > io->message_data_size){
 		if(verbose){
 			fprintf(stderr, "%s: %d: pagesize bigger than max message size!\r\n", \
 					program_invocation_short_name, io->controller);
@@ -173,7 +173,7 @@ int negotiate_protocol(struct io_helper *io){
 		return(-1);
 	}
 
-	message->data_size = pagesize;
+	io->message_data_size = pagesize;
 
 	/* Set the socket to non-blocking. */
 	if((fcntl_flags = fcntl(io->remote_fd, F_GETFL, 0)) == -1){
@@ -198,22 +198,22 @@ int negotiate_protocol(struct io_helper *io){
 	}
 
 	/* Send our desired message size. */
-	if(io->remote_write(io, &message->data_size, sizeof(message->data_size)) == -1){
+	if(io->remote_write(io, &io->message_data_size, sizeof(io->message_data_size)) == -1){
 		if(verbose){
 			fprintf(stderr, "%s: %d: io->remote_write(%lx, %lx, %d): %s\r\n", \
 					program_invocation_short_name, io->controller, \
-					(unsigned long) io, (unsigned long) &message->data_size, (int) sizeof(message->data_size), \
+					(unsigned long) io, (unsigned long) &io->message_data_size, (int) sizeof(io->message_data_size), \
 					strerror(errno));
 		}
 		return(-1);
 	}
 
 	/* Recieve their desired message size. */
-	if(io->remote_read(io, &remote_data_size, sizeof(message->data_size)) == -1){
+	if(io->remote_read(io, &remote_data_size, sizeof(io->message_data_size)) == -1){
 		if(verbose){
 			fprintf(stderr, "%s: %d: io->remote_read(%lx, %lx, %d): %s\r\n", \
 					program_invocation_short_name, io->controller, \
-					(unsigned long) io, (unsigned long) &remote_data_size, (int) sizeof(message->data_size), \
+					(unsigned long) io, (unsigned long) &remote_data_size, (int) sizeof(io->message_data_size), \
 					strerror(errno));
 		}
 		return(-1);
@@ -229,13 +229,13 @@ int negotiate_protocol(struct io_helper *io){
 	}
 
 	/* Set the message size to the smaller of the two, and malloc the space. */
-	message->data_size = message->data_size < remote_data_size ? message->data_size : remote_data_size;
+	io->message_data_size = io->message_data_size < remote_data_size ? io->message_data_size : remote_data_size;
 
-	if((message->data = (char *) malloc(message->data_size)) == NULL){
+	if((message->data = (char *) malloc(io->message_data_size)) == NULL){
 		if(verbose){
 			fprintf(stderr, "%s: %d: malloc(%d): %s\r\n", \
 					program_invocation_short_name, io->controller, \
-					message->data_size, \
+					io->message_data_size, \
 					strerror(errno));
 		}
 		return(-1);

@@ -36,7 +36,7 @@ int remote_read_plaintext(struct io_helper *io, void *buff, size_t count){
 
 			if(select(io->remote_fd + 1, &fd_select, NULL, NULL, NULL) == -1){
 				if(verbose){
-					fprintf(stderr, "%s: %d: select(%d, %lx, NULL, NULL, NULL): %s\r\n", \
+					fprintf(stderr, "%s: %d: remote_read_plaintext(): select(%d, %lx, NULL, NULL, NULL): %s\r\n", \
 							program_invocation_short_name, io->controller, \
 							io->remote_fd + 1, (unsigned long) &fd_select, \
 							strerror(errno));
@@ -109,7 +109,7 @@ int remote_write_plaintext(struct io_helper *io, void *buff, size_t count){
 
 			if(select(io->remote_fd + 1, NULL, &fd_select, NULL, NULL) == -1){
 				if(verbose){
-					fprintf(stderr, "%s: %d: select(%d, NULL, %lx, NULL, NULL): %s\r\n", \
+					fprintf(stderr, "%s: %d: remote_write_plaintext(): select(%d, NULL, %lx, NULL, NULL): %s\r\n", \
 							program_invocation_short_name, io->controller, \
 							io->remote_fd + 1, (unsigned long) &fd_select, \
 							strerror(errno));

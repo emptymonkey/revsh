@@ -304,8 +304,8 @@ int connection_node_delete(unsigned short origin, unsigned short id, struct conn
 	if(tmp_connection_node->rhost_rport){
 		free(tmp_connection_node->rhost_rport);
 	}
-	if(tmp_connection_node->socks_buffer_head){
-		free(tmp_connection_node->socks_buffer_head);
+	if(tmp_connection_node->buffer_head){
+		free(tmp_connection_node->buffer_head);
 	}
 	if(tmp_connection_node){
 		free(tmp_connection_node);
@@ -329,13 +329,6 @@ struct connection_node *connection_node_find(unsigned short origin, unsigned sho
 
 
 
-/*
-#define SOCKS_NO_HANDSHAKE  0
-#define SOCKS_V4_COMPLETE 1
-#define SOCKS_V4A_COMPLETE 2
-#define SOCKS_V5_AUTH 3
-#define SOCKS_V5_COMPLETE 4
- */
 int parse_socks_request(struct connection_node *cur_connection_node){
 
 	int index, size;
@@ -347,13 +340,13 @@ int parse_socks_request(struct connection_node *cur_connection_node){
 	int atype = 0x01;
 
 
-	head = cur_connection_node->socks_buffer_head;
-	ptr = cur_connection_node->socks_buffer_ptr;
+	head = cur_connection_node->buffer_head;
+	ptr = cur_connection_node->buffer_tail;
 	size = ptr - head;
 	index = 0;
 
 	if(!size){
-		return(SOCKS_NO_HANDSHAKE);
+		return(CON_SOCKS_NO_HANDSHAKE);
 	}
 
 	cur_connection_node->ver = *(head);
@@ -370,7 +363,7 @@ int parse_socks_request(struct connection_node *cur_connection_node){
 		 */
 
 		if(size < 9){
-			return(SOCKS_NO_HANDSHAKE);
+			return(CON_SOCKS_NO_HANDSHAKE);
 		}
 
 		index += 1;
@@ -389,7 +382,7 @@ int parse_socks_request(struct connection_node *cur_connection_node){
 
 			index++;
 			if(index == size){
-				return(SOCKS_NO_HANDSHAKE);
+				return(CON_SOCKS_NO_HANDSHAKE);
 			}
 		}
 
@@ -403,14 +396,14 @@ int parse_socks_request(struct connection_node *cur_connection_node){
 			){
 
 			if(!(index < size)){
-				return(SOCKS_NO_HANDSHAKE);
+				return(CON_SOCKS_NO_HANDSHAKE);
 			}
 
 			domain_name = head + index;
 			while(head[index]){
 				index++;
 				if(index == size){
-					return(SOCKS_NO_HANDSHAKE);
+					return(CON_SOCKS_NO_HANDSHAKE);
 				}
 			}
 
@@ -425,7 +418,7 @@ int parse_socks_request(struct connection_node *cur_connection_node){
 				return(-1);
 			}
 
-			return(SOCKS_V4A_COMPLETE);
+			return(CON_READY);
 		}
 
 		if((cur_connection_node->rhost_rport = addr_to_string(atype, dst_addr_ptr, dst_port_ptr, 0)) == NULL){
@@ -438,15 +431,15 @@ int parse_socks_request(struct connection_node *cur_connection_node){
 			return(-1);
 		}
 
-		return(SOCKS_V4_COMPLETE);
+		return(CON_READY);
 
 	}else if(head[index] == 5){
 		// XXX SOCKS 5
 
-		if(cur_connection_node->socks_flag == SOCKS_NO_HANDSHAKE){
+		if(cur_connection_node->state == CON_SOCKS_NO_HANDSHAKE){
 			index += 1;	
 			if(!(index < size)){
-				return(SOCKS_NO_HANDSHAKE);
+				return(CON_SOCKS_NO_HANDSHAKE);
 			}
 
 			cur_connection_node->auth_method = 0xff;
@@ -454,7 +447,7 @@ int parse_socks_request(struct connection_node *cur_connection_node){
 			for(i = 0; i < nmethods; i++){
 
 				if(!(index < size)){
-					return(SOCKS_NO_HANDSHAKE);
+					return(CON_SOCKS_NO_HANDSHAKE);
 				}
 
 				// Prefer uname/pass to no-auth. (uname/pass not yet implemented.)
@@ -466,8 +459,8 @@ int parse_socks_request(struct connection_node *cur_connection_node){
 				index++;
 			}
 
-			return(SOCKS_V5_AUTH);
-		}else if(cur_connection_node->socks_flag == SOCKS_V5_AUTH){
+			return(CON_SOCKS_V5_AUTH);
+		}else if(cur_connection_node->state == CON_SOCKS_V5_AUTH){
 
 
 			/*
@@ -484,7 +477,7 @@ int parse_socks_request(struct connection_node *cur_connection_node){
 			 */
 
 			if(size < 5){
-				return(SOCKS_NO_HANDSHAKE);
+				return(CON_SOCKS_NO_HANDSHAKE);
 			}
 
 			index += 1;
@@ -502,14 +495,14 @@ int parse_socks_request(struct connection_node *cur_connection_node){
 			if(atype == 0x01){
 				// From the diagram above. 4 + Variable + 2, where Variable is 4 in the ipv4 case.
 				if(size < (4 + len  + 2)){
-					return(SOCKS_NO_HANDSHAKE);
+					return(CON_SOCKS_NO_HANDSHAKE);
 				}
 			}else if(atype == 0x03){
 				len = head[index];
 
 				// From the diagram above. 4 + Variable + 2, where Variable length is defined in the first octet.
 				if(size < (4 + 1 + len + 2)){
-					return(SOCKS_NO_HANDSHAKE);
+					return(CON_SOCKS_NO_HANDSHAKE);
 				}
 				dst_addr_ptr = head + index + 1;
 				dst_port_ptr = head + index + 1 + len;
@@ -518,7 +511,7 @@ int parse_socks_request(struct connection_node *cur_connection_node){
 
 				// From the diagram above. 4 + Variable + 2, where Variable is 16 in the ipv6 case.
 				if(size < (4 + len + 2)){
-					return(SOCKS_NO_HANDSHAKE);
+					return(CON_SOCKS_NO_HANDSHAKE);
 				}
 				dst_addr_ptr = head + index;
 				dst_port_ptr = head + index + len;
@@ -535,7 +528,7 @@ int parse_socks_request(struct connection_node *cur_connection_node){
 				return(-1);
 			}
 
-			return(SOCKS_V5_COMPLETE);
+			return(CON_READY);
 		}
 	}
 
