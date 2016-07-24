@@ -120,9 +120,12 @@ int posix_openpt(int flags);
 struct proxy_node *proxy_node_new(char *proxy_string, int proxy_type);
 int proxy_listen(struct proxy_node *cur_proxy_node);
 int proxy_connect(char *rhost_rport);
-struct connection_node *connection_node_create(struct connection_node **head);
-int connection_node_delete(unsigned short origin, unsigned short id, struct connection_node **head);
-struct connection_node *connection_node_find(unsigned short origin, unsigned short id, struct connection_node **head);
+
+struct connection_node *connection_node_create(struct io_helper *io);
+int connection_node_delete(struct io_helper *io, unsigned short origin, unsigned short id);
+struct connection_node *connection_node_find(struct io_helper *io, unsigned short origin, unsigned short id);
+void connection_node_queue(struct io_helper *io, struct connection_node *cur_connection_node);
+
 int parse_socks_request(struct connection_node *cur_connection_node);
 char *addr_to_string(int atype, char *addr, char *port, int len);
 int proxy_response(int sock, char ver, char cmd, char *buffer, int buffer_size);
@@ -205,6 +208,7 @@ int handle_connection_read(struct io_helper *io, struct connection_node *cur_con
 // XXX implement this!
 #define DT_NOP	6
 
-/* DT_DEBUG: Send me your debug queue! */
+/* DT_DEBUG: Used to send error reporting to be served up via an alternative delivery mechanism. (e.g. fifo, socket, log_file, etc.) */
 // XXX implement this!
 #define DT_DEBUG	7
+

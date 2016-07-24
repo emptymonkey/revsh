@@ -41,7 +41,7 @@ struct proxy_node *proxy_node_new(char *proxy_string, int proxy_type){
 	}
 	new_node->type = proxy_type;	
 
-	if((first = (char *) calloc(strlen(proxy_string), sizeof(char))) == NULL){
+	if((first = (char *) calloc(strlen(proxy_string) + 1, sizeof(char))) == NULL){
 		if(verbose){
 			fprintf(stderr, "%s: calloc(%d, sizeof(char)): %s\r\n", \
 					program_invocation_short_name, (int) strlen(proxy_string), strerror(errno));
@@ -68,7 +68,7 @@ struct proxy_node *proxy_node_new(char *proxy_string, int proxy_type){
 
 	} else if(proxy_type == PROXY_LOCAL) {
 
-		if((third = strchr(second, ':')) == NULL){
+		if(!second || (third = strchr(second, ':')) == NULL){
 			if(verbose){
 				fprintf(stderr, "%s: Malformed proxy string: %s\r\n", \
 						program_invocation_short_name, proxy_string);
@@ -79,7 +79,8 @@ struct proxy_node *proxy_node_new(char *proxy_string, int proxy_type){
 		if((fourth = strchr((third + 1) , ':')) != NULL){
 			new_node->lhost = first;
 			new_node->lport = second;
-			new_node->rhost_rport = third + 1;
+			*(third++) = '\0';
+			new_node->rhost_rport = third;
 		}else{
 			new_node->lhost = DEFAULT_PROXY_ADDR;
 			new_node->lport = first;
@@ -235,10 +236,13 @@ int proxy_connect(char *rhost_rport){
 
 		setsockopt(connector, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int));
 
+		fcntl(connector, F_SETFL, O_NONBLOCK);
 		errno = 0;
 		if(connect(connector, p->ai_addr, p->ai_addrlen) < 0){
-			close(connector);
-			continue;
+			if (errno != EINPROGRESS){
+				close(connector);
+				continue;
+			}
 		}
 		break;
 	}
@@ -248,11 +252,10 @@ int proxy_connect(char *rhost_rport){
 		return(-1);
 	}
 
-	fcntl(connector, F_SETFL, O_NONBLOCK);
 	return(connector);
 }
 
-struct connection_node *connection_node_create(struct connection_node **head){
+struct connection_node *connection_node_create(struct io_helper *io){
 
 	struct connection_node *cur_connection_node, *tmp_connection_node;
 
@@ -266,30 +269,33 @@ struct connection_node *connection_node_create(struct connection_node **head){
 		return(NULL);
 	}
 
-	tmp_connection_node = *(head);
-	if(tmp_connection_node){
-		while(tmp_connection_node->next){
-			tmp_connection_node = tmp_connection_node->next;
-		}
-
+	tmp_connection_node = io->connection_tail;
+	if(!tmp_connection_node){
+		io->connection_head = cur_connection_node;
+		io->connection_tail = cur_connection_node;
+	}else{
 		tmp_connection_node->next = cur_connection_node;
 		cur_connection_node->prev = tmp_connection_node;
-	}else{
-		*(head) = cur_connection_node;
+		io->connection_tail = cur_connection_node;
 	}
+
+	io->fd_count++;
 	return(cur_connection_node);
 }
 
-int connection_node_delete(unsigned short origin, unsigned short id, struct connection_node **head){
+int connection_node_delete(struct io_helper *io, unsigned short origin, unsigned short id){
 
 	struct connection_node *tmp_connection_node;
 
-	if((tmp_connection_node = connection_node_find(origin, id, head)) == NULL){
-		return(0);
+	if((tmp_connection_node = connection_node_find(io, origin, id)) == NULL){
+		return(-2);
 	}
 
-	if(tmp_connection_node == *(head)){
-		*(head) = NULL;
+	if(tmp_connection_node == io->connection_head){
+		io->connection_head = tmp_connection_node->next;
+	}
+	if(tmp_connection_node == io->connection_tail){
+		io->connection_tail = tmp_connection_node->prev;
 	}
 	if(tmp_connection_node->prev){
 		tmp_connection_node->prev->next = tmp_connection_node->next;
@@ -310,14 +316,16 @@ int connection_node_delete(unsigned short origin, unsigned short id, struct conn
 	if(tmp_connection_node){
 		free(tmp_connection_node);
 	}
-	return(1);
+
+	io->fd_count--;
+	return(0);
 }
 
 
-struct connection_node *connection_node_find(unsigned short origin, unsigned short id, struct connection_node **head){
+struct connection_node *connection_node_find(struct io_helper *io, unsigned short origin, unsigned short id){
 	struct connection_node *tmp_connection_node;
 
-	tmp_connection_node = *(head);
+	tmp_connection_node = io->connection_head;
 	while(tmp_connection_node){
 		if((tmp_connection_node->origin == origin) && (tmp_connection_node->id == id)){
 			return(tmp_connection_node);
@@ -327,6 +335,25 @@ struct connection_node *connection_node_find(unsigned short origin, unsigned sho
 	return(NULL);
 }
 
+void connection_node_queue(struct io_helper *io, struct connection_node *cur_connection_node){
+
+	if(cur_connection_node == io->connection_tail){
+		return;
+	}
+
+	if(cur_connection_node == io->connection_head){
+		io->connection_head = cur_connection_node->next;
+	}
+	if(cur_connection_node->prev){
+		cur_connection_node->prev->next = cur_connection_node->next;
+	}
+
+	cur_connection_node->next->prev = cur_connection_node->prev;
+
+	io->connection_tail->next = cur_connection_node;
+	io->connection_tail = cur_connection_node;
+
+}
 
 
 int parse_socks_request(struct connection_node *cur_connection_node){
@@ -585,67 +612,67 @@ char *addr_to_string(int atype, char *addr, char *port, int len){
 
 /*
 Cases:
-	4 / 4A:
-		+----+----+-----+-----+
-		|VER |CMD |PORT |ADDR |
-		+----+----+-----+-----+
-		|1   |1   |2    |4    |
-		+----+----+-----+-----+
-						
-		Connect:
-			VER -> 0x00
-			CMD -> 0x5A
-			PORT -> // ignored, pad w/zeros
-			ADDR -> // ignored, pad w/zeros
+4 / 4A:
++----+----+-----+-----+
+|VER |CMD |PORT |ADDR |
++----+----+-----+-----+
+|1   |1   |2    |4    |
++----+----+-----+-----+
 
-		Bind:
-			VER -> 0x00
-			CMD -> 0x5A
-			PORT -> // port of the listenting socket
-			ADDR -> // address of the listening socket
+Connect:
+VER -> 0x00
+CMD -> 0x5A
+PORT -> // ignored, pad w/zeros
+ADDR -> // ignored, pad w/zeros
 
-	5:
-		+----+----+-----+-----+--------+-----+
-		|VER |CMD |RSV  |ATYP |ADDR    |PORT |
-		+----+----+-----+-----+--------+-----+
-		|1   |1   |'\0' |1    |4 or 16 |2    |
-		+----+----+-----+-----+--------+-----+
-						
-		Connect:
-			VN -> 0x05
-			CD -> 0x00
-			ATYP -> // address type
-			PORT -> // port of the connecting socket
-			ADDR -> // address of the connecting socket
+Bind:
+VER -> 0x00
+CMD -> 0x5A
+PORT -> // port of the listenting socket
+ADDR -> // address of the listening socket
 
-		Bind (first reply):
-			VN -> 0x05
-			CD -> 0x00
-			ATYP -> // address type
-			PORT -> // port of the listening socket
-			ADDR -> // address of the listening socket
+5:
++----+----+-----+-----+--------+-----+
+|VER |CMD |RSV  |ATYP |ADDR    |PORT |
++----+----+-----+-----+--------+-----+
+|1   |1   |'\0' |1    |4 or 16 |2    |
++----+----+-----+-----+--------+-----+
 
-		Bind (second reply):
-			VN -> 0x05
-			CD -> 0x00
-			ATYP -> // address type
-			PORT -> // port of the connectin socket
-			ADDR -> // address of the connecting socket
+Connect:
+VN -> 0x05
+CD -> 0x00
+ATYP -> // address type
+PORT -> // port of the connecting socket
+ADDR -> // address of the connecting socket
 
-	Case with largest response size:
-		Socks 5, IPv6, bind (which requires *two* responses)
-			(1 + 1 + 1 + 1 + 16 + 2) * 2
-			= (22) * 2
-			= 44 bytes
-*/
+Bind (first reply):
+VN -> 0x05
+CD -> 0x00
+ATYP -> // address type
+PORT -> // port of the listening socket
+ADDR -> // address of the listening socket
+
+Bind (second reply):
+VN -> 0x05
+CD -> 0x00
+ATYP -> // address type
+PORT -> // port of the connectin socket
+ADDR -> // address of the connecting socket
+
+Case with largest response size:
+Socks 5, IPv6, bind (which requires *two* responses)
+(1 + 1 + 1 + 1 + 16 + 2) * 2
+= (22) * 2
+= 44 bytes
+ */
 #define MAX_RESPONSE_SIZE 44
 
-// XXX Use the new DT_PROXY_HT_RESPONSE to send back port / addr info.
-// XXX  - Actually, just have the response be the exact response to be sent back to the client!
-// XXX  - And don't worry about a new buffer. Just stuff it into the message buffer and pass it through!
-// XXX	- Use getsockname() to gather the data.
-// XXX	- http://beej.us/guide/bgnet/output/html/multipage/sockaddr_inman.html
-// XXX	- http://long.ccaba.upc.edu/long/045Guidelines/eva/ipv6.html
+// Use the new DT_PROXY_HT_RESPONSE to send back port / addr info.
+// - Actually, just have the response be the exact response to be sent back to the client!
+// - And don't worry about a new buffer. Just stuff it into the message buffer and pass it through!
+// - Use getsockname() to gather the data.
+// - http://beej.us/guide/bgnet/output/html/multipage/sockaddr_inman.html
+// - http://long.ccaba.upc.edu/long/045Guidelines/eva/ipv6.html
 
 int proxy_response(int sock, char ver, char cmd, char *buffer, int buffer_size){
 
@@ -722,7 +749,7 @@ int proxy_response(int sock, char ver, char cmd, char *buffer, int buffer_size){
 				// port
 				memcpy(buff_ptr, &(((struct sockaddr_in6 *) &addr)->sin6_port), 2);
 				buff_ptr += 2;
-				
+
 			}
 
 			return(buff_ptr - buffer);

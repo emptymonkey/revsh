@@ -6,8 +6,6 @@ extern sig_atomic_t sig_found;
 
 // XXX Write buffers are now in place to be filled.
 // XXX
-// XXX * Setup connections as a doubly linked list and implement round-robin queueing on read().
-// XXX * Implement a count of fd's and stop accepting new proxy connections at max. (FD_SETSIZE from select.h)
 // XXX * Stress test with read()s and write()s set to 1 character at a time.
 
 
@@ -24,6 +22,7 @@ extern sig_atomic_t sig_found;
 int broker(struct io_helper *io, struct config_helper *config){
 
 	int retval = -1;
+	int found;
 
 	fd_set read_fds, write_fds;
 	int fd_max;
@@ -34,7 +33,7 @@ int broker(struct io_helper *io, struct config_helper *config){
 	struct message_helper *message;
 
 	struct proxy_node *cur_proxy_node;
-	struct connection_node *cur_connection_node;
+	struct connection_node *cur_connection_node, *next_connection_node;
 
 
 	/* We use this as a shorthand to make message syntax more readable. */
@@ -63,6 +62,12 @@ int broker(struct io_helper *io, struct config_helper *config){
 		}
 	}
 
+	io->fd_count = 2;
+	cur_proxy_node = io->proxy_head;
+	while(cur_proxy_node && io->fd_count < FD_SETSIZE){
+		io->fd_count++;
+		cur_proxy_node = cur_proxy_node->next;
+	}
 
 	/*  Start the broker() loop. */
 	while(1){
@@ -77,13 +82,19 @@ int broker(struct io_helper *io, struct config_helper *config){
 		FD_SET(io->remote_fd, &read_fds);
 		fd_max = io->remote_fd > fd_max ? io->remote_fd : fd_max;
 
-		cur_proxy_node = io->proxy_head;
-		while(cur_proxy_node){
+		/*
+			 Only add proxy file descriptors to select() if we have enough space for more connections.
+			 Skip the proxy listeners from the select() loop otherwise.
+		 */
+		if(io->fd_count < FD_SETSIZE){
+			cur_proxy_node = io->proxy_head;
+			while(cur_proxy_node){
 
-			FD_SET(cur_proxy_node->fd, &read_fds);
-			fd_max = cur_proxy_node->fd > fd_max ? cur_proxy_node->fd : fd_max;
+				FD_SET(cur_proxy_node->fd, &read_fds);
+				fd_max = cur_proxy_node->fd > fd_max ? cur_proxy_node->fd : fd_max;
 
-			cur_proxy_node = cur_proxy_node->next;
+				cur_proxy_node = cur_proxy_node->next;
+			}
 		}
 
 		cur_connection_node = io->connection_head;
@@ -104,7 +115,6 @@ int broker(struct io_helper *io, struct config_helper *config){
 
 		if(((retval = select(fd_max + 1, &read_fds, &write_fds, NULL, NULL)) == -1) \
 				&& !sig_found){
-			fprintf(stderr, "\rDEBUG: sig_found: %d\n", sig_found);
 			print_error(io, "%s: %d: broker(): select(%d, %lx, NULL, NULL, NULL): %s\n", \
 					program_invocation_short_name, io->controller, \
 					fd_max + 1, (unsigned long) &read_fds, (unsigned long) &write_fds, \
@@ -113,7 +123,7 @@ int broker(struct io_helper *io, struct config_helper *config){
 		}
 
 		/* Determine which case we are in and call the appropriate handler. */
-		
+
 		if(sig_found){
 
 			current_sig = sig_found;
@@ -132,28 +142,37 @@ int broker(struct io_helper *io, struct config_helper *config){
 									(unsigned long) io, strerror(errno));
 							goto CLEAN_UP;
 						}
-					break;
+						break;
 				}
 			}
 
-		}else if(FD_ISSET(io->local_in_fd, &write_fds)){
-	
+			continue;
+		}
+
+		if(FD_ISSET(io->local_in_fd, &write_fds)){
+
 			if((retval = handle_local_write(io)) == -1){
 				goto CLEAN_UP;
 			}
 
-		}else if(FD_ISSET(io->local_in_fd, &read_fds)){
+			continue;
+		}
 
-				retval = handle_local_read(io);
+		if(FD_ISSET(io->local_in_fd, &read_fds)){
 
-				if(retval < 0){
-					if(retval == -2){
-						retval = 0;
-					}
-					goto CLEAN_UP;
-				}	
+			retval = handle_local_read(io);
 
-		}else if(FD_ISSET(io->remote_fd, &read_fds)){
+			if(retval < 0){
+				if(retval == -2){
+					retval = 0;
+				}
+				goto CLEAN_UP;
+			}	
+
+			continue;
+		}
+
+		if(FD_ISSET(io->remote_fd, &read_fds)){
 
 			if((retval = message_pull(io)) == -1){
 				if(io->eof){
@@ -204,7 +223,7 @@ int broker(struct io_helper *io, struct config_helper *config){
 						}
 
 					}else if(message->header_type == DT_PROXY_HT_RESPONSE){
-		
+
 						if((retval = handle_message_dt_proxy_ht_response(io)) == -1){
 							goto CLEAN_UP;
 						}
@@ -236,41 +255,60 @@ int broker(struct io_helper *io, struct config_helper *config){
 					break;
 			}
 
-
-		}else{
-			cur_proxy_node = io->proxy_head;
-			while(cur_proxy_node){
-
-				if(FD_ISSET(cur_proxy_node->fd, &read_fds)){
-					if((retval = handle_proxy_read(io, cur_proxy_node)) == -1){
-						goto CLEAN_UP;
-					}
-					break;
-				}
-
-				cur_proxy_node = cur_proxy_node->next;		
-			}
-
-			cur_connection_node = io->connection_head;
-			while(cur_connection_node){
-
-				if(FD_ISSET(cur_connection_node->fd, &write_fds)){
-					if((retval = handle_connection_write(io, cur_connection_node)) == -1){
-						goto CLEAN_UP;
-					}
-					break;
-				}
-
-				if(FD_ISSET(cur_connection_node->fd, &read_fds)){
-					if((retval = handle_connection_read(io, cur_connection_node)) == -1){
-						goto CLEAN_UP;
-					}
-					break;
-				}
-
-				cur_connection_node = cur_connection_node->next;
-			}
+			continue;
 		}
+
+		found = 0;
+		cur_proxy_node = io->proxy_head;
+		while(cur_proxy_node){
+
+			if(FD_ISSET(cur_proxy_node->fd, &read_fds)){
+				if((retval = handle_proxy_read(io, cur_proxy_node)) == -1){
+					goto CLEAN_UP;
+				}
+
+				found = 1;
+				break;
+			}
+
+			cur_proxy_node = cur_proxy_node->next;		
+		}
+
+		if(found){
+			continue;
+		}
+
+
+		cur_connection_node = io->connection_head;
+		while(cur_connection_node){
+
+			// Advancing to the next node in the list now, in case cur_connection_node gets deleted in the processing of the loop.
+			next_connection_node = cur_connection_node->next;
+
+			if(FD_ISSET(cur_connection_node->fd, &write_fds)){
+				if((retval = handle_connection_write(io, cur_connection_node)) == -1){
+					goto CLEAN_UP;
+				}
+
+				break;
+			}
+
+			if(FD_ISSET(cur_connection_node->fd, &read_fds)){
+
+				if((retval = handle_connection_read(io, cur_connection_node)) == -1){
+					goto CLEAN_UP;
+				}
+
+				if(retval == 0){
+					connection_node_queue(io, cur_connection_node);
+				}
+
+				break;
+			}
+
+			cur_connection_node = next_connection_node;
+		}
+
 	}
 
 	print_error(io, "%s: %d: broker(): while(1): Should not be here!\r\n", \
@@ -278,10 +316,8 @@ int broker(struct io_helper *io, struct config_helper *config){
 	retval = -1;
 
 CLEAN_UP:
-	free(io->tty_winsize);
 
-	// XXX 
-	// If we're here, we are exiting the shell. Stick around for proxies or loop through and close connections?
+	// right now things are fatal at this point, so we're letting the kernel clean up our mallocs and close our sockets.
 
 	return(retval);
 }

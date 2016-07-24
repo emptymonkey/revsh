@@ -155,5 +155,7 @@ struct io_helper {
 
 	struct winsize *tty_winsize;
 
+	int fd_count;
+
 };
 

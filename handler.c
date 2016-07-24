@@ -212,9 +212,8 @@ int handle_message_dt_proxy_ht_destroy(struct io_helper *io){
 				program_invocation_short_name, io->controller, \
 				message->data, \
 				strerror(message->header_errno));
-		return(-1);
 	}
-	connection_node_delete(message->header_origin, message->header_id, &(io->connection_head));
+	connection_node_delete(io, message->header_origin, message->header_id);
 
 	return(0);
 }
@@ -227,14 +226,14 @@ int handle_message_dt_proxy_ht_create(struct io_helper *io){
 	int count, errno;
 
 
-	if((cur_connection_node = connection_node_find(message->header_origin, message->header_id, &(io->connection_head)))){
-		connection_node_delete(message->header_origin, message->header_id, &(io->connection_head));
+	if((cur_connection_node = connection_node_find(io, message->header_origin, message->header_id))){
+		connection_node_delete(io, message->header_origin, message->header_id);
 	}
 
-	if((tmp_connection_node = connection_node_create(&(io->connection_head))) == NULL){
-		print_error(io, "%s: %d: calloc(1, %d): %s\n", \
+	if((tmp_connection_node = connection_node_create(io)) == NULL){
+		print_error(io, "%s: %d: connection_node_create(%lx): %s\n", \
 				program_invocation_short_name, io->controller, \
-				(int) sizeof(struct connection_node), \
+				(unsigned long) io, \
 				strerror(errno));
 		return(-1);
 	}
@@ -259,7 +258,6 @@ int handle_message_dt_proxy_ht_create(struct io_helper *io){
 	tmp_connection_node->origin = message->header_origin;
 	tmp_connection_node->id = message->header_id;
 
-	//            fprintf(stderr, "\rDEBUG: proxy_connect(%s)\r\n", tmp_connection_node->rhost_rport);
 	errno = 0;
 	if((tmp_connection_node->fd = proxy_connect(tmp_connection_node->rhost_rport)) == -1){
 		message->header_type = DT_PROXY_HT_DESTROY;
@@ -277,11 +275,10 @@ int handle_message_dt_proxy_ht_create(struct io_helper *io){
 			}
 			return(-1);
 		}
-		connection_node_delete(message->header_origin, message->header_id, &(io->connection_head));
+		connection_node_delete(io, message->header_origin, message->header_id);
 
 		return(0);
 	}
-	//            fprintf(stderr, "\rDEBUG: tmp_connection_node->fd: %d\r\n", tmp_connection_node->fd);
 	tmp_connection_node->state = CON_ACTIVE;
 
 	// Set up the response buffer here, and send it through as a message!
@@ -297,7 +294,7 @@ int handle_message_dt_proxy_ht_create(struct io_helper *io){
 			}
 			return(-1);
 		}
-		connection_node_delete(message->header_origin, message->header_id, &(io->connection_head));
+		connection_node_delete(io, message->header_origin, message->header_id);
 		return(0);
 	}
 
@@ -325,8 +322,7 @@ int handle_message_dt_proxy_ht_response(struct io_helper *io){
 
 	struct message_helper *new_message, *tmp_message;
 
-	//            fprintf(stderr, "DEBUG: (%d|%d): DT_PROXY_HT_RESPONSE\r\n", message->header_origin, message->header_id);
-	if((cur_connection_node = connection_node_find(message->header_origin, message->header_id, &(io->connection_head))) == NULL){
+	if((cur_connection_node = connection_node_find(io, message->header_origin, message->header_id)) == NULL){
 		message->header_type = DT_PROXY_HT_DESTROY;
 		message->header_errno = EBADR;
 
@@ -341,14 +337,7 @@ int handle_message_dt_proxy_ht_response(struct io_helper *io){
 		}
 	}
 
-	//            fprintf(stderr, "\rDEBUG: cur_connection_node: %lx\n", (unsigned long) cur_connection_node);
-	//            fprintf(stderr, "\rDEBUG: cur_connection_node->write_head: %lx\n", (unsigned long) cur_connection_node->write_head);
-	//            fprintf(stderr, "\rDEBUG: cur_connection_node->fd: %d\n", cur_connection_node->fd);
-	//            fprintf(stderr, "\rDEBUG: message->data_len: %d\n", message->data_len);
-	//            fprintf(stderr, "\rDEBUG: message->data: %s\n", message->data);
-
 	retval = write(cur_connection_node->fd, message->data, message->data_len);
-	//            fprintf(stderr, "\rDEBUG: retval: %d\n", retval);
 
 	if(retval == -1){
 		if(errno != EINTR){
@@ -372,7 +361,7 @@ int handle_message_dt_proxy_ht_response(struct io_helper *io){
 				}
 				return(-1);
 			}
-			connection_node_delete(cur_connection_node->origin, cur_connection_node->id, &(io->connection_head));
+			connection_node_delete(io, cur_connection_node->origin, cur_connection_node->id);
 		}
 	}
 
@@ -430,8 +419,7 @@ int handle_message_dt_connection(struct io_helper *io){
 	int count, errno;
 
 
-	//          fprintf(stderr, "DEBUG: (%d|%d): DT_CONNECTION\r\n", message->header_origin, message->header_id);
-	if((cur_connection_node = connection_node_find(message->header_origin, message->header_id, &(io->connection_head))) == NULL){
+	if((cur_connection_node = connection_node_find(io, message->header_origin, message->header_id)) == NULL){
 
 		message->data_type = DT_PROXY;
 		message->header_type = DT_PROXY_HT_DESTROY;
@@ -449,7 +437,6 @@ int handle_message_dt_connection(struct io_helper *io){
 		return(0);
 	}
 
-	//          fprintf(stderr, "\rDEBUG: case DT_CONNECTION_HT...: %d\n", message->header_type);
 
 	if(message->header_type == DT_CONNECTION_HT_DORMANT){
 		cur_connection_node->state = CON_DORMANT;
@@ -490,7 +477,7 @@ int handle_message_dt_connection(struct io_helper *io){
 				}
 				return(-1);
 			}
-			connection_node_delete(cur_connection_node->origin, cur_connection_node->id, &(io->connection_head));
+			connection_node_delete(io, cur_connection_node->origin, cur_connection_node->id);
 		}
 	}
 
@@ -543,17 +530,15 @@ int handle_proxy_read(struct io_helper *io, struct proxy_node *cur_proxy_node){
 	int count;
 	struct connection_node *tmp_connection_node;
 
-	//					fprintf(stderr, "\rDEBUG: PROXY: FD_ISSET: cur_proxy_node->fd: %d\r\n", cur_proxy_node->fd);
 
 	/* Create a new connection object. */
-	if((tmp_connection_node = connection_node_create(&(io->connection_head))) == NULL){
+	if((tmp_connection_node = connection_node_create(io)) == NULL){
 		print_error(io, "%s: %d: calloc(1, %d): %s\n", \
 				program_invocation_short_name, io->controller, \
 				(int) sizeof(struct connection_node), \
 				strerror(errno));
 		return(-1);
 	}
-	//					fprintf(stderr, "\rDEBUG: tmp_connection_node: %lx\n", (unsigned long) tmp_connection_node);
 
 	if((tmp_connection_node->fd = accept(cur_proxy_node->fd, NULL, NULL)) == -1){
 		print_error(io, "%s: %d: accept(%d, NULL, NULL): %s\n", \
@@ -568,7 +553,6 @@ int handle_proxy_read(struct io_helper *io, struct proxy_node *cur_proxy_node){
 	tmp_connection_node->id = tmp_connection_node->fd;
 
 	if(cur_proxy_node->type == PROXY_DYNAMIC){
-		//						fprintf(stderr, "DEBUG: do PROXY_DYNAMIC\n");
 		// PROXY_DYNAMIC case goes here.
 
 		tmp_connection_node->state = CON_SOCKS_NO_HANDSHAKE;
@@ -580,11 +564,9 @@ int handle_proxy_read(struct io_helper *io, struct proxy_node *cur_proxy_node){
 			}
 			return(-1);
 		}
-		//						fprintf(stderr, "DEBUG: tmp_connection_node->buffer_head: %lx\n", (unsigned long) tmp_connection_node->buffer_head);
 
 		tmp_connection_node->buffer_tail = tmp_connection_node->buffer_head;
 		tmp_connection_node->buffer_size = io->message_data_size;
-		//						fprintf(stderr, "DEBUG: done PROXY_DYNAMIC\n");
 	} else if(cur_proxy_node->type == PROXY_LOCAL){
 
 		count = strlen(cur_proxy_node->rhost_rport);
@@ -610,7 +592,6 @@ int handle_connection_write(struct io_helper *io, struct connection_node *cur_co
 	struct message_helper *message = &(io->message);
 	struct message_helper *tmp_message;
 
-	//					fprintf(stderr, "\rDEBUG: CONNECTION: FD_ISSET: &write_fds: cur_connection_node->fd: %d\r\n", cur_connection_node->fd);
 
 	while(cur_connection_node->write_head){
 
@@ -662,8 +643,6 @@ int handle_connection_read(struct io_helper *io, struct connection_node *cur_con
 	int retval, count;
 	struct message_helper *message = &(io->message);
 
-	//					fprintf(stderr, "\rDEBUG: CONNECTION: FD_ISSET: &read_fds: cur_connection_node->fd: %d\r\n", cur_connection_node->fd);
-	//					fprintf(stderr, "\rDEBUG: cur_connection_node->state: %d\n", cur_connection_node->state);
 
 	if(cur_connection_node->state == CON_ACTIVE){
 
@@ -672,7 +651,6 @@ int handle_connection_read(struct io_helper *io, struct connection_node *cur_con
 		message->header_origin = cur_connection_node->origin;
 		message->header_id = cur_connection_node->id;
 
-		// XXX fix the error checking and report. 
 		if((retval = read(cur_connection_node->fd, message->data, io->message_data_size)) < 1){
 			if(retval){
 				print_error(io, "%s: %d: read(%d, %lx, %d): %s\n", \
@@ -683,8 +661,8 @@ int handle_connection_read(struct io_helper *io, struct connection_node *cur_con
 			message->data_type = DT_PROXY;
 			message->header_type = DT_PROXY_HT_DESTROY;
 			message->header_errno = errno;
-			connection_node_delete(cur_connection_node->origin, cur_connection_node->id, &(io->connection_head));
-			return(0);
+			connection_node_delete(io, cur_connection_node->origin, cur_connection_node->id);
+			return(-2);
 		}
 
 		message->data_len = retval;
@@ -711,20 +689,10 @@ int handle_connection_read(struct io_helper *io, struct connection_node *cur_con
 					strerror(errno));
 		}
 
-		connection_node_delete(cur_connection_node->origin, cur_connection_node->id, &(io->connection_head));
-		return(0);
+		connection_node_delete(io, cur_connection_node->origin, cur_connection_node->id);
+		return(-2);
 	}
 	cur_connection_node->buffer_tail = cur_connection_node->buffer_tail + retval;
-
-	/*
-		 fprintf(stderr, "DEBUG: cur_connection_node->buffer_size: %d\n", cur_connection_node->buffer_size);
-		 fprintf(stderr, "DEBUG: cur_connection_node->buffer_head: ");
-		 int i;
-		 for(i = 0; i < retval; i++){
-		 fprintf(stderr, "%02x", cur_connection_node->buffer_head[i]);
-		 }
-		 fprintf(stderr, "\n");
-	 */
 
 	if((retval = parse_socks_request(cur_connection_node)) == -1){
 		if(verbose){
@@ -732,17 +700,13 @@ int handle_connection_read(struct io_helper *io, struct connection_node *cur_con
 					program_invocation_short_name, io->controller, \
 					(unsigned long) cur_connection_node);
 		}
-		connection_node_delete(cur_connection_node->origin, cur_connection_node->id, &(io->connection_head));
+		connection_node_delete(io, cur_connection_node->origin, cur_connection_node->id);
 		return(0);
 	}
 
 	cur_connection_node->state = retval;
 
 	if(cur_connection_node->state == CON_READY){
-		//					fprintf(stderr, "DEBUG: (%d|%d): DT_PROXY_HT_CREATE 1: rhost_rport: %s\r\n", cur_connection_node->origin, cur_connection_node-> id, cur_connection_node->rhost_rport);
-		//							fprintf(stderr, "\rDEBUG: cur_connection_node->state == CON_READY\n");
-		//							fprintf(stderr, "\rDEBUG: cur_connection_node->fd: %d\n", cur_connection_node->fd);
-		//							fprintf(stderr, "\rDEBUG: cur_connection_node->rhost_rport: %s\n", cur_connection_node->rhost_rport);
 		message->data_type = DT_PROXY;
 		message->header_type = DT_PROXY_HT_CREATE;
 		message->header_origin = cur_connection_node->origin;
@@ -778,16 +742,9 @@ int handle_connection_read(struct io_helper *io, struct connection_node *cur_con
 		if(cur_connection_node->auth_method == 0xff){
 			// best effort write() before we kill the connection.
 			write(cur_connection_node->fd, cur_connection_node->buffer_head, cur_connection_node->buffer_tail - cur_connection_node->buffer_head);
-			connection_node_delete(cur_connection_node->origin, cur_connection_node->id, &(io->connection_head));
+			connection_node_delete(io, cur_connection_node->origin, cur_connection_node->id);
 		}
 	}
 
-	/*
-		 if(cur_connection_node->state == CON_COMPLETE){
-		 fprintf(stderr, "DEBUG: (%d|%d): ver: %d\r\n", cur_connection_node->origin, cur_connection_node-> id, (int) cur_connection_node->ver);
-		 fprintf(stderr, "DEBUG: (%d|%d): cmd: %d\r\n", cur_connection_node->origin, cur_connection_node-> id, (int) cur_connection_node->cmd);
-		 fprintf(stderr, "DEBUG: (%d|%d): rhost_rport: %s\r\n", cur_connection_node->origin, cur_connection_node-> id, cur_connection_node->rhost_rport);
-		 }
-	 */
 	return(0);
 }
