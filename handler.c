@@ -20,7 +20,7 @@ int handle_signal_sigwinch(struct io_helper *io){
 	message = &io->message;
 
 	if((retval = ioctl(io->local_out_fd, TIOCGWINSZ, io->tty_winsize)) == -1){
-		print_error(io, "%s: %d: handle_signal_sigwinch(): ioctl(%d, TIOCGWINSZ, %lx): %s\n", \
+		report_error(io, "%s: %d: handle_signal_sigwinch(): ioctl(%d, TIOCGWINSZ, %lx): %s\n", \
 				program_invocation_short_name, io->controller, \
 				io->local_out_fd, (unsigned long) io->tty_winsize, \
 				strerror(errno));
@@ -59,7 +59,7 @@ int handle_local_write(struct io_helper *io){
 
 		if(retval == -1){
 			if(errno != EINTR){
-				print_error(io, "%s: %d: write(%d, %lx, %d): %s\n", \
+				report_error(io, "%s: %d: write(%d, %lx, %d): %s\n", \
 						program_invocation_short_name, io->controller, \
 						io->local_out_fd, (unsigned long) tmp_message->data, tmp_message->data_len, \
 						strerror(errno));
@@ -94,7 +94,7 @@ int handle_local_read(struct io_helper *io){
 			if(errno == EIO){
 				return(-2);
 			}else{
-				print_error(io, "%s: %d: read(%d, %lx, %d): %s\n", \
+				report_error(io, "%s: %d: read(%d, %lx, %d): %s\n", \
 						program_invocation_short_name, io->controller, \
 						io->local_in_fd, (unsigned long) message->data, io->message_data_size, \
 						strerror(errno));
@@ -139,7 +139,7 @@ int handle_message_dt_tty(struct io_helper *io){
 
 	if(retval == -1){
 		if(errno != EINTR){
-			print_error(io, "%s: %d: write(%d, %lx, %d): %s\n", \
+			report_error(io, "%s: %d: write(%d, %lx, %d): %s\n", \
 					program_invocation_short_name, io->controller, \
 					io->local_out_fd, (unsigned long) message->data, message->data_len, \
 					strerror(errno));
@@ -151,7 +151,7 @@ int handle_message_dt_tty(struct io_helper *io){
 		new_message = message_helper_create(message->data + retval, message->data_len - retval, io->message_data_size);
 
 		if(!new_message){
-			print_error(io, "%s: %d: message_helper_create(%lx, %d, %d): %s\n", \
+			report_error(io, "%s: %d: message_helper_create(%lx, %d, %d): %s\n", \
 					program_invocation_short_name, io->controller, \
 					(unsigned long) message->data + retval, message->data_len - retval, io->message_data_size, \
 					strerror(errno));
@@ -177,7 +177,7 @@ int handle_message_dt_winresize(struct io_helper *io){
   struct message_helper *message = &(io->message);
 
 	if(message->data_len != sizeof(io->tty_winsize->ws_row) + sizeof(io->tty_winsize->ws_col)){
-		print_error(io, "%s: %d: DT_WINRESIZE termios: not enough data!\r\n", \
+		report_error(io, "%s: %d: DT_WINRESIZE termios: not enough data!\r\n", \
 				program_invocation_short_name, io->controller);
 		return(-1);
 	}
@@ -186,7 +186,7 @@ int handle_message_dt_winresize(struct io_helper *io){
 	io->tty_winsize->ws_col = ntohs(*((unsigned short *) (message->data + sizeof(unsigned short))));
 
 	if((retval = ioctl(io->local_out_fd, TIOCSWINSZ, io->tty_winsize)) == -1){
-		print_error(io, "%s: %d: ioctl(%d, %d, %lx): %s\n", \
+		report_error(io, "%s: %d: ioctl(%d, %d, %lx): %s\n", \
 				program_invocation_short_name, io->controller, \
 				io->local_out_fd, TIOCSWINSZ, (unsigned long) io->tty_winsize, \
 				strerror(errno));
@@ -194,7 +194,7 @@ int handle_message_dt_winresize(struct io_helper *io){
 	}
 
 	if((retval = kill(-(io->child_sid), SIGWINCH)) == -1){
-		print_error(io, "%s: %d: kill(%d, SIGWINCH): %s\n", \
+		report_error(io, "%s: %d: kill(%d, SIGWINCH): %s\n", \
 				program_invocation_short_name, io->controller, \
 				-(io->child_sid), \
 				strerror(errno));
@@ -208,7 +208,7 @@ int handle_message_dt_proxy_ht_destroy(struct io_helper *io){
   struct message_helper *message = &(io->message);
 
 	if(message->header_errno && verbose){
-		print_error(io, "%s: %d: Proxy unable to connect to '%s': %s\n", \
+		report_error(io, "%s: %d: Proxy unable to connect to '%s': %s\n", \
 				program_invocation_short_name, io->controller, \
 				message->data, \
 				strerror(message->header_errno));
@@ -231,7 +231,7 @@ int handle_message_dt_proxy_ht_create(struct io_helper *io){
 	}
 
 	if((tmp_connection_node = connection_node_create(io)) == NULL){
-		print_error(io, "%s: %d: connection_node_create(%lx): %s\n", \
+		report_error(io, "%s: %d: connection_node_create(%lx): %s\n", \
 				program_invocation_short_name, io->controller, \
 				(unsigned long) io, \
 				strerror(errno));
@@ -248,7 +248,7 @@ int handle_message_dt_proxy_ht_create(struct io_helper *io){
 	count -= 2;
 
 	if((tmp_connection_node->rhost_rport = (char *) calloc(count + 1, sizeof(char))) == NULL){
-		print_error(io, "%s: %d: calloc(%d, %d): %s\n", \
+		report_error(io, "%s: %d: calloc(%d, %d): %s\n", \
 				program_invocation_short_name, io->controller, \
 				count + 1, (int) sizeof(char), \
 				strerror(errno));
@@ -341,7 +341,7 @@ int handle_message_dt_proxy_ht_response(struct io_helper *io){
 
 	if(retval == -1){
 		if(errno != EINTR){
-			print_error(io, "%s: %d: write(%d, %lx, %d): %s\n", \
+			report_error(io, "%s: %d: write(%d, %lx, %d): %s\n", \
 					program_invocation_short_name, io->controller, \
 					cur_connection_node->fd, (unsigned long) message->data, message->data_len, \
 					strerror(errno));
@@ -369,7 +369,7 @@ int handle_message_dt_proxy_ht_response(struct io_helper *io){
 		new_message = message_helper_create(message->data + retval, message->data_len - retval, io->message_data_size);
 
 		if(!new_message){
-			print_error(io, "%s: %d: message_helper_create(%lx, %d, %d): %s\n", \
+			report_error(io, "%s: %d: message_helper_create(%lx, %d, %d): %s\n", \
 					program_invocation_short_name, io->controller, \
 					(unsigned long) message->data + retval, message->data_len - retval, io->message_data_size, \
 					strerror(errno));
@@ -457,7 +457,7 @@ int handle_message_dt_connection(struct io_helper *io){
 
 	if(retval == -1){
 		if(errno != EINTR){
-			print_error(io, "%s: %d: write(%d, %lx, %d): %s\n", \
+			report_error(io, "%s: %d: write(%d, %lx, %d): %s\n", \
 					program_invocation_short_name, io->controller, \
 					cur_connection_node->fd, (unsigned long) message->data, message->data_len, \
 					strerror(errno));
@@ -485,7 +485,7 @@ int handle_message_dt_connection(struct io_helper *io){
 		new_message = message_helper_create(message->data + retval, message->data_len - retval, io->message_data_size);
 
 		if(!new_message){
-			print_error(io, "%s: %d: message_helper_create(%lx, %d, %d): %s\n", \
+			report_error(io, "%s: %d: message_helper_create(%lx, %d, %d): %s\n", \
 					program_invocation_short_name, io->controller, \
 					(unsigned long) message->data + retval, message->data_len - retval, io->message_data_size, \
 					strerror(errno));
@@ -533,7 +533,7 @@ int handle_proxy_read(struct io_helper *io, struct proxy_node *cur_proxy_node){
 
 	/* Create a new connection object. */
 	if((tmp_connection_node = connection_node_create(io)) == NULL){
-		print_error(io, "%s: %d: calloc(1, %d): %s\n", \
+		report_error(io, "%s: %d: calloc(1, %d): %s\n", \
 				program_invocation_short_name, io->controller, \
 				(int) sizeof(struct connection_node), \
 				strerror(errno));
@@ -541,7 +541,7 @@ int handle_proxy_read(struct io_helper *io, struct proxy_node *cur_proxy_node){
 	}
 
 	if((tmp_connection_node->fd = accept(cur_proxy_node->fd, NULL, NULL)) == -1){
-		print_error(io, "%s: %d: accept(%d, NULL, NULL): %s\n", \
+		report_error(io, "%s: %d: accept(%d, NULL, NULL): %s\n", \
 				program_invocation_short_name, io->controller, \
 				cur_proxy_node->fd, \
 				strerror(errno));
@@ -571,7 +571,7 @@ int handle_proxy_read(struct io_helper *io, struct proxy_node *cur_proxy_node){
 
 		count = strlen(cur_proxy_node->rhost_rport);
 		if((tmp_connection_node->rhost_rport = (char *) calloc(count + 1, sizeof(char))) == NULL){
-			print_error(io, "%s: %d: calloc(%d, %d): %s\n", \
+			report_error(io, "%s: %d: calloc(%d, %d): %s\n", \
 					program_invocation_short_name, io->controller, \
 					count + 1, (int) sizeof(char), \
 					strerror(errno));
@@ -601,7 +601,7 @@ int handle_connection_write(struct io_helper *io, struct connection_node *cur_co
 
 		if(retval == -1){
 			if(errno != EINTR){
-				print_error(io, "%s: %d: write(%d, %lx, %d): %s\n", \
+				report_error(io, "%s: %d: write(%d, %lx, %d): %s\n", \
 						program_invocation_short_name, io->controller, \
 						io->local_out_fd, (unsigned long) tmp_message->data, tmp_message->data_len, \
 						strerror(errno));
@@ -653,7 +653,7 @@ int handle_connection_read(struct io_helper *io, struct connection_node *cur_con
 
 		if((retval = read(cur_connection_node->fd, message->data, io->message_data_size)) < 1){
 			if(retval){
-				print_error(io, "%s: %d: read(%d, %lx, %d): %s\n", \
+				report_error(io, "%s: %d: read(%d, %lx, %d): %s\n", \
 						program_invocation_short_name, io->controller, \
 						io->local_in_fd, (unsigned long) message->data, io->message_data_size, \
 						strerror(errno));
@@ -744,6 +744,23 @@ int handle_connection_read(struct io_helper *io, struct connection_node *cur_con
 			write(cur_connection_node->fd, cur_connection_node->buffer_head, cur_connection_node->buffer_tail - cur_connection_node->buffer_head);
 			connection_node_delete(io, cur_connection_node->origin, cur_connection_node->id);
 		}
+	}
+
+	return(0);
+}
+
+int handle_send_nop(struct io_helper *io){
+	struct message_helper *message = &(io->message);
+
+	message->data_type = DT_NOP;
+	if(message_push(io) == -1){
+		if(verbose){
+			fprintf(stderr, "%s: %d: message_push(%lx): %s\n", \
+					program_invocation_short_name, io->controller, \
+					(unsigned long) io, \
+					strerror(errno));
+		}
+		return(-1);
 	}
 
 	return(0);

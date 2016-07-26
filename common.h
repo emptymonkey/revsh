@@ -42,7 +42,6 @@
 
 
 #include "helper_objects.h"
-
 #include "config.h"
 
 #define TARGET_CERT_FILE "target_cert.pem"
@@ -53,8 +52,6 @@
 #define PLAINTEXT 0
 #define ADH 1
 #define EDH 2
-
-#define LOCAL_BUFF_SIZE	128
 
 /* Proxy types */
 #define PROXY_LOCAL 0
@@ -102,8 +99,10 @@ struct message_helper *message_helper_create(char *data, unsigned short data_len
 void message_helper_destroy(struct message_helper *mh);
 
 int remote_printf(struct io_helper *io, char *fmt, ...);
-int print_error(struct io_helper *io, char *fmt, ...);
 int negotiate_protocol(struct io_helper *io);
+
+void report_error(struct io_helper *io, char *fmt, ...);
+int report_log(struct io_helper *io, char *fmt, ...);
 
 int do_control(struct io_helper *io, struct config_helper *config);
 int do_target(struct io_helper *io, struct config_helper *config);
@@ -142,6 +141,7 @@ int handle_message_dt_connection(struct io_helper *io);
 int handle_proxy_read(struct io_helper *io, struct proxy_node *cur_proxy_node);
 int handle_connection_write(struct io_helper *io, struct connection_node *cur_connection_node);
 int handle_connection_read(struct io_helper *io, struct connection_node *cur_connection_node);
+int handle_send_nop(struct io_helper *io);
 
 
 
@@ -178,6 +178,7 @@ int handle_connection_read(struct io_helper *io, struct connection_node *cur_con
 #define DT_INIT				1
 
 /* DT_TTY: TTY interaction data. */
+/* This message type is always given priority because, despite added funcitionality, we are still a shell at heart. */
 #define DT_TTY				2
 
 /* DT_WINRESIZE: Window re-size event data. */
@@ -189,26 +190,25 @@ int handle_connection_read(struct io_helper *io, struct connection_node *cur_con
 	In a DT_PROXY_HT_CREATE request, the first char will be ver, the second char will be cmd.
 	Null terminated rhost_rport string follows.
 */
-#define DT_PROXY_HT_CREATE	1
-#define DT_PROXY_HT_DESTROY	2
-#define DT_PROXY_HT_RESPONSE 3
+#define DT_PROXY_HT_CREATE				1
+#define DT_PROXY_HT_DESTROY				2
+#define DT_PROXY_HT_RESPONSE			3
 
-/* DT_CONNECTION: Proxy data for established connections. */
+/* DT_CONNECTION: Information related to established proxy connections. */
 #define DT_CONNECTION	5
+/* Normal data to be brokered back and forth. */
+#define DT_CONNECTION_HT_DATA			0
 /*
-	DT_CONNECTION_HT_DORMANT: used when a local fd would block for writting, and our message queue is getting deep.
+	DT_CONNECTION_HT_DORMANT is used when a fd would block for writting, and our message queue is getting deep.
 		Tells the other side to stop reading from the associated remote fd until otherwise notified. Reset to normal
-		withDT_CONNECTION_HT_ACTIVE. 
+		with DT_CONNECTION_HT_ACTIVE once the message write queue for this connection is empty. 
 */
-#define DT_CONNECTION_HT_DATA	0
 #define DT_CONNECTION_HT_DORMANT	1
-#define DT_CONNECTION_HT_ACTIVE	2
+#define DT_CONNECTION_HT_ACTIVE		2
 
-/* DT_NOP: No Operation dummy message used for keep-alive. */
-// XXX implement this!
-#define DT_NOP	6
+/* DT_NOP: No Operation dummy message used for network keep-alive. */
+#define DT_NOP				6
 
-/* DT_DEBUG: Used to send error reporting to be served up via an alternative delivery mechanism. (e.g. fifo, socket, log_file, etc.) */
-// XXX implement this!
-#define DT_DEBUG	7
+/* DT_ERROR: Used to send error reporting back to the controller for logging. */
+#define DT_ERROR			7
 

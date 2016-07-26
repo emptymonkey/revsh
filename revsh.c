@@ -58,9 +58,9 @@ volatile sig_atomic_t sig_found = 0;
  **********************************************************************************************************************/
 void usage(){
 #ifdef OPENSSL
-	fprintf(stderr, "\nusage:\t%s\t[-c [-a] [-d KEYS_DIR] [-f RC_FILE] [-L [LHOST:]LPORT:RHOST:RPORT] [-D [LHOST:]LPORT]\n\t\t[-s SHELL] [-t SEC] [-r SEC1[,SEC2]] [-b] [-n] [-k] [-v] [-h] [ADDRESS:PORT]\n", program_invocation_short_name);
+	fprintf(stderr, "\nusage:\t%s\t[-c [-a] [-d KEYS_DIR] [-f RC_FILE] [-L [LHOST:]LPORT:RHOST:RPORT] [-D [LHOST:]LPORT]\n\t\t[-s SHELL] [-t SEC] [-r SEC1[,SEC2]] [-z LOG_FILE] [-b] [-n] [-k] [-v] [-h] [ADDRESS:PORT]\n", program_invocation_short_name);
 #else /* OPENSSL */
-	fprintf(stderr, "\nusage:\t%s\t[-c [-f RC_FILE]] [-s SHELL] [-t SEC] [-r SEC1[,SEC2][-L [LHOST:]LPORT:RHOST:RPORT] [-D [LHOST:]LPORT]]\n\t\t[-b [-k]] [-n] [-v] [ADDRESS:PORT]\n", program_invocation_short_name);
+	fprintf(stderr, "\nusage:\t%s\t[-c [-f RC_FILE]] [-s SHELL] [-t SEC] [-r SEC1[,SEC2] [-z LOG_FILE] [-L [LHOST:]LPORT:RHOST:RPORT] [-D [LHOST:]LPORT]]\n\t\t[-b [-k]] [-n] [-v] [ADDRESS:PORT]\n", program_invocation_short_name);
 #endif /* OPENSSL */
 	fprintf(stderr, "\n\t-c\t\tRun in command and control mode.\t\t(Default is target mode.)\n");
 #ifdef OPENSSL
@@ -73,6 +73,11 @@ void usage(){
 	fprintf(stderr, "\t-s SHELL\tInvoke SHELL as the remote shell.\t\t(Default is \"%s\".)\n", DEFAULT_SHELL);
 	fprintf(stderr, "\t-t SEC\t\tSet the connection timeout to SEC seconds.\t(Default is \"%d\".)\n", TIMEOUT);
 	fprintf(stderr, "\t-r SEC1,SEC2\tSet the retry time to be SEC1 seconds, or\t(Default is \"%s\".)\n\t\t\tto be random in the range from SEC1 to SEC2.\n", RETRY);
+#ifdef LOG_FILE
+	fprintf(stderr, "\t-z LOG_FILE\tLog general use and errors to LOG_FILE.\t(Default is \"%s\".)\n", LOG_FILE);
+#else
+	fprintf(stderr, "\t-z LOG_FILE\tLog general use and errors to LOG_FILE.\t(No default set.)\n");
+#endif
 	fprintf(stderr, "\t-b\t\tStart in bind shell mode.\t\t\t(Default is reverse shell mode.)\n");
 	fprintf(stderr, "\t-n\t\tNon-interactive netcat style data broker.\t(Default is interactive w/remote tty.)\n\t\t\tNo tty. Useful for copying files.\n");
 	fprintf(stderr, "\t-k\t\tRun in keep-alive mode.\n");
@@ -123,17 +128,19 @@ int main(int argc, char **argv){
 	unsigned int seed;
 	int tmp_fd;
 
+  wordexp_t log_file_exp;
+
 
 	/*
 	 * Basic initialization.
 	 */
 
 	/* We will not print errors here, as verbose status has not yet been set. */
-	if((io = (struct io_helper *) malloc(sizeof(struct io_helper))) == NULL){
+	if((io = (struct io_helper *) calloc(1, sizeof(struct io_helper))) == NULL){
 		return(-2);
 	}
 
-	if((config = (struct config_helper *) malloc(sizeof(struct config_helper))) == NULL){
+	if((config = (struct config_helper *) calloc(1, sizeof(struct config_helper))) == NULL){
 		return(-3);
 	}
 
@@ -152,8 +159,18 @@ int main(int argc, char **argv){
 	config->rc_file = RC_FILE;
 	config->keys_dir = KEYS_DIR;
 	config->bindshell = 0;
-	config->keepalive = 0;
 	config->timeout = TIMEOUT;
+	config->keepalive = 0;
+	config->nop = 0;
+
+#ifdef NOP
+	config->nop = 1;
+#endif
+
+	config->log_file = NULL;
+#ifdef LOG_FILE
+	config->log_file = LOG_FILE;
+#endif
 
 	verbose = 0;
 
@@ -174,7 +191,7 @@ int main(int argc, char **argv){
 	}
 
 	/* Grab the configuration from the command line. */
-	while((opt = getopt(argc, argv, "pbkacs:d:f:L:R:D:r:ht:nv")) != -1){
+	while((opt = getopt(argc, argv, "pbkacs:d:f:L:R:D:r:z:ht:nv")) != -1){
 		switch(opt){
 
 			/*  The plaintext case is an undocumented "feature" which should be difficult to use. */
@@ -240,6 +257,10 @@ int main(int argc, char **argv){
 				retry_string = optarg;
 				break;
 
+			case 'z':
+				config->log_file = optarg;
+				break;
+
 			case 't':
 				errno = 0;
 				config->timeout = strtol(optarg, NULL, 10);
@@ -280,29 +301,55 @@ int main(int argc, char **argv){
 		usage();
 	}
 
+	/* Before anything else, let's try and get the log file opened. */
+  if(wordexp(config->log_file, &log_file_exp, 0) && verbose){
+    fprintf(stderr, "%s: %d: wordexp(%s, %lx, 0): %s\r\n", \
+        program_invocation_short_name, io->controller, \
+        config->log_file, (unsigned long)  &log_file_exp, \
+        strerror(errno));
+    return(-1);
+  }
+
+  if(log_file_exp.we_wordc != 1){
+    fprintf(stderr, "%s: %d: Invalid path: %s\r\n", \
+        program_invocation_short_name, io->controller, \
+        config->log_file);
+    return(-1);
+  }
+
+	if(config->log_file){
+		if((io->log_stream = fopen(log_file_exp.we_wordv[0], "a")) == NULL && verbose){
+			fprintf(stderr, "%s: %d: fopen(\"%s\", \"a\"): %s\r\n", \
+					program_invocation_short_name, io->controller, \
+					log_file_exp.we_wordv[0], \
+					strerror(errno));
+			return(-1);
+		}
+	}
+
 	/* Grab some entropy and seed rand(). */
 	if((tmp_fd = open("/dev/random", O_RDONLY)) == -1){
-    if(verbose){
-      fprintf(stderr, "%s: %d: open(\"/dev/random\", O_RDONLY): %s\r\n", \
-          program_invocation_short_name, io->controller, \
+		if(verbose){
+			fprintf(stderr, "%s: %d: open(\"/dev/random\", O_RDONLY): %s\r\n", \
+					program_invocation_short_name, io->controller, \
 					strerror(errno));
-    }
-    return(-1);
+		}
+		return(-1);
 	}
 
 	if((retval = read(tmp_fd, &seed, sizeof(seed))) != sizeof(seed)){
-    if(verbose){
-      fprintf(stderr, "%s: %d: read(%d, %lx, %d): Unable to fill seed!\r\n", \
-          program_invocation_short_name, io->controller, \
+		if(verbose){
+			fprintf(stderr, "%s: %d: read(%d, %lx, %d): Unable to fill seed!\r\n", \
+					program_invocation_short_name, io->controller, \
 					tmp_fd, (unsigned long) &seed, (int) sizeof(seed));
-    }
-    return(-1);
+		}
+		return(-1);
 	}
 
 	close(tmp_fd);
 
 	srand(seed);
-	
+
 
 	/*  The joy of a struct with pointers to functions. We only call "io->remote_read()" and the */
 	/*  appropriate crypto / no crypto version is called on the backend. */

@@ -33,6 +33,13 @@
 #define TARGET_CIPHER EDH_CIPHER ":" ADH_CIPHER
 #define CONTROLLER_CIPHER "!ADH" ":" EDH_CIPHER
 
+/* Comment out to disable logging. */
+#define LOG_FILE	REVSH_DIR "log"
+
+/* If defined, use the RETRY values above to also time the sending a keep-alive NOP message. */
+/* In some environments, this will ensure the networking gear doesn't kill the connection for lack of activity. */
+#define NOP
+
 /* CALLING_CARD is just a string that will be left sitting in the binary. I use it as advertising space. */
 #define CALLING_CARD "@emptymonkey - https://github.com/emptymonkey"
 

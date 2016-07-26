@@ -1,6 +1,7 @@
 
 #include "common.h"
 
+#define LOCAL_BUFF_SIZE	128
 
 /***********************************************************************************************************************
  *
@@ -157,7 +158,7 @@ int do_target(struct io_helper *io, struct config_helper *config){
 	}
 
 	if(message->data_type != DT_INIT){
-		print_error(io, "%s: %d: invalid initialization: shell: Protocol violation!\r\n", \
+		report_error(io, "%s: %d: invalid initialization: shell: Protocol violation!\r\n", \
 				program_invocation_short_name, io->controller);
 		return(-1);
 	}
@@ -172,7 +173,7 @@ int do_target(struct io_helper *io, struct config_helper *config){
 	}else{
 
 		if((config->shell = (char *) calloc(message->data_len + 1, sizeof(char))) == NULL){
-			print_error(io, "%s: %d: calloc(%d, %d): %s\r\n", \
+			report_error(io, "%s: %d: calloc(%d, %d): %s\r\n", \
 					program_invocation_short_name, io->controller, \
 					message->data_len + 1, (int) sizeof(char), \
 					strerror(errno));
@@ -204,7 +205,7 @@ int do_target(struct io_helper *io, struct config_helper *config){
 	message->data[message->data_len] = '\0';
 
 	if((exec_envp = string_to_vector(message->data)) == NULL){
-		print_error(io, "%s: %d: string_to_vector(%s): %s\r\n", \
+		report_error(io, "%s: %d: string_to_vector(%s): %s\r\n", \
 				program_invocation_short_name, io->controller, \
 				message->data, strerror(errno));
 		return(-1);
@@ -240,45 +241,47 @@ int do_target(struct io_helper *io, struct config_helper *config){
 	tty_winsize->ws_row = ntohs(*((unsigned short *) message->data));
 	tty_winsize->ws_col = ntohs(*((unsigned short *) (message->data + sizeof(unsigned short))));
 
+	// The initialization protocol is now finished. Rest of initialization is local.
+  io->init_complete = 1;
 
 	/*  - Create a pseudo-terminal (pty). */
 	if((pty_master = posix_openpt(O_RDWR|O_NOCTTY)) == -1){
-		print_error(io, "%s: %d: posix_openpt(O_RDWR|O_NOCTTY): %s\r\n", \
+		report_error(io, "%s: %d: posix_openpt(O_RDWR|O_NOCTTY): %s\r\n", \
 				program_invocation_short_name, io->controller, \
 				strerror(errno));
 		return(-1);
 	}
 
 	if(grantpt(pty_master) == -1){
-		print_error(io, "%s: %d: grantpt(%d): %s\r\n", \
+		report_error(io, "%s: %d: grantpt(%d): %s\r\n", \
 				program_invocation_short_name, io->controller, \
 				pty_master, strerror(errno));
 		return(-1);
 	}
 
 	if(unlockpt(pty_master) == -1){
-		print_error(io, "%s: %d: unlockpt(%d): %s\r\n", \
+		report_error(io, "%s: %d: unlockpt(%d): %s\r\n", \
 				program_invocation_short_name, io->controller, \
 				pty_master, strerror(errno));
 		return(-1);
 	}
 
 	if(ioctl(pty_master, TIOCSWINSZ, tty_winsize) == -1){
-		print_error(io, "%s: %d: ioctl(%d, %d, %lx): %s\r\n", \
+		report_error(io, "%s: %d: ioctl(%d, %d, %lx): %s\r\n", \
 				program_invocation_short_name, io->controller, \
 				pty_master, TIOCGWINSZ, (unsigned long) tty_winsize, strerror(errno));
 		return(-1);
 	}
 
 	if((pty_name = ptsname(pty_master)) == NULL){
-		print_error(io, "%s: %d: ptsname(%d): %s\r\n", \
+		report_error(io, "%s: %d: ptsname(%d): %s\r\n", \
 				program_invocation_short_name, io->controller, \
 				pty_master, strerror(errno));
 		return(-1);
 	}
 
 	if((pty_slave = open(pty_name, O_RDWR|O_NOCTTY)) == -1){
-		print_error(io, "%s: %d: open(%s, O_RDWR|O_NOCTTY): %s\r\n", \
+		report_error(io, "%s: %d: open(%s, O_RDWR|O_NOCTTY): %s\r\n", \
 				program_invocation_short_name, io->controller, \
 				pty_name, strerror(errno));
 		return(-1);
@@ -286,7 +289,7 @@ int do_target(struct io_helper *io, struct config_helper *config){
 
 	/*  - Send basic information back to the controller about the connecting host. */
 	if((buff_head = (char *) calloc(LOCAL_BUFF_SIZE, sizeof(char))) == NULL){
-		print_error(io, "%s: %d: calloc(%d, %d): %s\r\n", \
+		report_error(io, "%s: %d: calloc(%d, %d): %s\r\n", \
 				program_invocation_short_name, io->controller, \
 				LOCAL_BUFF_SIZE, (int) sizeof(char), \
 				strerror(errno));
@@ -349,14 +352,14 @@ int do_target(struct io_helper *io, struct config_helper *config){
 	free(buff_head);
 
 	if(close(STDIN_FILENO) == -1){
-		print_error(io, "%s: %d: close(STDIN_FILENO): %s\r\n", \
+		report_error(io, "%s: %d: close(STDIN_FILENO): %s\r\n", \
 				program_invocation_short_name, io->controller, \
 				strerror(errno));
 		return(-1);
 	}
 
 	if(close(STDOUT_FILENO) == -1){
-		print_error(io, "%s: %d: close(STDOUT_FILENO): %s\r\n", \
+		report_error(io, "%s: %d: close(STDOUT_FILENO): %s\r\n", \
 				program_invocation_short_name, io->controller, \
 				strerror(errno));
 		return(-1);
@@ -364,7 +367,7 @@ int do_target(struct io_helper *io, struct config_helper *config){
 
 	if(!verbose){
 		if(close(STDERR_FILENO) == -1){
-			print_error(io, "%s: %d: close(STDERR_FILENO): %s\r\n", \
+			report_error(io, "%s: %d: close(STDERR_FILENO): %s\r\n", \
 					program_invocation_short_name, io->controller, \
 					strerror(errno));
 			return(-1);
@@ -375,7 +378,7 @@ int do_target(struct io_helper *io, struct config_helper *config){
 	retval = fork();
 
 	if(retval == -1){
-		print_error(io, "%s: %d: fork(): %s\r\n", \
+		report_error(io, "%s: %d: fork(): %s\r\n", \
 				program_invocation_short_name, io->controller, \
 				strerror(errno));
 		return(-1);
@@ -387,7 +390,7 @@ int do_target(struct io_helper *io, struct config_helper *config){
 
 		/*  - Parent: Enter broker() and broker tty. */
 		if(close(pty_slave) == -1){
-			print_error(io, "%s: %d: close(%d): %s\r\n", \
+			report_error(io, "%s: %d: close(%d): %s\r\n", \
 					program_invocation_short_name, io->controller, \
 					pty_slave, strerror(errno));
 			return(-1);
@@ -399,7 +402,7 @@ int do_target(struct io_helper *io, struct config_helper *config){
 		retval = broker(io, config);
 
 		if(retval == -1 && !io->eof){
-			print_error(io, "%s: %d: broker(%lx, %lx): %s\r\n", \
+			report_error(io, "%s: %d: broker(%lx, %lx): %s\r\n", \
 					program_invocation_short_name, io->controller, \
 					(unsigned long) io, (unsigned long) config, strerror(errno));
 			return(-1);
@@ -418,48 +421,48 @@ int do_target(struct io_helper *io, struct config_helper *config){
 
 	/*  - Child: Initialize file descriptors. */
 	if(close(pty_master) == -1){
-		print_error(io, "%s: %d: close(%d): %s\r\n", \
+		report_error(io, "%s: %d: close(%d): %s\r\n", \
 				program_invocation_short_name, io->controller, \
 				pty_master, strerror(errno));
 		return(-1);
 	}
 	if(dup2(pty_slave, STDIN_FILENO) == -1){
-		print_error(io, "%s: %d: dup2(%d, STDIN_FILENO): %s\r\n", \
+		report_error(io, "%s: %d: dup2(%d, STDIN_FILENO): %s\r\n", \
 				program_invocation_short_name, io->controller, \
 				pty_slave, strerror(errno));
 		return(-1);
 	}
 
 	if(dup2(pty_slave, STDOUT_FILENO) == -1){
-		print_error(io, "%s: %d: dup2(%d, STDOUT_FILENO): %s\r\n", \
+		report_error(io, "%s: %d: dup2(%d, STDOUT_FILENO): %s\r\n", \
 				program_invocation_short_name, io->controller, \
 				pty_slave, strerror(errno));
 		return(-1);
 	}
 
 	if(dup2(pty_slave, STDERR_FILENO) == -1){
-		print_error(io, "%s: %d: dup2(%d, %d): %s\r\n", \
+		report_error(io, "%s: %d: dup2(%d, %d): %s\r\n", \
 				program_invocation_short_name, io->controller, \
 				pty_slave, STDERR_FILENO, strerror(errno));
 		return(-1);
 	}
 
 	if(close(io->remote_fd) == -1){
-		print_error(io, "%s: %d: close(%d): %s\r\n", \
+		report_error(io, "%s: %d: close(%d): %s\r\n", \
 				program_invocation_short_name, io->controller, \
 				io->remote_fd, strerror(errno));
 		return(-1);
 	}
 
 	if(close(pty_slave) == -1){
-		print_error(io, "%s: %d: close(%d): %s\r\n", \
+		report_error(io, "%s: %d: close(%d): %s\r\n", \
 				program_invocation_short_name, io->controller, \
 				pty_slave, strerror(errno));
 		return(-1);
 	}
 
 	if(setsid() == -1){
-		print_error(io, "%s: %d: setsid(): %s\r\n", \
+		report_error(io, "%s: %d: setsid(): %s\r\n", \
 				program_invocation_short_name, io->controller, \
 				strerror(errno));
 		return(-1);
@@ -467,7 +470,7 @@ int do_target(struct io_helper *io, struct config_helper *config){
 
 	/*  - Child: Set the pty as controlling. */
 	if(ioctl(STDIN_FILENO, TIOCSCTTY, 1) == -1){
-		print_error(io, "%s: %d: ioctl(STDIN_FILENO, TIOCSCTTY, 1): %s\r\n", \
+		report_error(io, "%s: %d: ioctl(STDIN_FILENO, TIOCSCTTY, 1): %s\r\n", \
 				program_invocation_short_name, io->controller, \
 				strerror(errno));
 		return(-1);
@@ -476,7 +479,7 @@ int do_target(struct io_helper *io, struct config_helper *config){
 	/*  - Child: Call execve() to invoke a shell. */
 	errno = 0;
 	if((exec_argv = string_to_vector(config->shell)) == NULL){
-		print_error(io, "%s: %d: string_to_vector(%s): %s\r\n", \
+		report_error(io, "%s: %d: string_to_vector(%s): %s\r\n", \
 				program_invocation_short_name, io->controller, \
 				config->shell, \
 				strerror(errno));
@@ -485,9 +488,67 @@ int do_target(struct io_helper *io, struct config_helper *config){
 
 	execve(exec_argv[0], exec_argv, exec_envp);
 
-	print_error(io, "%s: %d: execve(%s, %lx, %lx): %s\r\n", \
+	report_error(io, "%s: %d: execve(%s, %lx, %lx): %s\r\n", \
 			program_invocation_short_name, io->controller, \
 			exec_argv[0], (unsigned long) message->data_type, (unsigned long) exec_envp, \
 			strerror(errno));
 	return(-1);
 }
+
+
+/***********************************************************************************************************************
+ *
+ * remote_printf()
+ *
+ * Input: A pointer to our io_helper object, and the fmt specification as you would find in a normal printf
+ *  statement.
+ * Output: 0 on success, -1 on failure.
+ *
+ * Purpose: Provide a printf() style wrapper that leverages the underlying message bus. Used by the target system 
+ *          during initialization to send back system info for display to the user.
+ *
+ **********************************************************************************************************************/
+int remote_printf(struct io_helper *io, char *fmt, ...){
+
+  int retval;
+  va_list list_ptr;
+
+	struct message_helper *message;
+
+
+	message = &io->message;
+	
+	message->data_type = DT_TTY;
+
+  va_start(list_ptr, fmt);
+
+  if((retval = vsnprintf(message->data, io->message_data_size, fmt, list_ptr)) < 0){
+		if(verbose){
+			fprintf(stderr, "%s: %d: vsnprintf(%lx, %d, %lx, %lx): %s\n", \
+					program_invocation_short_name, io->controller, \
+					(unsigned long) message->data, io->message_data_size, (unsigned long) fmt, (unsigned long) list_ptr, \
+					strerror(errno));
+		}
+		return(-1);
+	}
+
+	va_end(list_ptr);
+	if(retval == io->message_data_size){
+		message->data[io->message_data_size - 1] = '\0';
+	}
+
+	message->data_len = retval;
+
+	if(message_push(io) == -1){
+		if(verbose){
+			fprintf(stderr, "%s: %d: message_push(%lx): %s\n", \
+					program_invocation_short_name, io->controller, \
+					(unsigned long) io, \
+					strerror(errno));
+		}
+		return(-1);
+	}
+
+	return(0);
+}
+

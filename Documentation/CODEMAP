@@ -47,6 +47,8 @@ Minor helper functions will be ommited from the descriptions.
 		--- Talks with the remote partner to syncronize the revsh environment.
 		--- Sets up a pty.
 		--- fork()s a child which exec()s a shell.
+		--- remote_printf()
+			---- Leverage a printf() version of the message bus to report system info during startup.
 		--- Calls broker().
 		--- Performs cleanup and exits.
 
@@ -69,6 +71,12 @@ Minor helper functions will be ommited from the descriptions.
       ---- Coming from the message bus.
       ---- Requesting the creation of a corresponding proxy node.
 
+- report.c
+	-- report_error()
+		--- First, regardless of which end calls this, if we are verbose, print the error to the local fd acting as stderr.
+		--- Then, if were are control and logging, drop the error to the log file.
+    --- If we are target, send a DT_ERROR message back to the control to make the decision to log or not logging.
+
 - proxy.c
   -- Contains helper code related to the establishing and tearing down of proxies and their data connections.
 
@@ -83,10 +91,6 @@ Minor helper functions will be ommited from the descriptions.
 
 - io.c
 	-- Includes either the io_ssl.c or io_nossl.c code, as appropriate.
-	-- remote_printf()
-		--- Provide a printf() style interface that uses our messaging layer.
-	-- print_error()
-		--- Determine if we are control or target and print either locally or w/remote_printf().
 
 - io_ssl.c / io_nossl.c
 	-- remote_read_plaintext()

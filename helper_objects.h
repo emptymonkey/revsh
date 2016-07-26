@@ -38,8 +38,10 @@ struct config_helper {
 	char *rc_file;
 	char *shell;
 	char *local_forward;
+	char *log_file;
 
 	int keepalive;
+	int nop;
 
 	unsigned int retry_start;
 	unsigned int retry_stop;
@@ -127,12 +129,18 @@ struct io_helper {
 	int local_out_fd;
 	int remote_fd;
 
+	FILE *log_stream;
+
 	// Fixed size of all message->data buffers. 
 	unsigned short message_data_size;
 
 	// this message_helper node is used internally by the io_helper for the processing of the message bus.
 	struct message_helper message;
 	int eof;
+
+	// Flag representing that the initialization process has completed. Used in report_error() to determine
+  // if it is ok to leverage the message bus for error reporting.
+	int init_complete;
 
 	// this message_helper node is used for the write buffer queue for the tty/shell.
 	struct message_helper *tty_write_head;

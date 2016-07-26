@@ -220,6 +220,10 @@ int message_push(struct io_helper *io){
 		return(-1);
 	}	
 
+	if(message->data_type == DT_NOP){
+		message->data_len = 0;
+	}
+
 	/* Send the data. */
 	if(message->data_len > io->message_data_size){
 		if(verbose){
