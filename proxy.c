@@ -24,28 +24,19 @@ struct proxy_node *proxy_node_new(char *proxy_string, int proxy_type){
 
 	if((proxy_type == PROXY_DYNAMIC && !(count == 0 || count == 1)) \
 			|| (proxy_type == PROXY_LOCAL && !(count == 2 || count == 3))){
-		if(verbose){
-			fprintf(stderr, "%s: Improper port forward syntax for proxy type '%d': %s\r\n", \
-					program_invocation_short_name, proxy_type, proxy_string);
-		}
+		report_error("proxy_node_new(): Improper port forward syntax for proxy type '%d': %s", proxy_type, proxy_string);
 		return(NULL);
 	} 
 
 	// Now let's start setting up the nodes.
 	if((new_node = (struct proxy_node *) calloc(1, sizeof(struct proxy_node))) == NULL){
-		if(verbose){
-			fprintf(stderr, "%s: calloc(1, sizeof(struct proxy_node)): %s\r\n", \
-					program_invocation_short_name, strerror(errno));
-		}
+		report_error("proxy_node_new(): calloc(1, sizeof(struct proxy_node)): %s", strerror(errno));
 		return(NULL);
 	}
 	new_node->type = proxy_type;	
 
 	if((first = (char *) calloc(strlen(proxy_string) + 1, sizeof(char))) == NULL){
-		if(verbose){
-			fprintf(stderr, "%s: calloc(%d, sizeof(char)): %s\r\n", \
-					program_invocation_short_name, (int) strlen(proxy_string), strerror(errno));
-		}
+			report_error("proxy_node_new(): calloc(%d, sizeof(char)): %s", (int) strlen(proxy_string), strerror(errno));
 		free(new_node);
 		return(NULL);
 	}
@@ -69,10 +60,7 @@ struct proxy_node *proxy_node_new(char *proxy_string, int proxy_type){
 	} else if(proxy_type == PROXY_LOCAL) {
 
 		if(!second || (third = strchr(second, ':')) == NULL){
-			if(verbose){
-				fprintf(stderr, "%s: Malformed proxy string: %s\r\n", \
-						program_invocation_short_name, proxy_string);
-			}
+			report_error("proxy_node_new(): Malformed proxy string: %s", proxy_string);
 			goto CLEANUP;
 		}
 
@@ -92,10 +80,7 @@ struct proxy_node *proxy_node_new(char *proxy_string, int proxy_type){
 	}
 
 	if(proxy_listen(new_node) == -1){
-		if(verbose){
-			fprintf(stderr, "%s: proxy_listen() failed. Skipping this proxy.\r\n", \
-					program_invocation_short_name);
-		}
+		report_error("proxy_node_new(): proxy_listen() failed. Skipping this proxy.");
 		goto CLEANUP;
 	}
 
@@ -128,12 +113,8 @@ int proxy_listen(struct proxy_node *cur_proxy_node){
 	hints.ai_flags = AI_PASSIVE;
 
 	if((rv = getaddrinfo(cur_proxy_node->lhost, cur_proxy_node->lport, &hints, &ai)) != 0) {
-		if(verbose){
-			fprintf(stderr, "%s: getaddrinfo(%s, %s, %lx, %lx): %s\r\n", \
-					program_invocation_short_name, \
-					cur_proxy_node->lhost, cur_proxy_node->lport, (unsigned long) &hints, (unsigned long) &ai, \
-					gai_strerror(rv));
-		}
+		report_error("proxy_listen(): getaddrinfo(%s, %s, %lx, %lx): %s", \
+				cur_proxy_node->lhost, cur_proxy_node->lport, (unsigned long) &hints, (unsigned long) &ai, gai_strerror(rv));
 		return(-1);
 	}
 
@@ -154,22 +135,13 @@ int proxy_listen(struct proxy_node *cur_proxy_node){
 	}
 
 	if(p == NULL){
-		if(verbose){
-			fprintf(stderr, "%s: Failed to bind() to %s:%s\r\n", \
-					program_invocation_short_name, \
-					cur_proxy_node->lhost, cur_proxy_node->lport);
-		}
+		report_error("proxy_listen(): Failed to bind() to %s:%s", cur_proxy_node->lhost, cur_proxy_node->lport);
 		return(-1);
 	}
 	freeaddrinfo(ai); 
 
 	if(listen(listener, 10) == -1) {
-		if(verbose){
-			fprintf(stderr, "%s: listen(%d, 10): %s\r\n", \
-					program_invocation_short_name, \
-					listener, \
-					strerror(errno));					
-		}
+		report_error("proxy_listen(): listen(%d, 10): %s", listener, strerror(errno));					
 		return(-1);
 	}
 
@@ -218,12 +190,7 @@ int proxy_connect(char *rhost_rport){
 	hints.ai_flags = AI_PASSIVE;
 
 	if((rv = getaddrinfo(rhost, rport, &hints, &ai)) != 0) {
-		if(verbose){
-			fprintf(stderr, "%s: getaddrinfo(%s, %s, %lx, %lx): %s\r\n", \
-					program_invocation_short_name, \
-					rhost, rport, (unsigned long) &hints, (unsigned long) &ai, \
-					gai_strerror(rv));
-		}
+		report_error("proxy_connect(): getaddrinfo(%s, %s, %lx, %lx): %s", rhost, rport, (unsigned long) &hints, (unsigned long) &ai, gai_strerror(rv));
 		free(rhost);
 		return(connector);
 	}
@@ -255,17 +222,12 @@ int proxy_connect(char *rhost_rport){
 	return(connector);
 }
 
-struct connection_node *connection_node_create(struct io_helper *io){
+struct connection_node *connection_node_create(){
 
 	struct connection_node *cur_connection_node, *tmp_connection_node;
 
 	if((cur_connection_node = (struct connection_node *) calloc(1, sizeof(struct connection_node))) == NULL){
-		if(verbose){
-			fprintf(stderr, "%s: calloc(1, %d): %s\r\n", \
-					program_invocation_short_name, \
-					(int) sizeof(struct connection_node), \
-					strerror(errno));
-		}
+		report_error("connection_node_create(): calloc(1, %d): %s", (int) sizeof(struct connection_node), strerror(errno));
 		return(NULL);
 	}
 
@@ -283,11 +245,11 @@ struct connection_node *connection_node_create(struct io_helper *io){
 	return(cur_connection_node);
 }
 
-int connection_node_delete(struct io_helper *io, unsigned short origin, unsigned short id){
+int connection_node_delete(unsigned short origin, unsigned short id){
 
 	struct connection_node *tmp_connection_node;
 
-	if((tmp_connection_node = connection_node_find(io, origin, id)) == NULL){
+	if((tmp_connection_node = connection_node_find(origin, id)) == NULL){
 		return(-2);
 	}
 
@@ -322,7 +284,7 @@ int connection_node_delete(struct io_helper *io, unsigned short origin, unsigned
 }
 
 
-struct connection_node *connection_node_find(struct io_helper *io, unsigned short origin, unsigned short id){
+struct connection_node *connection_node_find(unsigned short origin, unsigned short id){
 	struct connection_node *tmp_connection_node;
 
 	tmp_connection_node = io->connection_head;
@@ -335,7 +297,7 @@ struct connection_node *connection_node_find(struct io_helper *io, unsigned shor
 	return(NULL);
 }
 
-void connection_node_queue(struct io_helper *io, struct connection_node *cur_connection_node){
+void connection_node_queue(struct connection_node *cur_connection_node){
 
 	if(cur_connection_node == io->connection_tail){
 		return;
@@ -436,12 +398,8 @@ int parse_socks_request(struct connection_node *cur_connection_node){
 
 			atype = 0x03;
 			if((cur_connection_node->rhost_rport = addr_to_string(atype, domain_name, dst_port_ptr, strlen(domain_name))) == NULL){
-				if(verbose){
-					fprintf(stderr, "%s: addr_to_string(%d, %lx, %lx, %d): %s\r\n", \
-							program_invocation_short_name, \
-							atype, (unsigned long) dst_addr_ptr, (unsigned long) dst_port_ptr, (int) strlen(domain_name), \
-							strerror(errno));
-				}
+				report_error("parse_socks_request(): addr_to_string(%d, %lx, %lx, %d): %s", \
+						atype, (unsigned long) dst_addr_ptr, (unsigned long) dst_port_ptr, (int) strlen(domain_name), strerror(errno));
 				return(-1);
 			}
 
@@ -449,19 +407,15 @@ int parse_socks_request(struct connection_node *cur_connection_node){
 		}
 
 		if((cur_connection_node->rhost_rport = addr_to_string(atype, dst_addr_ptr, dst_port_ptr, 0)) == NULL){
-			if(verbose){
-				fprintf(stderr, "%s: addr_to_string(%d, %lx, %lx, 0): %s\r\n", \
-						program_invocation_short_name, \
-						atype, (unsigned long) dst_addr_ptr, (unsigned long) dst_port_ptr, \
-						strerror(errno));
-			}
+			report_error("parse_socks_request(): addr_to_string(%d, %lx, %lx, 0): %s", \
+					atype, (unsigned long) dst_addr_ptr, (unsigned long) dst_port_ptr, strerror(errno));
 			return(-1);
 		}
 
 		return(CON_READY);
 
 	}else if(head[index] == 5){
-		// XXX SOCKS 5
+		// SOCKS 5
 
 		if(cur_connection_node->state == CON_SOCKS_NO_HANDSHAKE){
 			index += 1;	
@@ -546,12 +500,8 @@ int parse_socks_request(struct connection_node *cur_connection_node){
 
 
 			if((cur_connection_node->rhost_rport = addr_to_string(atype, dst_addr_ptr, dst_port_ptr, len)) == NULL){
-				if(verbose){
-					fprintf(stderr, "%s: addr_to_string(%d, %lx, %lx, 0): %s\r\n", \
-							program_invocation_short_name, \
-							atype, (unsigned long) dst_addr_ptr, (unsigned long) dst_port_ptr, \
-							strerror(errno));
-				}
+				report_error("parse_socks_request(): addr_to_string(%d, %lx, %lx, 0): %s", \
+						atype, (unsigned long) dst_addr_ptr, (unsigned long) dst_port_ptr, strerror(errno));
 				return(-1);
 			}
 
@@ -584,12 +534,7 @@ char *addr_to_string(int atype, char *addr, char *port, int len){
 	}
 
 	if((ptr = (char *) calloc(string_len + 1, sizeof(char))) == NULL){
-		if(verbose){
-			fprintf(stderr, "%s: calloc(%d, %d): %s\r\n", \
-					program_invocation_short_name, \
-					string_len + 1, (int) sizeof(char), \
-					strerror(errno));
-		}
+		report_error("addr_to_string(): calloc(%d, %d): %s", string_len + 1, (int) sizeof(char), strerror(errno));
 		return(NULL);
 	}
 
@@ -719,12 +664,8 @@ int proxy_response(int sock, char ver, char cmd, char *buffer, int buffer_size){
 			*(buff_ptr++) = 0x00;
 
 			if((retval = getsockname(sock, (struct sockaddr *)&addr, &addrlen)) == -1){
-				if(verbose){
-					fprintf(stderr, "%s: getsockname(%d, %lx, %lx): %s\r\n", \
-							program_invocation_short_name, \
-							sock, (unsigned long) &addr, (unsigned long) &addrlen, \
-							strerror(errno));
-				}
+				report_error("proxy_response(): getsockname(%d, %lx, %lx): %s", \
+						sock, (unsigned long) &addr, (unsigned long) &addrlen, strerror(errno));
 				return(-1);
 			}
 

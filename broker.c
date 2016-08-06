@@ -4,11 +4,6 @@
 extern sig_atomic_t sig_found;
 
 
-// XXX Write buffers are now in place to be filled.
-// XXX
-// XXX * Stress test with read()s and write()s set to 1 character at a time.
-
-
 /***********************************************************************************************************************
  *
  * broker()
@@ -19,7 +14,7 @@ extern sig_atomic_t sig_found;
  * Purpose: Broker data between the terminal and the network socket. 
  *
  **********************************************************************************************************************/
-int broker(struct io_helper *io, struct config_helper *config){
+int broker(struct config_helper *config){
 
 	int retval = -1;
 	int found;
@@ -38,9 +33,32 @@ int broker(struct io_helper *io, struct config_helper *config){
 	unsigned long tmp_ulong;
 	struct timeval timeout, *timeout_ptr;
 
+	struct proxy_request_node *cur_proxy_req_node;
+
 
 	/* We use this as a shorthand to make message syntax more readable. */
 	message = &io->message;
+
+	/* Set up proxies requested during launch. */
+	cur_proxy_req_node = config->proxy_request_head;	
+	while(cur_proxy_req_node){
+
+		cur_proxy_node = proxy_node_new(cur_proxy_req_node->request_string, cur_proxy_req_node->type);	
+
+		if(!cur_proxy_node){
+			report_error("do_control(): proxy_node_new(%s, %d): %s", cur_proxy_req_node->request_string, cur_proxy_req_node->type, strerror(errno));
+		}else{
+
+			if(!io->proxy_head){
+				io->proxy_head = cur_proxy_node;
+				io->proxy_tail = cur_proxy_node;
+			}else{
+				io->proxy_tail->next = cur_proxy_node;
+				io->proxy_tail = cur_proxy_node;
+			}
+		}
+		cur_proxy_req_node = cur_proxy_req_node->next;
+	}
 
 	if(config->interactive){
 
@@ -49,18 +67,12 @@ int broker(struct io_helper *io, struct config_helper *config){
 		act.sa_handler = signal_handler;
 
 		if((retval = sigaction(SIGWINCH, &act, NULL)) == -1){
-			report_error(io, "%s: %d: sigaction(SIGWINCH, %lx, NULL): %s\n", \
-					program_invocation_short_name, io->controller, \
-					(unsigned long) &act, \
-					strerror(errno));
+			report_error("broker(): sigaction(SIGWINCH, %lx, NULL): %s", (unsigned long) &act, strerror(errno));
 			return(-1);
 		}
 
 		if((io->tty_winsize = (struct winsize *) calloc(1, sizeof(struct winsize))) == NULL){
-			report_error(io, "%s: %d: calloc(1, %d): %s\n", \
-					program_invocation_short_name, io->controller, \
-					(int) sizeof(struct winsize), \
-					strerror(errno));
+			report_error("broker(): calloc(1, %d): %s", (int) sizeof(struct winsize), strerror(errno));
 			return(-1);
 		}
 	}
@@ -129,17 +141,14 @@ int broker(struct io_helper *io, struct config_helper *config){
 
 		if(((retval = select(fd_max + 1, &read_fds, &write_fds, NULL, timeout_ptr)) == -1) \
 				&& !sig_found){
-			report_error(io, "%s: %d: broker(): select(%d, %lx, %lx, NULL, %lx): %s\n", \
-					program_invocation_short_name, io->controller, \
-					fd_max + 1, (unsigned long) &read_fds, (unsigned long) &write_fds, \
-					(unsigned long) timeout_ptr, \
-					strerror(errno));
+			report_error("broker(): select(%d, %lx, %lx, NULL, %lx): %s", \
+					fd_max + 1, (unsigned long) &read_fds, (unsigned long) &write_fds, (unsigned long) timeout_ptr, strerror(errno));
 			goto CLEAN_UP;
 		}
 
 		if(!retval){
-			if((retval = handle_send_nop(io)) == -1){
-				// XXX report_error();
+			if((retval = handle_send_nop()) == -1){
+				report_error("broker(): handle_send_nop(): %s", strerror(errno));
 				goto CLEAN_UP;
 			}
 		}
@@ -158,10 +167,8 @@ int broker(struct io_helper *io, struct config_helper *config){
 
 					/* Gather and send the new window size. */
 					case SIGWINCH:
-						if((retval = handle_signal_sigwinch(io)) == -1){
-							report_error(io, "%s: %d: handle_signal_sigwinch(%d): %s\n", \
-									program_invocation_short_name, io->controller, \
-									(unsigned long) io, strerror(errno));
+						if((retval = handle_signal_sigwinch()) == -1){
+							report_error("broker(): handle_signal_sigwinch(): %s", strerror(errno));
 							goto CLEAN_UP;
 						}
 						break;
@@ -173,7 +180,7 @@ int broker(struct io_helper *io, struct config_helper *config){
 
 		if(FD_ISSET(io->local_in_fd, &write_fds)){
 
-			if((retval = handle_local_write(io)) == -1){
+			if((retval = handle_local_write()) == -1){
 				goto CLEAN_UP;
 			}
 
@@ -182,10 +189,12 @@ int broker(struct io_helper *io, struct config_helper *config){
 
 		if(FD_ISSET(io->local_in_fd, &read_fds)){
 
-			retval = handle_local_read(io);
+			retval = handle_local_read();
 
 			if(retval < 0){
-				if(retval == -2){
+				if(retval == -1){
+					report_error("broker(): handle_local_read(): %s", strerror(errno));
+				}else{
 					retval = 0;
 				}
 				goto CLEAN_UP;
@@ -196,14 +205,11 @@ int broker(struct io_helper *io, struct config_helper *config){
 
 		if(FD_ISSET(io->remote_fd, &read_fds)){
 
-			if((retval = message_pull(io)) == -1){
+			if((retval = message_pull()) == -1){
 				if(io->eof){
 					retval = 0;
-				}else if(verbose){
-					fprintf(stderr, "%s: %d: message_pull(%lx): %s\n", \
-							program_invocation_short_name, io->controller, \
-							(unsigned long) io, \
-							strerror(errno));
+				}else{
+					report_error("broker(): message_pull(%lx): %s", strerror(errno));
 				}
 				goto CLEAN_UP;
 			}
@@ -212,7 +218,8 @@ int broker(struct io_helper *io, struct config_helper *config){
 
 				case DT_TTY:
 
-					if((retval = handle_message_dt_tty(io)) == -1){
+					if((retval = handle_message_dt_tty()) == -1){
+						report_error("broker(): handle_message_dt_tty(): %s", strerror(errno));
 						goto CLEAN_UP;
 					}
 
@@ -221,7 +228,8 @@ int broker(struct io_helper *io, struct config_helper *config){
 				case DT_WINRESIZE:
 
 					if(!io->controller){
-						if((retval = handle_message_dt_winresize(io)) == -1){
+						if((retval = handle_message_dt_winresize()) == -1){
+							report_error("broker(): handle_message_dt_winresize(): %s", strerror(errno));
 							goto CLEAN_UP;
 						}
 					}
@@ -232,29 +240,30 @@ int broker(struct io_helper *io, struct config_helper *config){
 
 					if(message->header_type == DT_PROXY_HT_DESTROY){
 
-						if((retval = handle_message_dt_proxy_ht_destroy(io)) == -1){
+						if((retval = handle_message_dt_proxy_ht_destroy()) == -1){
+							report_error("broker(): handle_message_dt_proxy_ht_destroy(): %s", strerror(errno));
 							goto CLEAN_UP;
 						}
 
 					}else if(message->header_type == DT_PROXY_HT_CREATE){
 
-						retval = handle_message_dt_proxy_ht_create(io);
+						retval = handle_message_dt_proxy_ht_create();
 
 						if(retval == -1){
+							report_error("broker(): handle_message_dt_proxy_ht_create(): %s", strerror(errno));
 							goto CLEAN_UP;
 						}
 
 					}else if(message->header_type == DT_PROXY_HT_RESPONSE){
 
-						if((retval = handle_message_dt_proxy_ht_response(io)) == -1){
+						if((retval = handle_message_dt_proxy_ht_response()) == -1){
+							report_error("broker(): handle_message_dt_proxy_ht_response(): %s", strerror(errno));
 							goto CLEAN_UP;
 						}
 
 					}else{
 						// Malformed request.
-						report_error(io, "%s: %d: Unknown Proxy Header Type: %d\n", \
-								program_invocation_short_name, io->controller, \
-								message->header_type);
+						report_error("broker(): Unknown Proxy Header Type: %d", message->header_type);
 						retval = -1;
 						goto CLEAN_UP;
 					}
@@ -262,19 +271,20 @@ int broker(struct io_helper *io, struct config_helper *config){
 
 				case DT_CONNECTION:
 
-					if((retval = handle_message_dt_connection(io)) == -1){
+					if((retval = handle_message_dt_connection()) == -1){
+						report_error("broker(): handle_message_dt_connection(): %s", strerror(errno));
 						goto CLEAN_UP;
 					}
 
 					break;
 
 				case DT_NOP:
-						// Cool story, bro.
+					// Cool story, bro.
 					break;
 
 				case DT_ERROR:
 					if(io->controller){
-						if((retval = report_log(io, "Target Error: %s", message->data)) == -1){
+						if((retval = report_log("Target Error: %s", message->data)) == -1){
 							goto CLEAN_UP;
 						}
 					}
@@ -282,13 +292,7 @@ int broker(struct io_helper *io, struct config_helper *config){
 
 				default:
 					// Malformed request.
-					// XXX make this a non-fatal log entry.
-					/*
-						 report_error(io, "%s: %d: Unknown Proxy Header Type: %d\n", \
-						 program_invocation_short_name, io->controller, \
-						 message->header_type);
-						 goto CLEAN_UP;
-					 */
+					report_error("broker(): Unknown Proxy Header Type: %d", message->header_type);
 					break;
 			}
 
@@ -300,7 +304,8 @@ int broker(struct io_helper *io, struct config_helper *config){
 		while(cur_proxy_node){
 
 			if(FD_ISSET(cur_proxy_node->fd, &read_fds)){
-				if((retval = handle_proxy_read(io, cur_proxy_node)) == -1){
+				if((retval = handle_proxy_read(cur_proxy_node)) == -1){
+					report_error("broker(): handle_proxy_read(%lx): %s", (unsigned long) cur_proxy_node, strerror(errno));
 					goto CLEAN_UP;
 				}
 
@@ -323,7 +328,8 @@ int broker(struct io_helper *io, struct config_helper *config){
 			next_connection_node = cur_connection_node->next;
 
 			if(FD_ISSET(cur_connection_node->fd, &write_fds)){
-				if((retval = handle_connection_write(io, cur_connection_node)) == -1){
+				if((retval = handle_connection_write(cur_connection_node)) == -1){
+					report_error("broker(): handle_connection_write(%lx): %s", (unsigned long) cur_connection_node, strerror(errno));
 					goto CLEAN_UP;
 				}
 
@@ -332,12 +338,13 @@ int broker(struct io_helper *io, struct config_helper *config){
 
 			if(FD_ISSET(cur_connection_node->fd, &read_fds)){
 
-				if((retval = handle_connection_read(io, cur_connection_node)) == -1){
+				if((retval = handle_connection_read(cur_connection_node)) == -1){
+					report_error("broker(): handle_connection_read(%lx): %s", (unsigned long) cur_connection_node, strerror(errno));
 					goto CLEAN_UP;
 				}
 
 				if(retval == 0){
-					connection_node_queue(io, cur_connection_node);
+					connection_node_queue(cur_connection_node);
 				}
 
 				break;
@@ -348,8 +355,7 @@ int broker(struct io_helper *io, struct config_helper *config){
 
 	}
 
-	report_error(io, "%s: %d: broker(): while(1): Should not be here!\r\n", \
-			program_invocation_short_name, io->controller);
+	report_error("broker(): while(1): Should not be here!");
 	retval = -1;
 
 CLEAN_UP:

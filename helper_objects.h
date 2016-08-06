@@ -122,8 +122,8 @@ struct io_helper {
 	int child_sid;
 
 	/* We use pointers to functions here so we can invoke the appropriate function on the backend (crypto / no crypto). */
-	int (*remote_read)(struct io_helper *io, void *buf, size_t count);
-	int (*remote_write)(struct io_helper *io, void *buf, size_t count);
+	int (*remote_read)(void *buf, size_t count);
+	int (*remote_write)(void *buf, size_t count);
 
 	int local_in_fd;
 	int local_out_fd;

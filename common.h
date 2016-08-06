@@ -77,37 +77,44 @@ char *program_invocation_short_name;
 int pagesize;
 int verbose;
 
+/*
+	 This struct represents the overall state of the I/O. It was being passed around as a function argument, but it was getting passed everywhere... 
+	 Once we cleaned up error reporting and it was obvious all code needed access to this struct in order to do the right thing upon error, and I decided to
+	 just make it a global. It's being used globally, no need to pretend it's something other than what it is.
+ */
+struct io_helper *io;
+
 char **string_to_vector(char *command_string);
 void free_vector(char **vector);
 
-int init_io_controller(struct io_helper *io, struct config_helper *config);
-int init_io_target(struct io_helper *io, struct config_helper *config);
+int init_io_controller(struct config_helper *config);
+int init_io_target(struct config_helper *config);
 
-int remote_read_plaintext(struct io_helper *io, void *buf, size_t count);
-int remote_write_plaintext(struct io_helper *io, void *buf, size_t count);
+int remote_read_plaintext(void *buf, size_t count);
+int remote_write_plaintext(void *buf, size_t count);
 
 #ifdef OPENSSL
-int remote_read_encrypted(struct io_helper *io, void *buf, size_t count);
-int remote_write_encrypted(struct io_helper *io, void *buf, size_t count);
+int remote_read_encrypted(void *buf, size_t count);
+int remote_write_encrypted(void *buf, size_t count);
 
 int dummy_verify_callback(int preverify_ok, X509_STORE_CTX* ctx);
 #endif /* OPENSSL */
 
-int message_pull(struct io_helper *io);
-int message_push(struct io_helper *io);
+int message_pull();
+int message_push();
 struct message_helper *message_helper_create(char *data, unsigned short data_len, unsigned short message_data_size);
 void message_helper_destroy(struct message_helper *mh);
 
-int remote_printf(struct io_helper *io, char *fmt, ...);
-int negotiate_protocol(struct io_helper *io);
+int remote_printf(char *fmt, ...);
+int negotiate_protocol();
 
-void report_error(struct io_helper *io, char *fmt, ...);
-int report_log(struct io_helper *io, char *fmt, ...);
+void report_error(char *fmt, ...);
+int report_log(char *fmt, ...);
 
-int do_control(struct io_helper *io, struct config_helper *config);
-int do_target(struct io_helper *io, struct config_helper *config);
+int do_control(struct config_helper *config);
+int do_target(struct config_helper *config);
 
-int broker(struct io_helper *io, struct config_helper *config);
+int broker(struct config_helper *config);
 void signal_handler(int signal);
 
 void catch_alarm(int signal);
@@ -120,28 +127,28 @@ struct proxy_node *proxy_node_new(char *proxy_string, int proxy_type);
 int proxy_listen(struct proxy_node *cur_proxy_node);
 int proxy_connect(char *rhost_rport);
 
-struct connection_node *connection_node_create(struct io_helper *io);
-int connection_node_delete(struct io_helper *io, unsigned short origin, unsigned short id);
-struct connection_node *connection_node_find(struct io_helper *io, unsigned short origin, unsigned short id);
-void connection_node_queue(struct io_helper *io, struct connection_node *cur_connection_node);
+struct connection_node *connection_node_create();
+int connection_node_delete(unsigned short origin, unsigned short id);
+struct connection_node *connection_node_find(unsigned short origin, unsigned short id);
+void connection_node_queue(struct connection_node *cur_connection_node);
 
 int parse_socks_request(struct connection_node *cur_connection_node);
 char *addr_to_string(int atype, char *addr, char *port, int len);
 int proxy_response(int sock, char ver, char cmd, char *buffer, int buffer_size);
 
-int handle_signal_sigwinch(struct io_helper *io);
-int handle_local_write(struct io_helper *io);
-int handle_local_read(struct io_helper *io);
-int handle_message_dt_tty(struct io_helper *io);
-int handle_message_dt_winresize(struct io_helper *io);
-int handle_message_dt_proxy_ht_destroy(struct io_helper *io);
-int handle_message_dt_proxy_ht_create(struct io_helper *io);
-int handle_message_dt_proxy_ht_response(struct io_helper *io);
-int handle_message_dt_connection(struct io_helper *io);
-int handle_proxy_read(struct io_helper *io, struct proxy_node *cur_proxy_node);
-int handle_connection_write(struct io_helper *io, struct connection_node *cur_connection_node);
-int handle_connection_read(struct io_helper *io, struct connection_node *cur_connection_node);
-int handle_send_nop(struct io_helper *io);
+int handle_signal_sigwinch();
+int handle_local_write();
+int handle_local_read();
+int handle_message_dt_tty();
+int handle_message_dt_winresize();
+int handle_message_dt_proxy_ht_destroy();
+int handle_message_dt_proxy_ht_create();
+int handle_message_dt_proxy_ht_response();
+int handle_message_dt_connection();
+int handle_proxy_read(struct proxy_node *cur_proxy_node);
+int handle_connection_write(struct connection_node *cur_connection_node);
+int handle_connection_read(struct connection_node *cur_connection_node);
+int handle_send_nop();
 
 
 
@@ -187,9 +194,9 @@ int handle_send_nop(struct io_helper *io);
 /* DT_PROXY: Proxy meta-data. (e.g. setup, teardown, etc.) */
 #define DT_PROXY			4
 /*
-	In a DT_PROXY_HT_CREATE request, the first char will be ver, the second char will be cmd.
-	Null terminated rhost_rport string follows.
-*/
+	 In a DT_PROXY_HT_CREATE request, the first char will be ver, the second char will be cmd.
+	 Null terminated rhost_rport string follows.
+ */
 #define DT_PROXY_HT_CREATE				1
 #define DT_PROXY_HT_DESTROY				2
 #define DT_PROXY_HT_RESPONSE			3
@@ -199,10 +206,10 @@ int handle_send_nop(struct io_helper *io);
 /* Normal data to be brokered back and forth. */
 #define DT_CONNECTION_HT_DATA			0
 /*
-	DT_CONNECTION_HT_DORMANT is used when a fd would block for writting, and our message queue is getting deep.
-		Tells the other side to stop reading from the associated remote fd until otherwise notified. Reset to normal
-		with DT_CONNECTION_HT_ACTIVE once the message write queue for this connection is empty. 
-*/
+	 DT_CONNECTION_HT_DORMANT is used when a fd would block for writting, and our message queue is getting deep.
+	 Tells the other side to stop reading from the associated remote fd until otherwise notified. Reset to normal
+	 with DT_CONNECTION_HT_ACTIVE once the message write queue for this connection is empty. 
+ */
 #define DT_CONNECTION_HT_DORMANT	1
 #define DT_CONNECTION_HT_ACTIVE		2
 

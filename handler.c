@@ -12,7 +12,7 @@
 
 #include "common.h"
 
-int handle_signal_sigwinch(struct io_helper *io){
+int handle_signal_sigwinch(){
 
 	int retval;
 	struct message_helper *message;
@@ -20,10 +20,7 @@ int handle_signal_sigwinch(struct io_helper *io){
 	message = &io->message;
 
 	if((retval = ioctl(io->local_out_fd, TIOCGWINSZ, io->tty_winsize)) == -1){
-		report_error(io, "%s: %d: handle_signal_sigwinch(): ioctl(%d, TIOCGWINSZ, %lx): %s\n", \
-				program_invocation_short_name, io->controller, \
-				io->local_out_fd, (unsigned long) io->tty_winsize, \
-				strerror(errno));
+		report_error("handle_signal_sigwinch(): ioctl(%d, TIOCGWINSZ, %lx): %s", io->local_out_fd, (unsigned long) io->tty_winsize, strerror(errno));
 		return(-1);
 	}
 
@@ -33,20 +30,15 @@ int handle_signal_sigwinch(struct io_helper *io){
 	*((unsigned short *) (message->data + message->data_len)) = htons(io->tty_winsize->ws_col);
 	message->data_len += sizeof(io->tty_winsize->ws_col);
 
-	if((retval = message_push(io)) == -1){
-		if(verbose){
-			fprintf(stderr, "%s: %d: handle_signal_sigwinch(): message_push(%lx): %s\n", \
-					program_invocation_short_name, io->controller, \
-					(unsigned long) io, \
-					strerror(errno));
-		}
+	if((retval = message_push()) == -1){
+		report_error("handle_signal_sigwinch(): message_push(): %s", strerror(errno));
 		return(-1);
 	}
 
 	return(0);
 }
 
-int handle_local_write(struct io_helper *io){
+int handle_local_write(){
 	
 	int retval;
   struct message_helper *tmp_message;
@@ -59,10 +51,7 @@ int handle_local_write(struct io_helper *io){
 
 		if(retval == -1){
 			if(errno != EINTR){
-				report_error(io, "%s: %d: write(%d, %lx, %d): %s\n", \
-						program_invocation_short_name, io->controller, \
-						io->local_out_fd, (unsigned long) tmp_message->data, tmp_message->data_len, \
-						strerror(errno));
+				report_error("handle_local_write(): write(%d, %lx, %d): %s", io->local_out_fd, (unsigned long) tmp_message->data, tmp_message->data_len, strerror(errno));
 				return(-1);
 			}
 		}
@@ -81,7 +70,7 @@ int handle_local_write(struct io_helper *io){
 }
 
 // -2 -> EOF. Fatal non-error condition.
-int handle_local_read(struct io_helper *io){
+int handle_local_read(){
 
 	int retval;
 	struct message_helper *message = &(io->message);
@@ -94,10 +83,7 @@ int handle_local_read(struct io_helper *io){
 			if(errno == EIO){
 				return(-2);
 			}else{
-				report_error(io, "%s: %d: read(%d, %lx, %d): %s\n", \
-						program_invocation_short_name, io->controller, \
-						io->local_in_fd, (unsigned long) message->data, io->message_data_size, \
-						strerror(errno));
+				report_error("handle_local_read(): read(%d, %lx, %d): %s", io->local_in_fd, (unsigned long) message->data, io->message_data_size, strerror(errno));
 				return(retval);
 			}
 		}
@@ -109,13 +95,8 @@ int handle_local_read(struct io_helper *io){
 		if(!message->data_len){
 			return(-2);
 		}else{
-			if((retval = message_push(io)) == -1){
-				if(verbose){
-					fprintf(stderr, "%s: %d: message_push(%lx): %s\n", \
-							program_invocation_short_name, io->controller, \
-							(unsigned long) io, \
-							strerror(errno));
-				}
+			if((retval = message_push()) == -1){
+				report_error("handle_local_read(): message_push(): %s", strerror(errno));
 				return(-1);
 			}
 		}
@@ -125,10 +106,10 @@ int handle_local_read(struct io_helper *io){
 }
 
 
-int handle_message_dt_tty(struct io_helper *io){
+int handle_message_dt_tty(){
 
-  int retval;
-  struct message_helper *message = &(io->message);
+	int retval;
+	struct message_helper *message = &(io->message);
 	struct message_helper *new_message, *tmp_message;
 
 	if(io->tty_write_head){
@@ -139,10 +120,7 @@ int handle_message_dt_tty(struct io_helper *io){
 
 	if(retval == -1){
 		if(errno != EINTR){
-			report_error(io, "%s: %d: write(%d, %lx, %d): %s\n", \
-					program_invocation_short_name, io->controller, \
-					io->local_out_fd, (unsigned long) message->data, message->data_len, \
-					strerror(errno));
+			report_error("handle_message_dt_tty(): write(%d, %lx, %d): %s", io->local_out_fd, (unsigned long) message->data, message->data_len, strerror(errno));
 			return(-1);
 		}
 	}
@@ -151,10 +129,8 @@ int handle_message_dt_tty(struct io_helper *io){
 		new_message = message_helper_create(message->data + retval, message->data_len - retval, io->message_data_size);
 
 		if(!new_message){
-			report_error(io, "%s: %d: message_helper_create(%lx, %d, %d): %s\n", \
-					program_invocation_short_name, io->controller, \
-					(unsigned long) message->data + retval, message->data_len - retval, io->message_data_size, \
-					strerror(errno));
+			report_error("handle_message_dt_tty(): message_helper_create(%lx, %d, %d): %s\n", \
+					(unsigned long) message->data + retval, message->data_len - retval, io->message_data_size, strerror(errno));
 			return(-1);
 		}
 
@@ -172,13 +148,12 @@ int handle_message_dt_tty(struct io_helper *io){
 	return(0);
 }
 
-int handle_message_dt_winresize(struct io_helper *io){
-  int retval;
-  struct message_helper *message = &(io->message);
+int handle_message_dt_winresize(){
+	int retval;
+	struct message_helper *message = &(io->message);
 
 	if(message->data_len != sizeof(io->tty_winsize->ws_row) + sizeof(io->tty_winsize->ws_col)){
-		report_error(io, "%s: %d: DT_WINRESIZE termios: not enough data!\r\n", \
-				program_invocation_short_name, io->controller);
+		report_error("handle_message_dt_winresize(): DT_WINRESIZE termios: not enough data!");
 		return(-1);
 	}
 
@@ -186,55 +161,40 @@ int handle_message_dt_winresize(struct io_helper *io){
 	io->tty_winsize->ws_col = ntohs(*((unsigned short *) (message->data + sizeof(unsigned short))));
 
 	if((retval = ioctl(io->local_out_fd, TIOCSWINSZ, io->tty_winsize)) == -1){
-		report_error(io, "%s: %d: ioctl(%d, %d, %lx): %s\n", \
-				program_invocation_short_name, io->controller, \
-				io->local_out_fd, TIOCSWINSZ, (unsigned long) io->tty_winsize, \
-				strerror(errno));
+		report_error("handle_message_dt_winresize(): ioctl(%d, %d, %lx): %s", io->local_out_fd, TIOCSWINSZ, (unsigned long) io->tty_winsize, strerror(errno));
 		return(-1);
 	}
 
 	if((retval = kill(-(io->child_sid), SIGWINCH)) == -1){
-		report_error(io, "%s: %d: kill(%d, SIGWINCH): %s\n", \
-				program_invocation_short_name, io->controller, \
-				-(io->child_sid), \
-				strerror(errno));
+		report_error("handle_message_dt_winresize(): kill(%d, SIGWINCH): %s", -(io->child_sid), strerror(errno));
 		return(-1);
 	}
-	
-	return(0);
-}
-
-int handle_message_dt_proxy_ht_destroy(struct io_helper *io){
-  struct message_helper *message = &(io->message);
-
-	if(message->header_errno && verbose){
-		report_error(io, "%s: %d: Proxy unable to connect to '%s': %s\n", \
-				program_invocation_short_name, io->controller, \
-				message->data, \
-				strerror(message->header_errno));
-	}
-	connection_node_delete(io, message->header_origin, message->header_id);
 
 	return(0);
 }
 
-int handle_message_dt_proxy_ht_create(struct io_helper *io){
+int handle_message_dt_proxy_ht_destroy(){
+	struct message_helper *message = &(io->message);
+
+	connection_node_delete(message->header_origin, message->header_id);
+
+	return(0);
+}
+
+int handle_message_dt_proxy_ht_create(){
 	int retval;
 	struct message_helper *message = &(io->message);
 
-  struct connection_node *cur_connection_node, *tmp_connection_node;
+	struct connection_node *cur_connection_node, *tmp_connection_node;
 	int count, errno;
 
 
-	if((cur_connection_node = connection_node_find(io, message->header_origin, message->header_id))){
-		connection_node_delete(io, message->header_origin, message->header_id);
+	if((cur_connection_node = connection_node_find(message->header_origin, message->header_id))){
+		connection_node_delete(message->header_origin, message->header_id);
 	}
 
-	if((tmp_connection_node = connection_node_create(io)) == NULL){
-		report_error(io, "%s: %d: connection_node_create(%lx): %s\n", \
-				program_invocation_short_name, io->controller, \
-				(unsigned long) io, \
-				strerror(errno));
+	if((tmp_connection_node = connection_node_create()) == NULL){
+		report_error("handle_message_dt_proxy_ht_create(): connection_node_create(): %s", strerror(errno));
 		return(-1);
 	}
 
@@ -248,10 +208,7 @@ int handle_message_dt_proxy_ht_create(struct io_helper *io){
 	count -= 2;
 
 	if((tmp_connection_node->rhost_rport = (char *) calloc(count + 1, sizeof(char))) == NULL){
-		report_error(io, "%s: %d: calloc(%d, %d): %s\n", \
-				program_invocation_short_name, io->controller, \
-				count + 1, (int) sizeof(char), \
-				strerror(errno));
+		report_error("handle_message_dt_proxy_ht_create(): calloc(%d, %d): %s", count + 1, (int) sizeof(char), strerror(errno));
 		return(-1);
 	}
 	memcpy(tmp_connection_node->rhost_rport, message->data + 2, count);
@@ -260,22 +217,18 @@ int handle_message_dt_proxy_ht_create(struct io_helper *io){
 
 	errno = 0;
 	if((tmp_connection_node->fd = proxy_connect(tmp_connection_node->rhost_rport)) == -1){
-		message->header_type = DT_PROXY_HT_DESTROY;
-		message->header_errno = errno;
+		report_error("Unable to connect to %s.", tmp_connection_node->rhost_rport);
 
-		count = strlen(tmp_connection_node->rhost_rport) + 1;
-		count = count < io->message_data_size ? count : io->message_data_size;
-		memcpy(message->data, tmp_connection_node->rhost_rport, count);
-		if((retval = message_push(io)) == -1){
-			if(verbose){
-				fprintf(stderr, "%s: %d: message_push(%lx): %s\n", \
-						program_invocation_short_name, io->controller, \
-						(unsigned long) io, \
-						strerror(errno));
-			}
+		message->data_type = DT_PROXY;
+		message->header_type = DT_PROXY_HT_DESTROY;
+		message->header_origin = tmp_connection_node->origin;
+		message->header_id = tmp_connection_node->id;
+
+		if((retval = message_push()) == -1){
+			report_error("handle_message_dt_proxy_ht_create(): message_push(): %s", strerror(errno));
 			return(-1);
 		}
-		connection_node_delete(io, message->header_origin, message->header_id);
+		connection_node_delete(message->header_origin, message->header_id);
 
 		return(0);
 	}
@@ -283,56 +236,43 @@ int handle_message_dt_proxy_ht_create(struct io_helper *io){
 
 	// Set up the response buffer here, and send it through as a message!
 	if((retval = proxy_response(tmp_connection_node->fd, tmp_connection_node->ver, tmp_connection_node->cmd, message->data, io->message_data_size)) == -1){
+		message->data_type = DT_PROXY;
 		message->header_type = DT_PROXY_HT_DESTROY;
-		message->header_errno = errno;
-		if((retval = message_push(io)) == -1){
-			if(verbose){
-				fprintf(stderr, "%s: %d: message_push(%lx): %s\n", \
-						program_invocation_short_name, io->controller, \
-						(unsigned long) io, \
-						strerror(errno));
-			}
+    message->header_origin = tmp_connection_node->origin;
+    message->header_id = tmp_connection_node->id;
+
+		if((retval = message_push()) == -1){
+			report_error("handle_message_dt_proxy_ht_create(): message_push(): %s", strerror(errno));
 			return(-1);
 		}
-		connection_node_delete(io, message->header_origin, message->header_id);
+		connection_node_delete(message->header_origin, message->header_id);
 		return(0);
 	}
 
 	message->header_type = DT_PROXY_HT_RESPONSE;
 	message->data_len = retval;
-	if((retval = message_push(io)) == -1){
-		if(verbose){
-			fprintf(stderr, "%s: %d: message_push(%lx): %s\n", \
-					program_invocation_short_name, io->controller, \
-					(unsigned long) io, \
-					strerror(errno));
-		}
+	if((retval = message_push()) == -1){
+		report_error("handle_message_dt_proxy_ht_create(): message_push(): %s", strerror(errno));
 		return(-1);
 	}
 
 	return(0);
 }
 
-int handle_message_dt_proxy_ht_response(struct io_helper *io){
+int handle_message_dt_proxy_ht_response(){
 	int retval;
 	struct message_helper *message = &(io->message);
 
-  struct connection_node *cur_connection_node;
+	struct connection_node *cur_connection_node;
 	int count, errno;
 
 	struct message_helper *new_message, *tmp_message;
 
-	if((cur_connection_node = connection_node_find(io, message->header_origin, message->header_id)) == NULL){
+	if((cur_connection_node = connection_node_find(message->header_origin, message->header_id)) == NULL){
 		message->header_type = DT_PROXY_HT_DESTROY;
-		message->header_errno = EBADR;
 
-		if((retval = message_push(io)) == -1){
-			if(verbose){
-				fprintf(stderr, "%s: %d: message_push(%lx): %s\n", \
-						program_invocation_short_name, io->controller, \
-						(unsigned long) io, \
-						strerror(errno));
-			}
+		if((retval = message_push()) == -1){
+			report_error("handle_message_dt_proxy_ht_response(): message_push(): %s", strerror(errno));
 			return(-1);
 		}
 	}
@@ -341,27 +281,19 @@ int handle_message_dt_proxy_ht_response(struct io_helper *io){
 
 	if(retval == -1){
 		if(errno != EINTR){
-			report_error(io, "%s: %d: write(%d, %lx, %d): %s\n", \
-					program_invocation_short_name, io->controller, \
-					cur_connection_node->fd, (unsigned long) message->data, message->data_len, \
-					strerror(errno));
+			report_error("handle_message_dt_proxy_ht_response(): write(%d, %lx, %d): %s", \
+					cur_connection_node->fd, (unsigned long) message->data, message->data_len, strerror(errno));
 
 			message->data_type = DT_PROXY;
 			message->header_type = DT_PROXY_HT_DESTROY;
 			message->header_origin = cur_connection_node->origin;
 			message->header_id = cur_connection_node->id;
-			message->header_errno = EBADF;
 
-			if((retval = message_push(io)) == -1){
-				if(verbose){
-					fprintf(stderr, "%s: %d: message_push(%lx): %s\n", \
-							program_invocation_short_name, io->controller, \
-							(unsigned long) io, \
-							strerror(errno));
-				}
+			if((retval = message_push()) == -1){
+				report_error("handle_message_dt_proxy_ht_response(): message_push(): %s", strerror(errno));
 				return(-1);
 			}
-			connection_node_delete(io, cur_connection_node->origin, cur_connection_node->id);
+			connection_node_delete(cur_connection_node->origin, cur_connection_node->id);
 		}
 	}
 
@@ -369,10 +301,8 @@ int handle_message_dt_proxy_ht_response(struct io_helper *io){
 		new_message = message_helper_create(message->data + retval, message->data_len - retval, io->message_data_size);
 
 		if(!new_message){
-			report_error(io, "%s: %d: message_helper_create(%lx, %d, %d): %s\n", \
-					program_invocation_short_name, io->controller, \
-					(unsigned long) message->data + retval, message->data_len - retval, io->message_data_size, \
-					strerror(errno));
+			report_error("handle_message_dt_proxy_ht_response(): message_helper_create(%lx, %d, %d): %s", \
+					(unsigned long) message->data + retval, message->data_len - retval, io->message_data_size, strerror(errno));
 			return(-1);
 		}
 
@@ -394,13 +324,8 @@ int handle_message_dt_proxy_ht_response(struct io_helper *io){
 				message->header_origin = io->controller;
 				message->header_id = cur_connection_node->fd;
 
-				if((retval = message_push(io)) == -1){
-					if(verbose){
-						fprintf(stderr, "%s: %d: message_push(%lx): %s\n", \
-								program_invocation_short_name, io->controller, \
-								(unsigned long) io, \
-								strerror(errno));
-					}
+				if((retval = message_push()) == -1){
+					report_error("handle_message_dt_proxy_ht_response(): message_push(): %s", strerror(errno));
 					return(-1);
 				}
 			}
@@ -410,28 +335,22 @@ int handle_message_dt_proxy_ht_response(struct io_helper *io){
 	return(0);
 }
 
-int handle_message_dt_connection(struct io_helper *io){
+int handle_message_dt_connection(){
 	int retval;
 	struct message_helper *message = &(io->message);
 	struct message_helper *new_message, *tmp_message;
 
-  struct connection_node *cur_connection_node;
+	struct connection_node *cur_connection_node;
 	int count, errno;
 
 
-	if((cur_connection_node = connection_node_find(io, message->header_origin, message->header_id)) == NULL){
+	if((cur_connection_node = connection_node_find(message->header_origin, message->header_id)) == NULL){
 
 		message->data_type = DT_PROXY;
 		message->header_type = DT_PROXY_HT_DESTROY;
-		message->header_errno = EBADF;
 
-		if((retval = message_push(io)) == -1){
-			if(verbose){
-				fprintf(stderr, "%s: %d: message_push(%lx): %s\n", \
-						program_invocation_short_name, io->controller, \
-						(unsigned long) io, \
-						strerror(errno));
-			}
+		if((retval = message_push()) == -1){
+			report_error("handle_message_dt_connection(): message_push(): %s", strerror(errno));
 			return(-1);
 		}
 		return(0);
@@ -457,27 +376,19 @@ int handle_message_dt_connection(struct io_helper *io){
 
 	if(retval == -1){
 		if(errno != EINTR){
-			report_error(io, "%s: %d: write(%d, %lx, %d): %s\n", \
-					program_invocation_short_name, io->controller, \
-					cur_connection_node->fd, (unsigned long) message->data, message->data_len, \
-					strerror(errno));
+			report_error("handle_message_dt_connection(): write(%d, %lx, %d): %s", \
+					cur_connection_node->fd, (unsigned long) message->data, message->data_len, strerror(errno));
 
 			message->data_type = DT_PROXY;
 			message->header_type = DT_PROXY_HT_DESTROY;
 			message->header_origin = cur_connection_node->origin;
 			message->header_id = cur_connection_node->id;
-			message->header_errno = EBADF;
 
-			if((retval = message_push(io)) == -1){
-				if(verbose){
-					fprintf(stderr, "%s: %d: message_push(%lx): %s\n", \
-							program_invocation_short_name, io->controller, \
-							(unsigned long) io, \
-							strerror(errno));
-				}
+			if((retval = message_push()) == -1){
+				report_error("handle_message_dt_connection(): message_push(): %s", strerror(errno));
 				return(-1);
 			}
-			connection_node_delete(io, cur_connection_node->origin, cur_connection_node->id);
+			connection_node_delete(cur_connection_node->origin, cur_connection_node->id);
 		}
 	}
 
@@ -485,10 +396,8 @@ int handle_message_dt_connection(struct io_helper *io){
 		new_message = message_helper_create(message->data + retval, message->data_len - retval, io->message_data_size);
 
 		if(!new_message){
-			report_error(io, "%s: %d: message_helper_create(%lx, %d, %d): %s\n", \
-					program_invocation_short_name, io->controller, \
-					(unsigned long) message->data + retval, message->data_len - retval, io->message_data_size, \
-					strerror(errno));
+			report_error("handle_message_dt_connection(): message_helper_create(%lx, %d, %d): %s", \
+					(unsigned long) message->data + retval, message->data_len - retval, io->message_data_size, strerror(errno));
 			return(-1);
 		}
 
@@ -510,13 +419,8 @@ int handle_message_dt_connection(struct io_helper *io){
 				message->header_origin = io->controller;
 				message->header_id = cur_connection_node->fd;
 
-				if((retval = message_push(io)) == -1){
-					if(verbose){
-						fprintf(stderr, "%s: %d: message_push(%lx): %s\n", \
-								program_invocation_short_name, io->controller, \
-								(unsigned long) io, \
-								strerror(errno));
-					}
+				if((retval = message_push()) == -1){
+					report_error("handle_message_dt_connection(): message_push(): %s", strerror(errno));
 					return(-1);
 				}
 			}
@@ -526,25 +430,19 @@ int handle_message_dt_connection(struct io_helper *io){
 	return(0);
 }
 
-int handle_proxy_read(struct io_helper *io, struct proxy_node *cur_proxy_node){
+int handle_proxy_read(struct proxy_node *cur_proxy_node){
 	int count;
 	struct connection_node *tmp_connection_node;
 
 
 	/* Create a new connection object. */
-	if((tmp_connection_node = connection_node_create(io)) == NULL){
-		report_error(io, "%s: %d: calloc(1, %d): %s\n", \
-				program_invocation_short_name, io->controller, \
-				(int) sizeof(struct connection_node), \
-				strerror(errno));
+	if((tmp_connection_node = connection_node_create()) == NULL){
+		report_error("handle_proxy_read(): connection_node_create(): %s", strerror(errno));
 		return(-1);
 	}
 
 	if((tmp_connection_node->fd = accept(cur_proxy_node->fd, NULL, NULL)) == -1){
-		report_error(io, "%s: %d: accept(%d, NULL, NULL): %s\n", \
-				program_invocation_short_name, io->controller, \
-				cur_proxy_node->fd, \
-				strerror(errno));
+		report_error("handle_proxy_read(): accept(%d, NULL, NULL): %s", cur_proxy_node->fd, strerror(errno));
 		return(-1);
 	}
 	fcntl(tmp_connection_node->fd, F_SETFL, O_NONBLOCK);
@@ -558,10 +456,7 @@ int handle_proxy_read(struct io_helper *io, struct proxy_node *cur_proxy_node){
 		tmp_connection_node->state = CON_SOCKS_NO_HANDSHAKE;
 
 		if((tmp_connection_node->buffer_head = (char *) calloc(io->message_data_size, sizeof(char))) == NULL){
-			if(verbose){
-				fprintf(stderr, "%s: calloc(%d, %d): %s\r\n", \
-						program_invocation_short_name, io->message_data_size, (int) sizeof(char), strerror(errno));
-			}
+			report_error("handle_proxy_read(): calloc(%d, %d): %s\r", io->message_data_size, (int) sizeof(char), strerror(errno));
 			return(-1);
 		}
 
@@ -571,10 +466,7 @@ int handle_proxy_read(struct io_helper *io, struct proxy_node *cur_proxy_node){
 
 		count = strlen(cur_proxy_node->rhost_rport);
 		if((tmp_connection_node->rhost_rport = (char *) calloc(count + 1, sizeof(char))) == NULL){
-			report_error(io, "%s: %d: calloc(%d, %d): %s\n", \
-					program_invocation_short_name, io->controller, \
-					count + 1, (int) sizeof(char), \
-					strerror(errno));
+			report_error("handle_proxy_read(): calloc(%d, %d): %s", count + 1, (int) sizeof(char), strerror(errno));
 			return(-1);
 		}
 		memcpy(tmp_connection_node->rhost_rport, cur_proxy_node, count);
@@ -582,11 +474,10 @@ int handle_proxy_read(struct io_helper *io, struct proxy_node *cur_proxy_node){
 	}
 
 	return(0);
-
 }
 
 
-int handle_connection_write(struct io_helper *io, struct connection_node *cur_connection_node){
+int handle_connection_write(struct connection_node *cur_connection_node){
 
 	int retval;
 	struct message_helper *message = &(io->message);
@@ -601,10 +492,8 @@ int handle_connection_write(struct io_helper *io, struct connection_node *cur_co
 
 		if(retval == -1){
 			if(errno != EINTR){
-				report_error(io, "%s: %d: write(%d, %lx, %d): %s\n", \
-						program_invocation_short_name, io->controller, \
-						io->local_out_fd, (unsigned long) tmp_message->data, tmp_message->data_len, \
-						strerror(errno));
+				report_error("handle_connection_write(): write(%d, %lx, %d): %s", \
+						io->local_out_fd, (unsigned long) tmp_message->data, tmp_message->data_len, strerror(errno));
 				return(-1);
 			}
 		}
@@ -624,13 +513,8 @@ int handle_connection_write(struct io_helper *io, struct connection_node *cur_co
 			message->header_origin = io->controller;
 			message->header_id = cur_connection_node->fd;
 
-			if((retval = message_push(io)) == -1){
-				if(verbose){
-					fprintf(stderr, "%s: %d: message_push(%lx): %s\n", \
-							program_invocation_short_name, io->controller, \
-							(unsigned long) io, \
-							strerror(errno));
-				}
+			if((retval = message_push()) == -1){
+				report_error("handle_connection_write(): message_push(): %s", strerror(errno));
 				return(-1);
 			}
 		}
@@ -638,7 +522,7 @@ int handle_connection_write(struct io_helper *io, struct connection_node *cur_co
 	return(0);
 }
 
-int handle_connection_read(struct io_helper *io, struct connection_node *cur_connection_node){
+int handle_connection_read(struct connection_node *cur_connection_node){
 
 	int retval, count;
 	struct message_helper *message = &(io->message);
@@ -653,26 +537,18 @@ int handle_connection_read(struct io_helper *io, struct connection_node *cur_con
 
 		if((retval = read(cur_connection_node->fd, message->data, io->message_data_size)) < 1){
 			if(retval){
-				report_error(io, "%s: %d: read(%d, %lx, %d): %s\n", \
-						program_invocation_short_name, io->controller, \
-						io->local_in_fd, (unsigned long) message->data, io->message_data_size, \
-						strerror(errno));
+				report_error("handle_connection_read(): read(%d, %lx, %d): %s", \
+						io->local_in_fd, (unsigned long) message->data, io->message_data_size, strerror(errno));
 			}
 			message->data_type = DT_PROXY;
 			message->header_type = DT_PROXY_HT_DESTROY;
-			message->header_errno = errno;
-			connection_node_delete(io, cur_connection_node->origin, cur_connection_node->id);
+			connection_node_delete(cur_connection_node->origin, cur_connection_node->id);
 			return(-2);
 		}
 
 		message->data_len = retval;
-		if((retval = message_push(io)) == -1){
-			if(verbose){
-				fprintf(stderr, "%s: %d: message_push(%lx): %s\n", \
-						program_invocation_short_name, io->controller, \
-						(unsigned long) io, \
-						strerror(errno));
-			}
+		if((retval = message_push()) == -1){
+			report_error("handle_connection_read(): message_push(): %s", strerror(errno));
 			return(-1);
 		}
 
@@ -682,25 +558,16 @@ int handle_connection_read(struct io_helper *io, struct connection_node *cur_con
 	// Socks connection, not finished initializing.
 
 	if((retval = read(cur_connection_node->fd, cur_connection_node->buffer_tail, cur_connection_node->buffer_size - (cur_connection_node->buffer_tail - cur_connection_node->buffer_head))) < 1){
-		if(verbose){
-			fprintf(stderr, "%s: %d: read(%d, %lx, %d): %s\n", \
-					program_invocation_short_name, io->controller, \
-					cur_connection_node->fd, (unsigned long) cur_connection_node->buffer_head, io->message_data_size, \
-					strerror(errno));
-		}
-
-		connection_node_delete(io, cur_connection_node->origin, cur_connection_node->id);
+		report_error("handle_connection_read(): read(%d, %lx, %d): %s", \
+				cur_connection_node->fd, (unsigned long) cur_connection_node->buffer_head, io->message_data_size, strerror(errno));
+		connection_node_delete(cur_connection_node->origin, cur_connection_node->id);
 		return(-2);
 	}
 	cur_connection_node->buffer_tail = cur_connection_node->buffer_tail + retval;
 
 	if((retval = parse_socks_request(cur_connection_node)) == -1){
-		if(verbose){
-			fprintf(stderr, "%s: %d: parse_sock_request(%lx): Malformed SOCKS request.\n", \
-					program_invocation_short_name, io->controller, \
-					(unsigned long) cur_connection_node);
-		}
-		connection_node_delete(io, cur_connection_node->origin, cur_connection_node->id);
+		report_error("handle_connection_read(): parse_sock_request(%lx): Malformed SOCKS request.", (unsigned long) cur_connection_node);
+		connection_node_delete(cur_connection_node->origin, cur_connection_node->id);
 		return(0);
 	}
 
@@ -721,13 +588,8 @@ int handle_connection_read(struct io_helper *io, struct connection_node *cur_con
 		memcpy(message->data + 2, cur_connection_node->rhost_rport, count - 2);
 		message->data_len = count;
 
-		if((retval = message_push(io)) == -1){
-			if(verbose){
-				fprintf(stderr, "%s: %d: message_push(%lx): %s\n", \
-						program_invocation_short_name, io->controller, \
-						(unsigned long) io, \
-						strerror(errno));
-			}
+		if((retval = message_push()) == -1){
+			report_error("handle_connection_read(): message_push(): %s", strerror(errno));
 			return(-1);
 		}
 		cur_connection_node->state = CON_ACTIVE;
@@ -742,24 +604,19 @@ int handle_connection_read(struct io_helper *io, struct connection_node *cur_con
 		if(cur_connection_node->auth_method == 0xff){
 			// best effort write() before we kill the connection.
 			write(cur_connection_node->fd, cur_connection_node->buffer_head, cur_connection_node->buffer_tail - cur_connection_node->buffer_head);
-			connection_node_delete(io, cur_connection_node->origin, cur_connection_node->id);
+			connection_node_delete(cur_connection_node->origin, cur_connection_node->id);
 		}
 	}
 
 	return(0);
 }
 
-int handle_send_nop(struct io_helper *io){
+int handle_send_nop(){
 	struct message_helper *message = &(io->message);
 
 	message->data_type = DT_NOP;
-	if(message_push(io) == -1){
-		if(verbose){
-			fprintf(stderr, "%s: %d: message_push(%lx): %s\n", \
-					program_invocation_short_name, io->controller, \
-					(unsigned long) io, \
-					strerror(errno));
-		}
+	if(message_push() == -1){
+		report_error("handle_send_nop(): message_push(): %s", strerror(errno));
 		return(-1);
 	}
 

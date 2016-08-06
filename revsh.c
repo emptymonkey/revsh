@@ -120,7 +120,6 @@ int main(int argc, char **argv){
 	struct proxy_request_node *tmp_proxy_ptr = NULL;
 	struct proxy_request_node *cur_proxy_ptr = NULL;
 
-	struct io_helper *io;
 	struct config_helper *config;
 
 	char *retry_string = RETRY;
@@ -137,11 +136,13 @@ int main(int argc, char **argv){
 
 	/* We will not print errors here, as verbose status has not yet been set. */
 	if((io = (struct io_helper *) calloc(1, sizeof(struct io_helper))) == NULL){
-		return(-2);
+		report_error("main(): calloc(1, %d): %s", (int) sizeof(struct io_helper), strerror(errno));
+		return(-1);
 	}
 
 	if((config = (struct config_helper *) calloc(1, sizeof(struct config_helper))) == NULL){
-		return(-3);
+		report_error("main(): calloc(1, %d): %s", (int) sizeof(struct config_helper), strerror(errno));
+		return(-1);
 	}
 
 
@@ -235,7 +236,8 @@ int main(int argc, char **argv){
 			case 'L':
 			case 'D':
 				if((tmp_proxy_ptr = calloc(1, sizeof(struct proxy_node))) == NULL){
-					return(-4);
+					report_error("main(): calloc(1, %d): %s", (int) sizeof(struct proxy_node), strerror(errno));
+					return(-1);
 				}
 
 				if(!cur_proxy_ptr){
@@ -302,47 +304,31 @@ int main(int argc, char **argv){
 	}
 
 	/* Before anything else, let's try and get the log file opened. */
-  if(wordexp(config->log_file, &log_file_exp, 0) && verbose){
-    fprintf(stderr, "%s: %d: wordexp(%s, %lx, 0): %s\r\n", \
-        program_invocation_short_name, io->controller, \
-        config->log_file, (unsigned long)  &log_file_exp, \
-        strerror(errno));
+  if(wordexp(config->log_file, &log_file_exp, 0)){
+    report_error("main(): wordexp(%s, %lx, 0): %s", config->log_file, (unsigned long)  &log_file_exp, strerror(errno));
     return(-1);
   }
 
   if(log_file_exp.we_wordc != 1){
-    fprintf(stderr, "%s: %d: Invalid path: %s\r\n", \
-        program_invocation_short_name, io->controller, \
-        config->log_file);
+    report_error("main(): Invalid path: %s", config->log_file);
     return(-1);
   }
 
 	if(config->log_file){
-		if((io->log_stream = fopen(log_file_exp.we_wordv[0], "a")) == NULL && verbose){
-			fprintf(stderr, "%s: %d: fopen(\"%s\", \"a\"): %s\r\n", \
-					program_invocation_short_name, io->controller, \
-					log_file_exp.we_wordv[0], \
-					strerror(errno));
+		if((io->log_stream = fopen(log_file_exp.we_wordv[0], "a")) == NULL){
+			report_error("main(): fopen(\"%s\", \"a\"): %s", log_file_exp.we_wordv[0], strerror(errno));
 			return(-1);
 		}
 	}
 
 	/* Grab some entropy and seed rand(). */
 	if((tmp_fd = open("/dev/random", O_RDONLY)) == -1){
-		if(verbose){
-			fprintf(stderr, "%s: %d: open(\"/dev/random\", O_RDONLY): %s\r\n", \
-					program_invocation_short_name, io->controller, \
-					strerror(errno));
-		}
+		report_error("main(): open(\"/dev/random\", O_RDONLY): %s", strerror(errno));
 		return(-1);
 	}
 
 	if((retval = read(tmp_fd, &seed, sizeof(seed))) != sizeof(seed)){
-		if(verbose){
-			fprintf(stderr, "%s: %d: read(%d, %lx, %d): Unable to fill seed!\r\n", \
-					program_invocation_short_name, io->controller, \
-					tmp_fd, (unsigned long) &seed, (int) sizeof(seed));
-		}
+		report_error("main(): read(%d, %lx, %d): Unable to fill seed!", tmp_fd, (unsigned long) &seed, (int) sizeof(seed));
 		return(-1);
 	}
 
@@ -384,11 +370,7 @@ int main(int argc, char **argv){
 	errno = 0;
 	config->retry_start = strtol(retry_string, &tmp_ptr, 10);
 	if(errno){
-		if(verbose){
-			fprintf(stderr, "%s: %d: strtol(%s, %lx, 10): %s\r\n", \
-					program_invocation_short_name, io->controller, retry_string, \
-					(unsigned long) &tmp_ptr, strerror(errno));
-		}
+		report_error("main(): strtol(%s, %lx, 10): %s", retry_string, (unsigned long) &tmp_ptr, strerror(errno));
 		return(-1);
 	}
 
@@ -399,21 +381,17 @@ int main(int argc, char **argv){
 	errno = 0;
 	config->retry_stop = strtol(tmp_ptr, NULL, 10);
 	if(errno){
-		if(verbose){
-			fprintf(stderr, "%s: %d: strtol(%s, NULL, 10): %s\n", \
-					program_invocation_short_name, io->controller, \
-					tmp_ptr, strerror(errno));
-		}
+		report_error("main(): strtol(%s, NULL, 10): %s", tmp_ptr, strerror(errno));
 		return(-1);
 	}
 
 	/* Call the appropriate conductor. */
 	if(io->controller){
 		do{
-			retval = do_control(io, config);
+			retval = do_control(config);
 		} while(retval != -1 && config->keepalive);
 	}else{
-		retval = do_target(io, config);
+		retval = do_target(config);
 	}
 
 	return(retval);

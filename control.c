@@ -12,7 +12,7 @@
  * Purpose: This is the defining function for a control node.
  *
  **********************************************************************************************************************/
-int do_control(struct io_helper *io, struct config_helper *config){
+int do_control(struct config_helper *config){
 
 	int i;
 	int retval;
@@ -29,50 +29,34 @@ int do_control(struct io_helper *io, struct config_helper *config){
 	char *tmp_ptr;
 	int io_bytes;
 
-	struct proxy_request_node *cur_proxy_req_node;
-	struct proxy_node *cur_proxy_node;
-
   /* We use this as a shorthand to make message syntax more readable. */
 	message = &io->message;
 
 	/* Initialize the structures we will leverage. */
 	if((tty_winsize = (struct winsize *) calloc(1, sizeof(struct winsize))) == NULL){
-		report_error(io, "%s: %d: calloc(1, %d): %s\r\n", \
-				program_invocation_short_name, io->controller, \
-				(int) sizeof(struct winsize), strerror(errno));
+		report_error("do_control(): calloc(1, %d): %s", (int) sizeof(struct winsize), strerror(errno));
 		return(-1);
 	}
 
 	if(wordexp(config->rc_file, &rc_file_exp, 0)){
-		report_error(io, "%s: %d: wordexp(%s, %lx, 0): %s\r\n", \
-				program_invocation_short_name, io->controller, \
-				config->rc_file, (unsigned long)  &rc_file_exp, \
-				strerror(errno));
+		report_error("do_control(): wordexp(%s, %lx, 0): %s", config->rc_file, (unsigned long)  &rc_file_exp, strerror(errno));
 		return(-1);
 	}
 
 	if(rc_file_exp.we_wordc != 1){
-		report_error(io, "%s: %d: Invalid path: %s\r\n", \
-				program_invocation_short_name, io->controller, \
-				config->rc_file);
+		report_error("do_control(): Invalid path: %s", config->rc_file);
 		return(-1);
 	}
 
 	/* Set up the network connection. */
-	if(init_io_controller(io, config) == -1){
-		report_error(io, "%s: %d: init_io_listen(%lx, %lx): %s\r\n", \
-				program_invocation_short_name, io->controller, \
-				(unsigned long) io, (unsigned long) config, \
-				strerror(errno));
+	if(init_io_controller(config) == -1){
+		report_error("do_control(): init_io_controller(%lx): %s", (unsigned long) config, strerror(errno));
 		return(-1);
 	}
 
 	/* Prepare the message buffer. */
-	if(negotiate_protocol(io) == -1){
-		report_error(io, "%s: %d: negotiate_protocol(%lx): %s\r\n", \
-				program_invocation_short_name, io->controller, \
-				(unsigned long) io, \
-				strerror(errno));
+	if(negotiate_protocol() == -1){
+		report_error("do_control(): negotiate_protocol(): %s", strerror(errno));
 		return(-1);
 	}
 
@@ -80,31 +64,25 @@ int do_control(struct io_helper *io, struct config_helper *config){
 	if(verbose){
 		printf("Initializing...");
 	}
+	report_log("Controller: Initializing.");
 
 	/*  - Agree on interactive / non-interactive mode. */
 	message->data_type = DT_INIT;
 	message->data_len = sizeof(config->interactive);
 	memcpy(message->data, &config->interactive, sizeof(config->interactive));
 
-	if(message_push(io) == -1){
-		report_error(io, "%s: %d: message->push(%lx): %s\n", \
-				program_invocation_short_name, io->controller, \
-				(unsigned long) io, \
-				strerror(errno));
+	if(message_push() == -1){
+		report_error("do_control(): message->push(): %s", strerror(errno));
 		return(-1);
 	}
 
-	if(message_pull(io) == -1){
-		report_error(io, "%s: %d: message_pull(%lx): %s\r\n", \
-				program_invocation_short_name, io->controller, \
-				(unsigned long) io, \
-				strerror(errno));
+	if(message_pull() == -1){
+		report_error("do_control(): message_pull(): %s", strerror(errno));
 		return(-1);
 	}
 
 	if(message->data_type != DT_INIT){
-		report_error(io, "%s: %d: DT_INIT interactive: Protocol violation!\r\n", \
-				program_invocation_short_name, io->controller); 
+		report_error("do_control(): DT_INIT interactive: Protocol violation!");
 		return(-1);
 	}
 
@@ -114,7 +92,7 @@ int do_control(struct io_helper *io, struct config_helper *config){
 	}
 
 	if(!config->interactive){
-		retval = broker(io, config);
+		retval = broker(config);
 
 #ifdef OPENSSL
 		if(config->encryption){
@@ -137,20 +115,14 @@ int do_control(struct io_helper *io, struct config_helper *config){
 		memcpy(message->data, config->shell, message->data_len);
 	}
 
-	if(message_push(io) == -1){
-		report_error(io, "%s: %d: message_push(%lx): %s\n", \
-				program_invocation_short_name, io->controller, \
-				(unsigned long) io, \
-				strerror(errno));
+	if(message_push() == -1){
+		report_error("do_control(): message_push(): %s", strerror(errno));
 		return(-1);
 	}
 
 	/*  - Send initial environment data. */
 	if((exec_envp = string_to_vector(DEFAULT_ENV)) == NULL){
-		report_error(io, "%s: %d: string_to_vector(%s): %s\n", \
-				program_invocation_short_name, io->controller, \
-				DEFAULT_ENV, \
-				strerror(errno));
+		report_error("do_control(): string_to_vector(%s): %s", DEFAULT_ENV, strerror(errno));
 		return(-1);
 	}
 
@@ -171,8 +143,7 @@ int do_control(struct io_helper *io, struct config_helper *config){
 	}
 
 	if(io_bytes > io->message_data_size){
-		report_error(io, "%s: %d: Environment string too long!\n", \
-				program_invocation_short_name, io->controller);
+		report_error("do_control(): Environment string too long!");
 		return(-1);
 	}
 
@@ -189,8 +160,7 @@ int do_control(struct io_helper *io, struct config_helper *config){
 		*(message->data + message->data_len++) = '=';
 
 		if((tmp_ptr = getenv(exec_envp[i])) == NULL){
-			report_error(io, "%s: No such environment variable \"%s\". Ignoring.\n", \
-					program_invocation_short_name, exec_envp[i]);
+			report_error("do_control(): No such environment variable \"%s\". Ignoring.", exec_envp[i]);
 		}else{
 			io_bytes = strlen(tmp_ptr);
 			memcpy((message->data + message->data_len), tmp_ptr, io_bytes);
@@ -200,19 +170,14 @@ int do_control(struct io_helper *io, struct config_helper *config){
 
 	free_vector(exec_envp);
 
-	if(message_push(io) == -1){
-		report_error(io, "%s: %d: message_push(%lx): %s\n", \
-				program_invocation_short_name, io->controller, \
-				(unsigned long) io, \
-				strerror(errno));
+	if(message_push() == -1){
+		report_error("do_control(): message_push(): %s", strerror(errno));
 		return(-1);
 	}
 
 	/*  - Send initial termios data. */
 	if(ioctl(STDIN_FILENO, TIOCGWINSZ, tty_winsize) == -1){
-		report_error(io, "%s: %d: ioctl(STDIN_FILENO, TIOCGWINSZ, %lx): %s\n", \
-				program_invocation_short_name, io->controller, \
-				(unsigned long) tty_winsize, strerror(errno));
+		report_error("do_control(): ioctl(STDIN_FILENO, TIOCGWINSZ, %lx): %s", (unsigned long) tty_winsize, strerror(errno));
 		return(-1);
 	}
 
@@ -222,11 +187,8 @@ int do_control(struct io_helper *io, struct config_helper *config){
 	*((unsigned short *) (message->data + message->data_len)) = htons(tty_winsize->ws_col);
 	message->data_len += sizeof(tty_winsize->ws_col);
 
-	if(message_push(io) == -1){
-		report_error(io, "%s: %d: message_push(%lx): %s\n", \
-				program_invocation_short_name, io->controller, \
-				(unsigned long) io, \
-				strerror(errno));
+	if(message_push() == -1){
+		report_error("do_control(): message_push(): %s", strerror(errno));
 		return(-1);
 	}
 
@@ -235,10 +197,7 @@ int do_control(struct io_helper *io, struct config_helper *config){
 
 	/*  - Set local terminal to raw.  */
 	if(tcgetattr(STDIN_FILENO, &saved_termios_attrs) == -1){
-		report_error(io, "%s: %d: tcgetattr(STDIN_FILENO, %lx): %s\n", \
-				program_invocation_short_name, io->controller, \
-				(unsigned long) &saved_termios_attrs, \
-				strerror(errno));
+		report_error("do_control(): tcgetattr(STDIN_FILENO, %lx): %s", (unsigned long) &saved_termios_attrs, strerror(errno));
 		return(-1);
 	}
 
@@ -254,15 +213,14 @@ int do_control(struct io_helper *io, struct config_helper *config){
 	new_termios_attrs.c_cc[VTIME] = 0;
 
 	if(tcsetattr(STDIN_FILENO, TCSANOW, &new_termios_attrs) == -1){
-		report_error(io, "%s: %d: tcsetattr(STDIN_FILENO, TCSANOW, %lx): %s\n", \
-				program_invocation_short_name, io->controller, \
-				(unsigned long) &new_termios_attrs, strerror(errno));
+		report_error("do_control(): tcsetattr(STDIN_FILENO, TCSANOW, %lx): %s", (unsigned long) &new_termios_attrs, strerror(errno));
 		return(-1);
 	}	
 
 	if(verbose){
 		printf("\tDone!\r\n\n");
 	}
+	report_log("Controller: Initializtion complete.");
 
 	/*  - Send the commands in the rc file. */
 	if((rc_fd = open(rc_file_exp.we_wordv[0], O_RDONLY)) != -1){
@@ -271,20 +229,14 @@ int do_control(struct io_helper *io, struct config_helper *config){
 
 		while((io_bytes = read(rc_fd, message->data, io->message_data_size))){
 			if(io_bytes == -1){
-				report_error(io, "%s: %d: read(%d, %lx, %d): %s\r\n", \
-						program_invocation_short_name, io->controller, \
-						rc_fd, (unsigned long) message->data, io->message_data_size, \
-						strerror(errno));
+				report_error("do_control(): read(%d, %lx, %d): %s", rc_fd, (unsigned long) message->data, io->message_data_size, strerror(errno));
 				return(-1);
 			}
 
 			message->data_len = io_bytes;
 
-			if(message_push(io) == -1){
-				report_error(io, "%s: %d: message_push(%lx): %s\r\n", \
-						program_invocation_short_name, io->controller, \
-						(unsigned long) io, \
-						strerror(errno));
+			if(message_push() == -1){
+				report_error("do_control(): message_push(): %s", strerror(errno));
 				return(-1);
 			}
 		}
@@ -292,54 +244,23 @@ int do_control(struct io_helper *io, struct config_helper *config){
 		close(rc_fd);
 	}
 
-	/* Set up proxies requested during launch. */
-	// XXX Maybe if we do this in main() it will work from either end (control/target) as invoked from the commandline. (target commandline would open backwards...?)
-	cur_proxy_req_node = config->proxy_request_head;	
-	while(cur_proxy_req_node){
-
-		cur_proxy_node = proxy_node_new(cur_proxy_req_node->request_string, cur_proxy_req_node->type);	
-
-		if(!cur_proxy_node){
-			report_error(io, "%s: %d: proxy_node_new(%s, %d): %s\r\n", \
-					program_invocation_short_name, io->controller, \
-					cur_proxy_req_node->request_string, cur_proxy_req_node->type, \
-					strerror(errno));
-		}else{
-
-			if(!io->proxy_head){
-				io->proxy_head = cur_proxy_node;
-				io->proxy_tail = cur_proxy_node;
-			}else{
-				io->proxy_tail->next = cur_proxy_node;
-				io->proxy_tail = cur_proxy_node;
-			}
-		}
-		cur_proxy_req_node = cur_proxy_req_node->next;
-	}
-
 	err_flag = 0;
 
 	/*  - Enter broker() for tty brokering. */
-	retval = broker(io, config);
+	retval = broker(config);
 
 	if(retval == -1 && !io->eof){
 
 		if(errno == ECONNRESET){
 			err_flag = errno;
 		}else{
-			report_error(io, "%s: %d: broker(%lx, %lx): %s\r\n", \
-					program_invocation_short_name, io->controller, \
-					(unsigned long) io, (unsigned long) config, \
-					strerror(errno));
+			report_error("do_control(): broker(%lx): %s", (unsigned long) config, strerror(errno));
 		}
 	}
 
 	/*  - Reset local term. */
 	if(tcsetattr(STDIN_FILENO, TCSANOW, &saved_termios_attrs) == -1){
-		report_error(io, "%s: %d: tcsetattr(STDIN_FILENO, TCSANOW, %lx): %s\r\n", \
-				program_invocation_short_name, io->controller, \
-				(unsigned long) &saved_termios_attrs, \
-				strerror(errno));
+		report_error("do_control(): tcsetattr(STDIN_FILENO, TCSANOW, %lx): %s", (unsigned long) &saved_termios_attrs, strerror(errno));
 	}
 
 	/*  - Exit. */
@@ -347,8 +268,9 @@ int do_control(struct io_helper *io, struct config_helper *config){
 		if(verbose){
 			printf("Good-bye!\n");
 		}
+		report_log("Controller: Good-bye!");
 	}else{
-		while(message_pull(io) > 0){
+		while(message_pull() > 0){
 			if(message->data_type == DT_TTY){
 				write(STDERR_FILENO, message->data, message->data_len);
 			}

@@ -55,12 +55,7 @@ char **string_to_vector(char *command_string){
 
 	/*  Now, (count / 2) will be the number of tokens. Since we know the number of tokens, lets setup argv. */
 	if((argv = (char **) malloc((sizeof(char *) * ((count / 2) + 1)))) == NULL){
-		if(verbose){
-			fprintf(stderr, "%s: string_to_vector(): malloc(%d): %s\r\n", \
-					program_invocation_short_name, \
-					(int) ((sizeof(char *) * ((count / 2) + 1))), \
-					strerror(errno));
-		}
+		report_error("string_to_vector(): malloc(%d): %s", (int) ((sizeof(char *) * ((count / 2) + 1))), strerror(errno));
 		return(NULL);
 	}
 	memset(argv, 0, (sizeof(char *) * ((count / 2) + 1)));
@@ -76,12 +71,7 @@ char **string_to_vector(char *command_string){
 			if(!was_space){
 				/*  end of a token. */
 				if((argv[i] = (char *) malloc(sizeof(char) * (len + 1))) == NULL){
-					if(verbose){
-						fprintf(stderr, "%s: string_to_vector(): malloc(%d): %s\r\n", \
-								program_invocation_short_name, \
-								(int) (sizeof(char) * (len + 1)), \
-								strerror(errno));
-					}
+					report_error("string_to_vector(): malloc(%d): %s", (int) (sizeof(char) * (len + 1)), strerror(errno));
 					goto CLEAN_UP;
 				}
 				memset(argv[i], 0, sizeof(char) * (len + 1));
@@ -106,11 +96,7 @@ char **string_to_vector(char *command_string){
 	/*  Same final token termination case. */
 	if(count % 2){
 		if((argv[i] = malloc(sizeof(char) * (len + 1))) == NULL){
-			if(verbose){
-				fprintf(stderr, "%s: string_to_vector(): malloc(%d): %s\r\n", \
-						program_invocation_short_name, (int) (sizeof(char) * (len + 1)), \
-						strerror(errno));
-			}
+			report_error("string_to_vector(): malloc(%d): %s", (int) (sizeof(char) * (len + 1)), strerror(errno));
 			goto CLEAN_UP;
 		}
 		memset(argv[i], 0, sizeof(char) * (len + 1));

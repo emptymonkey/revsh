@@ -13,7 +13,7 @@
  * Purpose: Fill our buffer.
  *
  **********************************************************************************************************************/
-int remote_read_plaintext(struct io_helper *io, void *buff, size_t count){
+int remote_read_plaintext(void *buff, size_t count){
 
 	int retval;
 	int io_bytes;
@@ -35,12 +35,8 @@ int remote_read_plaintext(struct io_helper *io, void *buff, size_t count){
 			FD_SET(io->remote_fd, &fd_select);
 
 			if(select(io->remote_fd + 1, &fd_select, NULL, NULL, NULL) == -1){
-				if(verbose){
-					fprintf(stderr, "%s: %d: remote_read_plaintext(): select(%d, %lx, NULL, NULL, NULL): %s\r\n", \
-							program_invocation_short_name, io->controller, \
-							io->remote_fd + 1, (unsigned long) &fd_select, \
-							strerror(errno));
-				}
+				report_error("remote_read_plaintext(): select(%d, %lx, NULL, NULL, NULL): %s", \
+						io->remote_fd + 1, (unsigned long) &fd_select, strerror(errno));
 				return(-1);
 			}
 		}else{
@@ -55,12 +51,8 @@ int remote_read_plaintext(struct io_helper *io, void *buff, size_t count){
 
 		}else if(retval == -1){
 			if(!(errno == EINTR  || errno == EAGAIN)){
-				if(verbose){
-					fprintf(stderr, "%s: %d: read(%d, %lx, %d): %s\r\n", \
-							program_invocation_short_name, io->controller, \
-							io->remote_fd, (unsigned long) &tmp_ptr, (int) count, \
-							strerror(errno));
-				}
+				report_error("remote_read_plaintext(): read(%d, %lx, %d): %s", \
+						io->remote_fd, (unsigned long) &tmp_ptr, (int) count, strerror(errno));
 				return(-1);
 			}
 
@@ -86,7 +78,7 @@ int remote_read_plaintext(struct io_helper *io, void *buff, size_t count){
  * Purpose: Empty our buffer.
  *
  **********************************************************************************************************************/
-int remote_write_plaintext(struct io_helper *io, void *buff, size_t count){
+int remote_write_plaintext(void *buff, size_t count){
 
 	int retval;
 	int io_bytes;
@@ -108,12 +100,8 @@ int remote_write_plaintext(struct io_helper *io, void *buff, size_t count){
 			FD_SET(io->remote_fd, &fd_select);
 
 			if(select(io->remote_fd + 1, NULL, &fd_select, NULL, NULL) == -1){
-				if(verbose){
-					fprintf(stderr, "%s: %d: remote_write_plaintext(): select(%d, NULL, %lx, NULL, NULL): %s\r\n", \
-							program_invocation_short_name, io->controller, \
-							io->remote_fd + 1, (unsigned long) &fd_select, \
-							strerror(errno));
-				}
+				report_error("remote_write_plaintext(): select(%d, NULL, %lx, NULL, NULL): %s", \
+						io->remote_fd + 1, (unsigned long) &fd_select, strerror(errno));
 				return(-1);
 			}
 		}else{
@@ -124,12 +112,8 @@ int remote_write_plaintext(struct io_helper *io, void *buff, size_t count){
 
 		if(retval == -1){
 			if(!(errno == EINTR || errno == EAGAIN)){
-				if(verbose){
-					fprintf(stderr, "%s: %d: read(%d, %lx, %d): %s\r\n", \
-							program_invocation_short_name, io->controller, \
-							io->remote_fd, (unsigned long) &tmp_ptr, (int) count, \
-							strerror(errno));
-				}
+				report_error("remote_write_plaintext(): read(%d, %lx, %d): %s", \
+						io->remote_fd, (unsigned long) &tmp_ptr, (int) count, strerror(errno));
 				return(-1);
 			}
 
@@ -145,7 +129,7 @@ int remote_write_plaintext(struct io_helper *io, void *buff, size_t count){
 
 
 /* The decision below to use gethostbyname() instead of getaddrinfo() is a design decision. */
-/* If the application is being built without SSL, then the target host is may be a much older host with */
+/* If the application is being built without SSL, then the target host is probably a much older host with */
 /* equally old network libraries. The "no SSL" case would better be considered here as the "deprecated best */
 /* effort, only around for extreame backward compatability" case. */
 
@@ -160,7 +144,7 @@ int remote_write_plaintext(struct io_helper *io, void *buff, size_t count){
  * Purpose: To initialize a controller's network io layer.
  *
  **********************************************************************************************************************/
-int init_io_controller(struct io_helper *io, struct config_helper *config){
+int init_io_controller(struct config_helper *config){
 
 	int tmp_sock;
 
@@ -175,56 +159,45 @@ int init_io_controller(struct io_helper *io, struct config_helper *config){
 
 	struct sigaction *act = NULL;
 
+	socklen_t len;
+	struct sockaddr_storage addr;
+	char ipstr[INET6_ADDRSTRLEN];
+	int port;
+	struct sockaddr_in *s;
+	struct sockaddr_in6 *s6;
+
 
 	/* In the no ssl build, there is no difference between a controller in bindshell mode, and a target. */
 	/* As such, we'll just pass through to the other rather than repeat code. */
 	if(io->controller && config->bindshell){
-		return(init_io_target(io, config));
+		return(init_io_target(config));
 	}
 
 	/* Initialize the structures we will be using. */
 	if((act = (struct sigaction *) calloc(1, sizeof(struct sigaction))) == NULL){
-		if(verbose){
-			fprintf(stderr, "%s: %d: calloc(1, %d): %s\r\n", \
-					program_invocation_short_name, io->controller, \
-					(int) sizeof(struct sigaction), \
-					strerror(errno));
-		}
+		report_error("init_io_controller(): calloc(1, %d): %s", \
+				(int) sizeof(struct sigaction), strerror(errno));
 		return(-1);
 	}
 
 	/* Set up our socket. */
 	ip_address_len = strlen(config->ip_addr);
 	if((ip_address = calloc(ip_address_len + 1, sizeof(char))) == NULL){
-		if(verbose){
-			fprintf(stderr, "%s: %d: calloc(%d, %d): %s\n", \
-					program_invocation_short_name, io->controller, \
-					ip_address_len, (int) sizeof(char), \
-					strerror(errno));
-		}
+		report_error("init_io_controller(): calloc(%d, %d): %s", ip_address_len, (int) sizeof(char), strerror(errno));
 		return(-1);
 	}
 
 	memcpy(ip_address, config->ip_addr, ip_address_len);
 
 	if((ip_port = strchr(ip_address, ':')) == NULL){
-		if(verbose){
-			fprintf(stderr, "%s: %d: strchr(%s, ':'): Port not found!\n", \
-					program_invocation_short_name, io->controller, \
-					ip_address);
-		}
+		report_error("init_io_controller(): strchr(%s, ':'): Port not found!", ip_address);
 		return(-1);
 	}
 	*ip_port = '\0';
 	ip_port++;
 
 	if((host = gethostbyname(ip_address)) == NULL){
-		if(verbose){
-			fprintf(stderr, "%s: %d: gethostbyname(%s): %s\n", \
-					program_invocation_short_name, io->controller, \
-					ip_address, \
-					strerror(errno));
-		}
+		report_error("init_io_controller(): gethostbyname(%s): %s", ip_address, strerror(errno));
 		return(-1);
 	}
 
@@ -233,21 +206,13 @@ int init_io_controller(struct io_helper *io, struct config_helper *config){
 	name.sin_port = htons(strtol(ip_port, NULL, 10));
 
 	if((tmp_sock = socket(AF_INET, SOCK_STREAM, 0)) == -1){
-		if(verbose){
-			fprintf(stderr, "%s: %d: socket(AF_INET, SOCK_STREAM, 0): %s\n", \
-					program_invocation_short_name, io->controller, \
-					strerror(errno));
-		}
+		report_error("init_io_controller(): socket(AF_INET, SOCK_STREAM, 0): %s", strerror(errno));
 		return(-1);
 	}
 
 	if(setsockopt(tmp_sock, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) == -1){
-		if(verbose){
-			fprintf(stderr, "%s: %d: setsockopt(%d, SOL_SOCKET, SO_REUSEADDR, %lx, %d): %s\n", \
-					program_invocation_short_name, io->controller, \
-					tmp_sock, (unsigned long) &yes, (int) sizeof(yes), \
-					strerror(errno));
-		}
+		report_error("init_io_controller(): setsockopt(%d, SOL_SOCKET, SO_REUSEADDR, %lx, %d): %s", \
+				tmp_sock, (unsigned long) &yes, (int) sizeof(yes), strerror(errno));
 		return(-1);
 	}
 
@@ -255,11 +220,7 @@ int init_io_controller(struct io_helper *io, struct config_helper *config){
 	act->sa_handler = catch_alarm;
 
 	if(sigaction(SIGALRM, act, NULL) == -1){
-		if(verbose){
-			fprintf(stderr, "%s: %d: sigaction(%d, %lx, %p): %s\r\n", \
-					program_invocation_short_name, io->controller, \
-					SIGALRM, (unsigned long) act, NULL, strerror(errno));
-		}
+		report_error("init_io_controller(): sigaction(%d, %lx, %p): %s", SIGALRM, (unsigned long) act, NULL, strerror(errno));
 		return(-1);
 	}
 
@@ -269,64 +230,57 @@ int init_io_controller(struct io_helper *io, struct config_helper *config){
 		printf("Listening on %s...", config->ip_addr);
 		fflush(stdout);
 	}
+	report_log("Controller: Listening on %s.", config->ip_addr);
 
 	if(bind(tmp_sock, (struct sockaddr *) &name, sizeof(name)) == -1){
-		if(verbose){
-			fprintf(stderr, "%s: %d: bind(%d, %lx, %d): %s\n", \
-					program_invocation_short_name, io->controller, \
-					tmp_sock, (unsigned long) &name, (int) sizeof(name), \
-					strerror(errno));
-		}
+		report_error("init_io_controller(): bind(%d, %lx, %d): %s", \
+				tmp_sock, (unsigned long) &name, (int) sizeof(name), strerror(errno));
 		return(-1);
 	}
 
 	if(listen(tmp_sock, 1) == -1){
-		if(verbose){
-			fprintf(stderr, "%s: %d: listen(%d, 1): %s\n", \
-					program_invocation_short_name, io->controller, \
-					tmp_sock, \
-					strerror(errno));
-		}
+		report_error("init_io_controller(): listen(%d, 1): %s", tmp_sock, strerror(errno));
 		return(-1);
 	}  
 
 	if((io->remote_fd = accept(tmp_sock, NULL, NULL)) == -1){
-		if(verbose){
-			fprintf(stderr, "%s: %d: accept(%d, NULL, NULL): %s\n", \
-					program_invocation_short_name, io->controller, \
-					tmp_sock, \
-					strerror(errno));
-		}
+		report_error("init_io_controller(): accept(%d, NULL, NULL): %s", tmp_sock, strerror(errno));
 		return(-1);
 	}
 
 	if(close(tmp_sock) == -1){
-		if(verbose){
-			fprintf(stderr, "%s: %d: close(%d): %s\n", \
-					program_invocation_short_name, io->controller, \
-					tmp_sock, \
-					strerror(errno));
-		}
+		report_error("init_io_controller(): close(%d): %s", tmp_sock, strerror(errno));
 		return(-1);
 	}
 
 	act->sa_handler = SIG_DFL;
 
 	if(sigaction(SIGALRM, act, NULL) == -1){
-		if(verbose){
-			fprintf(stderr, "%s: %d: sigaction(%d, %lx, %p): %s\r\n", \
-					program_invocation_short_name, io->controller, \
-					SIGALRM, (unsigned long) act, NULL, \
-					strerror(errno));
-		}
+		report_error("init_io_controller(): sigaction(%d, %lx, %p): %s", SIGALRM, (unsigned long) act, NULL, strerror(errno));
 		return(-1);
 	}
 
 	alarm(0);
 
-	if(verbose){
-		printf("\tConnected!\n");
+	len = sizeof addr;
+	if(getpeername(io->remote_fd, (struct sockaddr*) &addr, &len) == -1){
+		report_error("init_io_controller(): getpeername(%d, %lx, %lx): %s", io->remote_fd, (unsigned long) &addr, &len, strerror(errno));
 	}
+
+	if(addr.ss_family == AF_INET){
+		s = (struct sockaddr_in *) &addr;
+		port = ntohs(s->sin_port);
+		inet_ntop(AF_INET, &s->sin_addr, ipstr, sizeof ipstr);
+	}else{
+		s6 = (struct sockaddr_in6 *) &addr;
+		port = ntohs(s6->sin6_port);
+		inet_ntop(AF_INET6, &s6->sin6_addr, ipstr, sizeof ipstr);
+	}
+
+	if(verbose){
+		printf("\tConnected from %s:%d\n", ipstr, port);
+	}
+	report_log("Controller: Connected from %s:%d.", ipstr, port);
 
 	free(ip_address);
 
@@ -345,7 +299,7 @@ int init_io_controller(struct io_helper *io, struct config_helper *config){
  * Purpose: To initialize a target's network io layer.
  *
  **********************************************************************************************************************/
-int init_io_target(struct io_helper *io, struct config_helper *config){
+int init_io_target(struct config_helper *config){
 
 	int retval;
 
@@ -368,29 +322,19 @@ int init_io_target(struct io_helper *io, struct config_helper *config){
 	/* In the no ssl build, there is no difference between a target in bindshell mode, and a controller. */
 	/* As such, we'll just pass through to the other rather than repeat code. */
 	if(!io->controller && config->bindshell){
-		return(init_io_controller(io, config));
+		return(init_io_controller(config));
 	}
 
 	/* Initialize the structures we will need. */
 	if((act = (struct sigaction *) calloc(1, sizeof(struct sigaction))) == NULL){
-		if(verbose){
-			fprintf(stderr, "%s: %d: calloc(1, %d): %s\r\n", \
-					program_invocation_short_name, io->controller, \
-					(int) sizeof(struct sigaction), \
-					strerror(errno));
-		}
+		report_error("init_io_target(): calloc(1, %d): %s", (int) sizeof(struct sigaction), strerror(errno));
 		return(-1);
 	}
 
 	/* Open our socket. */
 	ip_address_len = strlen(config->ip_addr);
 	if((ip_address = calloc(ip_address_len + 1, sizeof(char))) == NULL){
-		if(verbose){
-			fprintf(stderr, "%s: %d: calloc(%d, %d): %s\n", \
-					program_invocation_short_name, io->controller, \
-					ip_address_len, (int) sizeof(char), \
-					strerror(errno));
-		}
+		report_error("init_io_target(): calloc(%d, %d): %s", ip_address_len, (int) sizeof(char), strerror(errno));
 		return(-1);
 	}
 
@@ -398,23 +342,14 @@ int init_io_target(struct io_helper *io, struct config_helper *config){
 
 
 	if((ip_port = strchr(ip_address, ':')) == NULL){
-		if(verbose){
-			fprintf(stderr, "%s: %d: strchr(%s, ':'): Port not found!\n", \
-					program_invocation_short_name, io->controller, \
-					ip_address);
-		}
+		report_error("init_io_target(): strchr(%s, ':'): Port not found!", ip_address);
 		return(-1);
 	}
 	*ip_port = '\0';
 	ip_port++;
 
 	if((host = gethostbyname(ip_address)) == NULL){
-		if(verbose){
-			fprintf(stderr, "%s: %d: gethostbyname(%s): %s\n", \
-					program_invocation_short_name, io->controller, \
-					ip_address, \
-					strerror(errno));
-		}
+		report_error("init_io_target(): gethostbyname(%s): %s", ip_address, strerror(errno));
 		return(-1);
 	}
 
@@ -423,11 +358,7 @@ int init_io_target(struct io_helper *io, struct config_helper *config){
 	name.sin_port = htons(strtol(ip_port, NULL, 10));
 
 	if((tmp_sock = socket(AF_INET, SOCK_STREAM, 0)) == -1){
-		if(verbose){
-			fprintf(stderr, "%s: %d: socket(AF_INET, SOCK_STREAM, 0): %s\n", \
-					program_invocation_short_name, io->controller, \
-					strerror(errno));
-		}
+		report_error("init_io_target(): socket(AF_INET, SOCK_STREAM, 0): %s", strerror(errno));
 		return(-1);
 	}
 
@@ -435,11 +366,7 @@ int init_io_target(struct io_helper *io, struct config_helper *config){
 	act->sa_handler = catch_alarm;
 
 	if(sigaction(SIGALRM, act, NULL) == -1){
-		if(verbose){
-			fprintf(stderr, "%s: %d: sigaction(%d, %lx, %p): %s\r\n", \
-					program_invocation_short_name, io->controller, \
-					SIGALRM, (unsigned long) act, NULL, strerror(errno));
-		}
+		report_error("init_io_target(): sigaction(%d, %lx, %p): %s", SIGALRM, (unsigned long) act, NULL, strerror(errno));
 		return(-1);
 	}
 
@@ -453,12 +380,7 @@ int init_io_target(struct io_helper *io, struct config_helper *config){
 	while((retval = connect(tmp_sock, (struct sockaddr *) &name, sizeof(name))) && config->retry_start){
 
 		if(retval == -1 && !(errno == ECONNREFUSED || errno == ETIMEDOUT)){
-			if(verbose){
-				fprintf(stderr, "%s: %d: connect(%d, %lx, %d): %s\n", \
-						program_invocation_short_name, io->controller, \
-						io->remote_fd, (unsigned long) &name, (int) sizeof(name), \
-						strerror(errno));
-			}
+			report_error("init_io_target(): connect(%d, %lx, %d): %s", io->remote_fd, (unsigned long) &name, (int) sizeof(name), strerror(errno));
 			return(-1);
 		}
 
@@ -489,11 +411,7 @@ int init_io_target(struct io_helper *io, struct config_helper *config){
 	act->sa_handler = SIG_DFL;
 
 	if(sigaction(SIGALRM, act, NULL) == -1){
-		if(verbose){
-			fprintf(stderr, "%s: %d: sigaction(%d, %lx, %p): %s\r\n", \
-					program_invocation_short_name, io->controller, \
-					SIGALRM, (unsigned long) act, NULL, strerror(errno));
-		}
+		report_error("init_io_target(): sigaction(%d, %lx, %p): %s", SIGALRM, (unsigned long) act, NULL, strerror(errno));
 		return(-1);
 	}
 
