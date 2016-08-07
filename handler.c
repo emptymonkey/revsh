@@ -217,12 +217,16 @@ int handle_message_dt_proxy_ht_create(){
 
 	errno = 0;
 	if((tmp_connection_node->fd = proxy_connect(tmp_connection_node->rhost_rport)) == -1){
-		report_error("Unable to connect to %s.", tmp_connection_node->rhost_rport);
+
+		if(verbose){
+			fprintf(stderr, "\rproxy_connect(\"%s\"): Unable to connect: %s\n", tmp_connection_node->rhost_rport, strerror(errno));
+		}
 
 		message->data_type = DT_PROXY;
 		message->header_type = DT_PROXY_HT_DESTROY;
 		message->header_origin = tmp_connection_node->origin;
 		message->header_id = tmp_connection_node->id;
+		message->header_errno = errno;
 
 		if((retval = message_push()) == -1){
 			report_error("handle_message_dt_proxy_ht_create(): message_push(): %s", strerror(errno));
@@ -232,14 +236,66 @@ int handle_message_dt_proxy_ht_create(){
 
 		return(0);
 	}
-	tmp_connection_node->state = CON_ACTIVE;
+
+	
+	if(errno == EINPROGRESS){
+		tmp_connection_node->state = CON_EINPROGRESS;
+	} else {
+		handle_con_activate(tmp_connection_node);
+	}
+
+	return(0);
+}
+
+
+int handle_con_activate(struct connection_node *cur_connection_node){
+	int retval, optval;
+	socklen_t optlen;
+	struct message_helper *message = &(io->message);
+
+	if(cur_connection_node->state == CON_EINPROGRESS){
+
+		if(getsockopt(cur_connection_node->fd, SOL_SOCKET, SO_ERROR, &optval, &optlen) == -1){
+			message->data_type = DT_PROXY;
+			message->header_type = DT_PROXY_HT_DESTROY;
+			message->header_origin = cur_connection_node->origin;
+			message->header_id = cur_connection_node->id;
+
+			if((retval = message_push()) == -1){
+				report_error("handle_message_dt_proxy_ht_create(): message_push(): %s", strerror(errno));
+				return(-1);
+			}
+			connection_node_delete(message->header_origin, message->header_id);
+			return(0);
+		}
+
+		if(optval != 0){
+			if(verbose){
+				fprintf(stderr, "\rConnection failed: %s, %s\n", cur_connection_node->rhost_rport, strerror(optval));
+			}
+			message->data_type = DT_PROXY;
+			message->header_type = DT_PROXY_HT_DESTROY;
+			message->header_origin = cur_connection_node->origin;
+			message->header_id = cur_connection_node->id;
+			message->header_errno = optval;
+
+			if((retval = message_push()) == -1){
+				report_error("handle_message_dt_proxy_ht_create(): message_push(): %s", strerror(errno));
+				return(-1);
+			}
+			connection_node_delete(message->header_origin, message->header_id);
+			return(0);
+		}
+	}
+
+	cur_connection_node->state = CON_ACTIVE;
 
 	// Set up the response buffer here, and send it through as a message!
-	if((retval = proxy_response(tmp_connection_node->fd, tmp_connection_node->ver, tmp_connection_node->cmd, message->data, io->message_data_size)) == -1){
+	if((retval = proxy_response(cur_connection_node->fd, cur_connection_node->ver, cur_connection_node->cmd, message->data, io->message_data_size)) == -1){
 		message->data_type = DT_PROXY;
 		message->header_type = DT_PROXY_HT_DESTROY;
-    message->header_origin = tmp_connection_node->origin;
-    message->header_id = tmp_connection_node->id;
+		message->header_origin = cur_connection_node->origin;
+		message->header_id = cur_connection_node->id;
 
 		if((retval = message_push()) == -1){
 			report_error("handle_message_dt_proxy_ht_create(): message_push(): %s", strerror(errno));
@@ -329,6 +385,24 @@ int handle_message_dt_proxy_ht_response(){
 					return(-1);
 				}
 			}
+		}
+	}
+
+	cur_connection_node->state = CON_ACTIVE;
+
+	if(cur_connection_node->buffer_tail > cur_connection_node->buffer_ptr){
+
+		message->data_type = DT_CONNECTION;
+		message->header_type = DT_CONNECTION_HT_DATA;
+		message->header_origin = cur_connection_node->origin;
+		message->header_id = cur_connection_node->id;
+
+		message->data_len = cur_connection_node->buffer_tail - cur_connection_node->buffer_ptr;
+		memcpy(message->data, cur_connection_node->buffer_ptr, message->data_len);
+
+		if((retval = message_push()) == -1){
+			report_error("handle_message_dt_proxy_ht_response(): message_push(): %s", strerror(errno));
+			return(-1);
 		}
 	}
 
@@ -462,7 +536,7 @@ int handle_proxy_read(struct proxy_node *cur_proxy_node){
 
 		tmp_connection_node->buffer_tail = tmp_connection_node->buffer_head;
 		tmp_connection_node->buffer_size = io->message_data_size;
-	} else if(cur_proxy_node->type == PROXY_LOCAL){
+	}else if(cur_proxy_node->type == PROXY_LOCAL){
 
 		count = strlen(cur_proxy_node->rhost_rport);
 		if((tmp_connection_node->rhost_rport = (char *) calloc(count + 1, sizeof(char))) == NULL){
@@ -524,10 +598,11 @@ int handle_connection_write(struct connection_node *cur_connection_node){
 
 int handle_connection_read(struct connection_node *cur_connection_node){
 
-	int retval, count;
+	int return_code, retval, count;
 	struct message_helper *message = &(io->message);
 
 
+	return_code = 0;
 	if(cur_connection_node->state == CON_ACTIVE){
 
 		message->data_type = DT_CONNECTION;
@@ -535,32 +610,46 @@ int handle_connection_read(struct connection_node *cur_connection_node){
 		message->header_origin = cur_connection_node->origin;
 		message->header_id = cur_connection_node->id;
 
+
 		if((retval = read(cur_connection_node->fd, message->data, io->message_data_size)) < 1){
-			if(retval){
-				report_error("handle_connection_read(): read(%d, %lx, %d): %s", \
-						io->local_in_fd, (unsigned long) message->data, io->message_data_size, strerror(errno));
+			if(retval && verbose){
+				fprintf(stderr, "\rConnection %s closed: %s\n", cur_connection_node->rhost_rport, strerror(errno));
 			}
 			message->data_type = DT_PROXY;
 			message->header_type = DT_PROXY_HT_DESTROY;
+			message->header_errno = errno;
+
 			connection_node_delete(cur_connection_node->origin, cur_connection_node->id);
-			return(-2);
+			retval = 0;
+			return_code = -2;
 		}
+
+		message->data_len = retval;
+		if((retval = message_push()) == -1){
+			report_error("handle_connection_read(): message_push(): %s", strerror(errno));
+			return_code = -1;
+		}
+
+		return(return_code);
+	}
+
+	// Socks connection, not finished initializing.
+
+	if((retval = read(cur_connection_node->fd, cur_connection_node->buffer_tail, cur_connection_node->buffer_size - (cur_connection_node->buffer_tail - cur_connection_node->buffer_head))) < 1){
+		if(retval && verbose){
+			fprintf(stderr, "\rConnection %s closed: %s\n", cur_connection_node->rhost_rport, strerror(errno));
+		}
+		message->data_type = DT_PROXY;
+		message->header_type = DT_PROXY_HT_DESTROY;
+		message->header_errno = errno;
 
 		message->data_len = retval;
 		if((retval = message_push()) == -1){
 			report_error("handle_connection_read(): message_push(): %s", strerror(errno));
 			return(-1);
 		}
-
-		return(0);
-	}
-
-	// Socks connection, not finished initializing.
-
-	if((retval = read(cur_connection_node->fd, cur_connection_node->buffer_tail, cur_connection_node->buffer_size - (cur_connection_node->buffer_tail - cur_connection_node->buffer_head))) < 1){
-		report_error("handle_connection_read(): read(%d, %lx, %d): %s", \
-				cur_connection_node->fd, (unsigned long) cur_connection_node->buffer_head, io->message_data_size, strerror(errno));
 		connection_node_delete(cur_connection_node->origin, cur_connection_node->id);
+
 		return(-2);
 	}
 	cur_connection_node->buffer_tail = cur_connection_node->buffer_tail + retval;
@@ -574,6 +663,7 @@ int handle_connection_read(struct connection_node *cur_connection_node){
 	cur_connection_node->state = retval;
 
 	if(cur_connection_node->state == CON_READY){
+
 		message->data_type = DT_PROXY;
 		message->header_type = DT_PROXY_HT_CREATE;
 		message->header_origin = cur_connection_node->origin;
@@ -592,14 +682,12 @@ int handle_connection_read(struct connection_node *cur_connection_node){
 			report_error("handle_connection_read(): message_push(): %s", strerror(errno));
 			return(-1);
 		}
-		cur_connection_node->state = CON_ACTIVE;
 
 	}else if(cur_connection_node->state == CON_SOCKS_V5_AUTH){
 
 		cur_connection_node->buffer_head[0] = 0x05;
 		cur_connection_node->buffer_head[1] = cur_connection_node->auth_method;
 		cur_connection_node->buffer_tail = cur_connection_node->buffer_head + 2;
-		cur_connection_node->buffer_ptr = cur_connection_node->buffer_head;
 
 		if(cur_connection_node->auth_method == 0xff){
 			// best effort write() before we kill the connection.

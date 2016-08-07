@@ -18,13 +18,11 @@ int message_pull(){
 
 	int retval;
 
-//	fprintf(stderr, "\rDEBUG: inside message_pull()\n");
   /* We use this as a shorthand to make message syntax more readable. */
 	message = &io->message;
 
 	memset(message->data, '\0', io->message_data_size);
 
-//	fprintf(stderr, "\rDEBUG: 0\n");
 	/* Grab the header. */
 	if((retval = io->remote_read(&header_len, sizeof(header_len))) == -1){
 
@@ -36,7 +34,6 @@ int message_pull(){
 	}
 	header_len = ntohs(header_len);
 
-//	fprintf(stderr, "\rDEBUG: 1\n");
 	if((retval = io->remote_read(&message->data_type, sizeof(message->data_type))) == -1){
 		report_error("message_pull(): remote_read(%lx, %d): %s", \
 				(unsigned long) &message->data_type, (int) sizeof(message->data_type), strerror(errno));
@@ -44,7 +41,6 @@ int message_pull(){
 	}	
 	header_len -= sizeof(message->data_type);
 
-	//	fprintf(stderr, "\rDEBUG: 2\n");
 	if((retval = io->remote_read(&message->data_len, sizeof(message->data_len))) == -1){
 		report_error("message_pull(): remote_read(%lx, %d): %s", (unsigned long) &message->data_len, (int) sizeof(message->data_len), strerror(errno));
 		return(-1);
@@ -57,8 +53,6 @@ int message_pull(){
 		return(-1);
 	}
 
-	//	fprintf(stderr, "\rDEBUG: message->data_type: %d\n", message->data_type);
-	//	fprintf(stderr, "\rDEBUG: message->header_type: %d\n", message->header_type);
 	if(message->data_type == DT_PROXY || message->data_type == DT_CONNECTION){
 
 		if((retval = io->remote_read(&message->header_type, sizeof(message->header_type))) == -1){

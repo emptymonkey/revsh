@@ -120,12 +120,12 @@ int broker(struct config_helper *config){
 		cur_connection_node = io->connection_head;
 		while(cur_connection_node){
 
-			if(cur_connection_node->state != CON_DORMANT){
+			if(! ((cur_connection_node->state == CON_DORMANT) || (cur_connection_node->state == CON_READY) || (cur_connection_node->state == CON_EINPROGRESS))){
 				FD_SET(cur_connection_node->fd, &read_fds);
 				fd_max = cur_connection_node->fd > fd_max ? cur_connection_node->fd : fd_max;
 			}
 
-			if(cur_connection_node->write_head){
+			if(cur_connection_node->write_head || cur_connection_node->state == CON_EINPROGRESS){
 				FD_SET(cur_connection_node->fd, &write_fds);
 				fd_max = cur_connection_node->fd > fd_max ? cur_connection_node->fd : fd_max;
 			}
@@ -328,9 +328,17 @@ int broker(struct config_helper *config){
 			next_connection_node = cur_connection_node->next;
 
 			if(FD_ISSET(cur_connection_node->fd, &write_fds)){
-				if((retval = handle_connection_write(cur_connection_node)) == -1){
-					report_error("broker(): handle_connection_write(%lx): %s", (unsigned long) cur_connection_node, strerror(errno));
-					goto CLEAN_UP;
+
+				if(cur_connection_node->state == CON_EINPROGRESS){
+					if((retval = handle_con_activate(cur_connection_node)) == -1){
+						report_error("broker(): handle_con_activate(%lx): %s", (unsigned long) cur_connection_node, strerror(errno));
+						goto CLEAN_UP;
+					}
+				} else {
+					if((retval = handle_connection_write(cur_connection_node)) == -1){
+						report_error("broker(): handle_connection_write(%lx): %s", (unsigned long) cur_connection_node, strerror(errno));
+						goto CLEAN_UP;
+					}
 				}
 
 				break;

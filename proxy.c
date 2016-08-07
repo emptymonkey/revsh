@@ -99,13 +99,6 @@ int proxy_listen(struct proxy_node *cur_proxy_node){
 	int rv, listener;
 	struct addrinfo hints, *ai, *p;
 
-	if(verbose){
-		printf("DEBUG:\tcur_proxy_node->lhost: %s\r\n", cur_proxy_node->lhost);
-		printf("DEBUG:\tcur_proxy_node->lport: %s\r\n", cur_proxy_node->lport);
-		printf("DEBUG:\tcur_proxy_node->rhost_rport: %s\r\n", cur_proxy_node->rhost_rport);
-		printf("DEBUG:\tcur_proxy_node->type: %d\r\n", cur_proxy_node->type);
-	}
-
 	memset(&hints, 0, sizeof(hints));
 
 	hints.ai_family = AF_UNSPEC;
@@ -317,7 +310,6 @@ void connection_node_queue(struct connection_node *cur_connection_node){
 
 }
 
-
 int parse_socks_request(struct connection_node *cur_connection_node){
 
 	int index, size;
@@ -403,6 +395,8 @@ int parse_socks_request(struct connection_node *cur_connection_node){
 				return(-1);
 			}
 
+			index++;
+			cur_connection_node->buffer_ptr = head + index;
 			return(CON_READY);
 		}
 
@@ -412,6 +406,8 @@ int parse_socks_request(struct connection_node *cur_connection_node){
 			return(-1);
 		}
 
+		index++;
+		cur_connection_node->buffer_ptr = head + index;
 		return(CON_READY);
 
 	}else if(head[index] == 5){
@@ -505,6 +501,8 @@ int parse_socks_request(struct connection_node *cur_connection_node){
 				return(-1);
 			}
 
+			index++;
+			cur_connection_node->buffer_ptr = head + index;
 			return(CON_READY);
 		}
 	}

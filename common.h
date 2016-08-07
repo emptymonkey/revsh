@@ -63,8 +63,9 @@
 #define CON_SOCKS_NO_HANDSHAKE	0
 #define CON_SOCKS_V5_AUTH	1
 #define CON_READY 2
-#define CON_ACTIVE 3
-#define CON_DORMANT 4
+#define CON_EINPROGRESS 3
+#define CON_ACTIVE 4
+#define CON_DORMANT 5
 
 /* The max number of messages we will queue for delivery before requesting the remote client to throttle the connection. */
 #define MESSAGE_DEPTH_MAX	64
@@ -144,6 +145,7 @@ int handle_message_dt_winresize();
 int handle_message_dt_proxy_ht_destroy();
 int handle_message_dt_proxy_ht_create();
 int handle_message_dt_proxy_ht_response();
+int handle_con_activate(struct connection_node *cur_connection_node);
 int handle_message_dt_connection();
 int handle_proxy_read(struct proxy_node *cur_proxy_node);
 int handle_connection_write(struct connection_node *cur_connection_node);
