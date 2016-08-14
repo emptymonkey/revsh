@@ -1,4 +1,6 @@
-E.g.
-cat socks4a | xxd -p -r | nc -v 127.0.0.1 4444 | xxd
+Files contain basic hex patterns for the socks handshakes of various flavors. Finishes with a basic http request. You will need to change the IP address to your dev target that should be running a webserver on port 80.
+
+Use with netcat for quick testing of the SOCKS handshakes:
+cat socks4a | xxd -p -r | nc -v 127.0.0.1 4444
 
 In each file the second line is the ip address (which will change depending on your test target.) In the case of socks4a, the second line is the hex representation of the ascii characters that represent the ip address. In the socks4 and socks5 files, the second line is the hex representation of the four octets that directly compose the ip address.
