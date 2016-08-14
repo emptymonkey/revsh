@@ -262,7 +262,7 @@ int handle_con_activate(struct connection_node *cur_connection_node){
 			message->header_id = cur_connection_node->id;
 
 			if((retval = message_push()) == -1){
-				report_error("handle_message_dt_proxy_ht_create(): message_push(): %s", strerror(errno));
+				report_error("handle_message_dt_proxy_ht_activate(): message_push(): %s", strerror(errno));
 				return(-1);
 			}
 			connection_node_delete(message->header_origin, message->header_id);
@@ -280,7 +280,7 @@ int handle_con_activate(struct connection_node *cur_connection_node){
 			message->header_errno = optval;
 
 			if((retval = message_push()) == -1){
-				report_error("handle_message_dt_proxy_ht_create(): message_push(): %s", strerror(errno));
+				report_error("handle_message_dt_proxy_ht_activate(): message_push(): %s", strerror(errno));
 				return(-1);
 			}
 			connection_node_delete(message->header_origin, message->header_id);
@@ -298,7 +298,7 @@ int handle_con_activate(struct connection_node *cur_connection_node){
 		message->header_id = cur_connection_node->id;
 
 		if((retval = message_push()) == -1){
-			report_error("handle_message_dt_proxy_ht_create(): message_push(): %s", strerror(errno));
+			report_error("handle_message_dt_proxy_ht_activate(): message_push(): %s", strerror(errno));
 			return(-1);
 		}
 		connection_node_delete(message->header_origin, message->header_id);
@@ -308,7 +308,7 @@ int handle_con_activate(struct connection_node *cur_connection_node){
 	message->header_type = DT_PROXY_HT_RESPONSE;
 	message->data_len = retval;
 	if((retval = message_push()) == -1){
-		report_error("handle_message_dt_proxy_ht_create(): message_push(): %s", strerror(errno));
+		report_error("handle_message_dt_proxy_ht_activate(): message_push(): %s", strerror(errno));
 		return(-1);
 	}
 
@@ -389,6 +389,8 @@ int handle_message_dt_proxy_ht_response(){
 	}
 
 	cur_connection_node->state = CON_ACTIVE;
+// XXX after activation, free() cur_connection_node->buffer_head??
+// XXX is it ever used after socks handshake is complete?
 
 	if(cur_connection_node->buffer_tail > cur_connection_node->buffer_ptr){
 
@@ -535,6 +537,7 @@ int handle_proxy_read(struct proxy_node *cur_proxy_node){
 		}
 
 		tmp_connection_node->buffer_tail = tmp_connection_node->buffer_head;
+		tmp_connection_node->buffer_ptr = tmp_connection_node->buffer_head;
 		tmp_connection_node->buffer_size = io->message_data_size;
 	}else if(cur_proxy_node->type == PROXY_LOCAL){
 
@@ -639,28 +642,45 @@ int handle_connection_read(struct connection_node *cur_connection_node){
 		if(retval && verbose){
 			fprintf(stderr, "\rConnection %s closed: %s\n", cur_connection_node->rhost_rport, strerror(errno));
 		}
-		message->data_type = DT_PROXY;
-		message->header_type = DT_PROXY_HT_DESTROY;
-		message->header_errno = errno;
-
-		message->data_len = retval;
-		if((retval = message_push()) == -1){
-			report_error("handle_connection_read(): message_push(): %s", strerror(errno));
-			return(-1);
-		}
 		connection_node_delete(cur_connection_node->origin, cur_connection_node->id);
-
 		return(-2);
 	}
+
 	cur_connection_node->buffer_tail = cur_connection_node->buffer_tail + retval;
 
+// XXX Check parse_socks_request() return codes. Differentiate between fatal and non-fatal errors.
 	if((retval = parse_socks_request(cur_connection_node)) == -1){
 		report_error("handle_connection_read(): parse_sock_request(%lx): Malformed SOCKS request.", (unsigned long) cur_connection_node);
 		connection_node_delete(cur_connection_node->origin, cur_connection_node->id);
-		return(0);
+		return(-2);
 	}
-
 	cur_connection_node->state = retval;
+
+	if(cur_connection_node->state == CON_SOCKS_V5_AUTH){
+
+		cur_connection_node->buffer_head[0] = 0x05;
+		cur_connection_node->buffer_head[1] = cur_connection_node->auth_method;
+		retval = write(cur_connection_node->fd, cur_connection_node->buffer_head, 2);
+
+		if(retval == -1 || cur_connection_node->auth_method == 0xff){
+			if(verbose){
+				fprintf(stderr, "\rConnection %s closed: %s\n", cur_connection_node->rhost_rport, strerror(errno));
+			}
+			connection_node_delete(cur_connection_node->origin, cur_connection_node->id);
+			return(-2);
+		}
+
+		if(cur_connection_node->buffer_tail > cur_connection_node->buffer_ptr){
+
+			// XXX Check parse_socks_request() return codes. Differentiate between fatal and non-fatal errors.
+			if((retval = parse_socks_request(cur_connection_node)) == -1){
+				report_error("handle_connection_read(): parse_sock_request(%lx): Malformed SOCKS request.", (unsigned long) cur_connection_node);
+				connection_node_delete(cur_connection_node->origin, cur_connection_node->id);
+				return(-2);
+			}
+			cur_connection_node->state = retval;
+		}
+	}
 
 	if(cur_connection_node->state == CON_READY){
 
@@ -683,17 +703,6 @@ int handle_connection_read(struct connection_node *cur_connection_node){
 			return(-1);
 		}
 
-	}else if(cur_connection_node->state == CON_SOCKS_V5_AUTH){
-
-		cur_connection_node->buffer_head[0] = 0x05;
-		cur_connection_node->buffer_head[1] = cur_connection_node->auth_method;
-		cur_connection_node->buffer_tail = cur_connection_node->buffer_head + 2;
-
-		if(cur_connection_node->auth_method == 0xff){
-			// best effort write() before we kill the connection.
-			write(cur_connection_node->fd, cur_connection_node->buffer_head, cur_connection_node->buffer_tail - cur_connection_node->buffer_head);
-			connection_node_delete(cur_connection_node->origin, cur_connection_node->id);
-		}
 	}
 
 	return(0);

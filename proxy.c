@@ -321,7 +321,7 @@ int parse_socks_request(struct connection_node *cur_connection_node){
 	int atype = 0x01;
 
 
-	head = cur_connection_node->buffer_head;
+	head = cur_connection_node->buffer_ptr;
 	ptr = cur_connection_node->buffer_tail;
 	size = ptr - head;
 	index = 0;
@@ -397,6 +397,7 @@ int parse_socks_request(struct connection_node *cur_connection_node){
 
 			index++;
 			cur_connection_node->buffer_ptr = head + index;
+
 			return(CON_READY);
 		}
 
@@ -406,8 +407,8 @@ int parse_socks_request(struct connection_node *cur_connection_node){
 			return(-1);
 		}
 
-		index++;
 		cur_connection_node->buffer_ptr = head + index;
+
 		return(CON_READY);
 
 	}else if(head[index] == 5){
@@ -427,16 +428,17 @@ int parse_socks_request(struct connection_node *cur_connection_node){
 					return(CON_SOCKS_NO_HANDSHAKE);
 				}
 
-				// Prefer uname/pass to no-auth. (uname/pass not yet implemented.)
-				if(head[index] == 0x02){
-				}else if(head[index] == 0x00){
+				// XXX Someday we might implement more than the "NO AUTHENTICATION REQUIRED" method...
+				if(head[index] == 0x00){
 					cur_connection_node->auth_method = 0x00;
 				}
 
 				index++;
 			}
 
+			cur_connection_node->buffer_ptr = head + index;
 			return(CON_SOCKS_V5_AUTH);
+
 		}else if(cur_connection_node->state == CON_SOCKS_V5_AUTH){
 
 
@@ -494,6 +496,7 @@ int parse_socks_request(struct connection_node *cur_connection_node){
 				dst_port_ptr = head + index + len;
 			}
 
+			index += len + 2;
 
 			if((cur_connection_node->rhost_rport = addr_to_string(atype, dst_addr_ptr, dst_port_ptr, len)) == NULL){
 				report_error("parse_socks_request(): addr_to_string(%d, %lx, %lx, 0): %s", \
@@ -501,8 +504,9 @@ int parse_socks_request(struct connection_node *cur_connection_node){
 				return(-1);
 			}
 
-			index++;
+
 			cur_connection_node->buffer_ptr = head + index;
+
 			return(CON_READY);
 		}
 	}
