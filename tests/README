@@ -1,0 +1,4 @@
+E.g.
+cat socks4a | xxd -p -r | nc -v 127.0.0.1 4444 | xxd
+
+In each file the second line is the ip address (which will change depending on your test target.) In the case of socks4a, the second line is the hex representation of the ascii characters that represent the ip address. In the socks4 and socks5 files, the second line is the hex representation of the four octets that directly compose the ip address.
