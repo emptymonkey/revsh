@@ -214,7 +214,8 @@ int remote_read_encrypted(void *buff, size_t count){
 
 		retval = SSL_read(io->ssl, buff, count);
 
-		switch(SSL_get_error(io->ssl, retval)){
+		int ssl_errno;
+		switch((ssl_errno = SSL_get_error(io->ssl, retval))){
 
 			case SSL_ERROR_ZERO_RETURN:
 				io->eof = 1;

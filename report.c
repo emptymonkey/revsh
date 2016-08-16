@@ -1,6 +1,8 @@
 
 #include "common.h"
 
+#define ERROR_BUFF_SIZE 1024
+
 
 /***********************************************************************************************************************
  *
@@ -18,62 +20,59 @@ void report_error(char *fmt, ...){
 
 	int retval;
 	va_list list_ptr;
-
 	struct message_helper *message;
 
+	char error_string[ERROR_BUFF_SIZE] = {0};
 
 	va_start(list_ptr, fmt);
+	retval = vsnprintf(error_string, ERROR_BUFF_SIZE - 1, fmt, list_ptr);
+	va_end(list_ptr);
+
+	if(retval < 0){
+		if(verbose){
+			fprintf(stderr, "report_error(): vsnprintf(%lx, %d, %lx, %lx): %s\n", \
+					(unsigned long) error_string, ERROR_BUFF_SIZE - 1, (unsigned long) fmt, (unsigned long) list_ptr, strerror(errno));
+		}
+		return;
+	}
 
 	if(verbose){
-
 		if(io && io->controller){
 			// io->controller's tty is raw right now. Stick a \r in there for legibility.
 			fprintf(stderr, "\r");
 		}
 
-		vfprintf(stderr, fmt, list_ptr);
-		fprintf(stderr, "\n");
+		fprintf(stderr, "%s\n", error_string);
 	}
 
 	// This may have been a case where we are handling errors before io was set up. Exit now if that's the case.
 	if(!io){
 		return;
 	}
-
 	message = &io->message;
 
 	if(io->controller || io->init_complete){
 
-		va_start(list_ptr, fmt);
-
-		if(io->controller && io->log_stream){
-			if(report_log(fmt, list_ptr) == -1){
-				if(verbose){
-					fprintf(stderr, "report_error(): report_log(%lx, %lx): %s\n", \
-							(unsigned long) fmt, (unsigned long) list_ptr, strerror(errno));
+		if(io->controller){
+			if(io->log_stream){
+				if(report_log_string(error_string) == -1){
+					if(verbose){
+						fprintf(stderr, "report_error(): report_log_string(%lx): %s\n", \
+								(unsigned long) error_string, strerror(errno));
+					}
+					return;
 				}
-				return;
 			}
 		}else{
 
 			message->data_type = DT_ERROR;
 
-			if((retval = vsnprintf(message->data, io->message_data_size, fmt, list_ptr)) < 0){
-				if(verbose){
-					fprintf(stderr, "report_error(): vsnprintf(%lx, %d, %lx, %lx): %s\n", \
-							(unsigned long) message->data, io->message_data_size, (unsigned long) fmt, (unsigned long) list_ptr, strerror(errno));
-				}
-				return;
-			}
-
-			// We want to ensure that the message data is a proper '\0' terminated string.
-			// This will be the assumption on the recieving end.
-			va_end(list_ptr);
-			if(retval == io->message_data_size){
+			message->data_len = strlen(error_string) + 1;
+			if(message->data_len > io->message_data_size){
+				message->data_len = io->message_data_size - 1;
 				message->data[io->message_data_size - 1] = '\0';
 			}
-
-			message->data_len = retval;
+			memcpy(message->data, error_string, message->data_len);
 
 			if(message_push() == -1){
 				if(verbose){
@@ -85,9 +84,30 @@ void report_error(char *fmt, ...){
 	}
 }
 
+/* variadic functions are tricky. Setting up report_log() (and report_error() above) as a wrapper that converts the variadic variables to a string before calling report_log_string. */
 int report_log(char *fmt, ...){
 
+	int retval;
+
 	va_list list_ptr;
+	char error_string[ERROR_BUFF_SIZE] = {0};
+
+	va_start(list_ptr, fmt);
+	retval = vsnprintf(error_string, ERROR_BUFF_SIZE - 1, fmt, list_ptr);
+	va_end(list_ptr);
+
+	if(retval < 0){
+		if(verbose){
+			fprintf(stderr, "report_log(): vsnprintf(%lx, %d, %lx, %lx): %s\n", \
+					(unsigned long) error_string, ERROR_BUFF_SIZE - 1, (unsigned long) fmt, (unsigned long) list_ptr, strerror(errno));
+		}
+		return(retval);
+	}
+
+	return(report_log_string(error_string));
+}
+
+int report_log_string(char *error_string){
 
 	char *date_string;
 	char *tmp_ptr;
@@ -104,20 +124,15 @@ int report_log(char *fmt, ...){
 
 	fprintf(io->log_stream, "%s\t", date_string);
 
-	va_start(list_ptr, fmt);
-
-	if(vfprintf(io->log_stream, fmt, list_ptr) < 0){
+	if(fprintf(io->log_stream, "%s\n", error_string) < 0){
 		if(verbose){
-			fprintf(stderr, "report_log(): vfprintf(%lx, %lx, %lx): %s\n", \
-					(unsigned long) io->log_stream, (unsigned long) fmt, (unsigned long) list_ptr, strerror(errno));
+			fprintf(stderr, "report_log_string(): fprintf(%lx, \"%%s\\n\", %lx): %s\n", \
+					(unsigned long) io->log_stream, (unsigned long) error_string, strerror(errno));
 		}
 		return(-1);
 
 	}
 
-	va_end(list_ptr);
-
-	fprintf(io->log_stream, "\n");
 	fflush(io->log_stream);
 
 	return(0);

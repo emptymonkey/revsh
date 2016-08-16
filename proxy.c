@@ -314,9 +314,12 @@ int parse_socks_request(struct connection_node *cur_connection_node){
 
 	int index, size;
 	int nmethods, i;
-	int len;
+	int len = 0;
+
+	char *domain_name;
 	char *head, *ptr;
-	char *dst_port_ptr, *dst_addr_ptr, *domain_name;
+	char *dst_port_ptr = NULL;
+	char *dst_addr_ptr = NULL;
 
 	int atype = 0x01;
 
@@ -467,15 +470,17 @@ int parse_socks_request(struct connection_node *cur_connection_node){
 			atype = head[index];
 			index += 1;
 
-			len = 4;
-			dst_addr_ptr = head + index;
-			dst_port_ptr = head + index + len;
-
 			if(atype == 0x01){
+				len = 4;
 				// From the diagram above. 4 + Variable + 2, where Variable is 4 in the ipv4 case.
-				if(size < (4 + len  + 2)){
+				if(size < (4 + len + 2)){
 					return(CON_SOCKS_NO_HANDSHAKE);
 				}
+
+				dst_addr_ptr = head + index;
+				index += len;
+				dst_port_ptr = head + index;
+
 			}else if(atype == 0x03){
 				len = head[index];
 
@@ -483,8 +488,12 @@ int parse_socks_request(struct connection_node *cur_connection_node){
 				if(size < (4 + 1 + len + 2)){
 					return(CON_SOCKS_NO_HANDSHAKE);
 				}
-				dst_addr_ptr = head + index + 1;
-				dst_port_ptr = head + index + 1 + len;
+
+				index++;  // Move past the length variable.
+				dst_addr_ptr = head + index;
+				index += len;
+				dst_port_ptr = head + index;
+
 			} else if(atype == 0x04){
 				len = 16;
 
@@ -492,8 +501,11 @@ int parse_socks_request(struct connection_node *cur_connection_node){
 				if(size < (4 + len + 2)){
 					return(CON_SOCKS_NO_HANDSHAKE);
 				}
+
 				dst_addr_ptr = head + index;
-				dst_port_ptr = head + index + len;
+				index += len;
+				dst_port_ptr = head + index;
+
 			}
 
 			index += len + 2;
@@ -503,7 +515,6 @@ int parse_socks_request(struct connection_node *cur_connection_node){
 						atype, (unsigned long) dst_addr_ptr, (unsigned long) dst_port_ptr, strerror(errno));
 				return(-1);
 			}
-
 
 			cur_connection_node->buffer_ptr = head + index;
 

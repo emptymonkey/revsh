@@ -39,9 +39,9 @@ int handle_signal_sigwinch(){
 }
 
 int handle_local_write(){
-	
+
 	int retval;
-  struct message_helper *tmp_message;
+	struct message_helper *tmp_message;
 
 	while(io->tty_write_head){
 
@@ -50,7 +50,7 @@ int handle_local_write(){
 		retval = write(io->local_out_fd, tmp_message->data, tmp_message->data_len);
 
 		if(retval == -1){
-			if(errno != EINTR){
+			if(errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK){
 				report_error("handle_local_write(): write(%d, %lx, %d): %s", io->local_out_fd, (unsigned long) tmp_message->data, tmp_message->data_len, strerror(errno));
 				return(-1);
 			}
@@ -119,7 +119,7 @@ int handle_message_dt_tty(){
 	}
 
 	if(retval == -1){
-		if(errno != EINTR){
+		if(errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK){
 			report_error("handle_message_dt_tty(): write(%d, %lx, %d): %s", io->local_out_fd, (unsigned long) message->data, message->data_len, strerror(errno));
 			return(-1);
 		}
@@ -174,7 +174,14 @@ int handle_message_dt_winresize(){
 }
 
 int handle_message_dt_proxy_ht_destroy(){
+	struct connection_node *cur_connection_node;
 	struct message_helper *message = &(io->message);
+
+	if((cur_connection_node = connection_node_find(message->header_origin, message->header_id))){
+		if(verbose){
+			fprintf(stderr, "\rhandle_message_dt_proxy_ht_destroy(): Connection %s closed: %s\n", cur_connection_node->rhost_rport, strerror(message->header_errno));
+		}
+	}
 
 	connection_node_delete(message->header_origin, message->header_id);
 
@@ -237,7 +244,7 @@ int handle_message_dt_proxy_ht_create(){
 		return(0);
 	}
 
-	
+
 	if(errno == EINPROGRESS){
 		tmp_connection_node->state = CON_EINPROGRESS;
 	} else {
@@ -336,7 +343,7 @@ int handle_message_dt_proxy_ht_response(){
 	retval = write(cur_connection_node->fd, message->data, message->data_len);
 
 	if(retval == -1){
-		if(errno != EINTR){
+		if(errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK){
 			report_error("handle_message_dt_proxy_ht_response(): write(%d, %lx, %d): %s", \
 					cur_connection_node->fd, (unsigned long) message->data, message->data_len, strerror(errno));
 
@@ -350,6 +357,7 @@ int handle_message_dt_proxy_ht_response(){
 				return(-1);
 			}
 			connection_node_delete(cur_connection_node->origin, cur_connection_node->id);
+			return(-2);
 		}
 	}
 
@@ -389,8 +397,8 @@ int handle_message_dt_proxy_ht_response(){
 	}
 
 	cur_connection_node->state = CON_ACTIVE;
-// XXX after activation, free() cur_connection_node->buffer_head??
-// XXX is it ever used after socks handshake is complete?
+	// XXX after activation, free() cur_connection_node->buffer_head??
+	// XXX is it ever used after socks handshake is complete?
 
 	if(cur_connection_node->buffer_tail > cur_connection_node->buffer_ptr){
 
@@ -451,7 +459,7 @@ int handle_message_dt_connection(){
 	}
 
 	if(retval == -1){
-		if(errno != EINTR){
+		if(errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK){
 			report_error("handle_message_dt_connection(): write(%d, %lx, %d): %s", \
 					cur_connection_node->fd, (unsigned long) message->data, message->data_len, strerror(errno));
 
@@ -465,6 +473,7 @@ int handle_message_dt_connection(){
 				return(-1);
 			}
 			connection_node_delete(cur_connection_node->origin, cur_connection_node->id);
+			return(-2);
 		}
 	}
 
@@ -568,10 +577,22 @@ int handle_connection_write(struct connection_node *cur_connection_node){
 		retval = write(cur_connection_node->fd, tmp_message->data, tmp_message->data_len);
 
 		if(retval == -1){
-			if(errno != EINTR){
+			if(errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK){
 				report_error("handle_connection_write(): write(%d, %lx, %d): %s", \
 						io->local_out_fd, (unsigned long) tmp_message->data, tmp_message->data_len, strerror(errno));
-				return(-1);
+
+				message->data_type = DT_PROXY;
+				message->header_type = DT_PROXY_HT_DESTROY;
+				message->header_origin = cur_connection_node->origin;
+				message->header_id = cur_connection_node->id;
+
+				if((retval = message_push()) == -1){
+					report_error("handle_message_dt_proxy_ht_response(): message_push(): %s", strerror(errno));
+					return(-1);
+				}
+				connection_node_delete(cur_connection_node->origin, cur_connection_node->id);
+
+				return(-2);
 			}
 		}
 
@@ -615,8 +636,8 @@ int handle_connection_read(struct connection_node *cur_connection_node){
 
 
 		if((retval = read(cur_connection_node->fd, message->data, io->message_data_size)) < 1){
-			if(retval && verbose){
-				fprintf(stderr, "\rConnection %s closed: %s\n", cur_connection_node->rhost_rport, strerror(errno));
+			if(verbose){
+				fprintf(stderr, "\rhandle_connection_read(): Connection %s closed: %s\n", cur_connection_node->rhost_rport, strerror(errno));
 			}
 			message->data_type = DT_PROXY;
 			message->header_type = DT_PROXY_HT_DESTROY;
@@ -648,7 +669,7 @@ int handle_connection_read(struct connection_node *cur_connection_node){
 
 	cur_connection_node->buffer_tail = cur_connection_node->buffer_tail + retval;
 
-// XXX Check parse_socks_request() return codes. Differentiate between fatal and non-fatal errors.
+	// XXX Check parse_socks_request() return codes. Differentiate between fatal and non-fatal errors.
 	if((retval = parse_socks_request(cur_connection_node)) == -1){
 		report_error("handle_connection_read(): parse_sock_request(%lx): Malformed SOCKS request.", (unsigned long) cur_connection_node);
 		connection_node_delete(cur_connection_node->origin, cur_connection_node->id);

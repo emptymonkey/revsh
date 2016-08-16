@@ -56,6 +56,7 @@ volatile sig_atomic_t sig_found = 0;
  * Purpose: Educate the user as to the error of their ways.
  *
  **********************************************************************************************************************/
+// XXX add -vv support by making verbose a counter.
 void usage(){
 #ifdef OPENSSL
 	fprintf(stderr, "\nusage:\t%s\t[-c [-a] [-d KEYS_DIR] [-f RC_FILE] [-L [LHOST:]LPORT:RHOST:RPORT] [-D [LHOST:]LPORT]\n\t\t[-s SHELL] [-t SEC] [-r SEC1[,SEC2]] [-z LOG_FILE] [-b] [-n] [-k] [-v] [-h] [ADDRESS:PORT]\n", program_invocation_short_name);

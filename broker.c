@@ -209,7 +209,7 @@ int broker(struct config_helper *config){
 				if(io->eof){
 					retval = 0;
 				}else{
-					report_error("broker(): message_pull(%lx): %s", strerror(errno));
+					report_error("broker(): message_pull(): %s", strerror(errno));
 				}
 				goto CLEAN_UP;
 			}
