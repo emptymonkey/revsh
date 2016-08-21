@@ -23,6 +23,7 @@ int message_push(){
 	/* We use this as a shorthand to make message syntax more readable. */
 	message = &io->message;
 
+
 	/* Send the header. */
 	header_len = sizeof(message->data_type) + sizeof(message->data_len);
 
@@ -131,6 +132,7 @@ int message_pull(){
   /* We use this as a shorthand to make message syntax more readable. */
 	message = &io->message;
 
+
 	memset(message->data, '\0', io->message_data_size);
 
 	/* Grab the header. */
@@ -203,6 +205,12 @@ int message_pull(){
 	/* Ignore any remaining header data as unknown, and probably from a more modern version of the */
 	/* protocol than we were compiled with. */
 	if(header_len){
+
+		if(header_len > io->message_data_size){
+			report_error("message_pull(): headers bigger than buffer!");
+			return(-1);
+		}
+
 		if((retval = io->remote_read(message->data, header_len)) == -1){
 			report_error("message_pull(): remote_read(%lx, %d): %s", (unsigned long) message->data, header_len, strerror(errno));
 			return(-1);
@@ -222,10 +230,6 @@ int message_pull(){
 
 	return(0);
 }
-
-
-
-
 
 
 struct message_helper *message_helper_create(char *data, unsigned short data_len, unsigned short message_data_size){

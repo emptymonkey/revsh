@@ -240,7 +240,7 @@ int main(int argc, char **argv){
 
 			case 'L':
 			case 'D':
-				if((tmp_proxy_ptr = calloc(1, sizeof(struct proxy_node))) == NULL){
+				if((tmp_proxy_ptr = (struct proxy_request_node *) calloc(1, sizeof(struct proxy_request_node))) == NULL){
 					report_error("main(): calloc(1, %d): %s", (int) sizeof(struct proxy_node), strerror(errno));
 					return(-1);
 				}
@@ -308,21 +308,23 @@ int main(int argc, char **argv){
 		usage();
 	}
 
-	/* Before anything else, let's try and get the log file opened. */
-  if(wordexp(config->log_file, &log_file_exp, 0)){
-    report_error("main(): wordexp(%s, %lx, 0): %s", config->log_file, (unsigned long)  &log_file_exp, strerror(errno));
-    return(-1);
-  }
-
-  if(log_file_exp.we_wordc != 1){
-    report_error("main(): Invalid path: %s", config->log_file);
-    return(-1);
-  }
-
-	if(config->log_file){
-		if((io->log_stream = fopen(log_file_exp.we_wordv[0], "a")) == NULL){
-			report_error("main(): fopen(\"%s\", \"a\"): %s", log_file_exp.we_wordv[0], strerror(errno));
+	if(io->controller){
+		/* Before anything else, let's try and get the log file opened. */
+		if(wordexp(config->log_file, &log_file_exp, 0)){
+			report_error("main(): wordexp(%s, %lx, 0): %s", config->log_file, (unsigned long)  &log_file_exp, strerror(errno));
 			return(-1);
+		}
+
+		if(log_file_exp.we_wordc != 1){
+			report_error("main(): Invalid path: %s", config->log_file);
+			return(-1);
+		}
+
+		if(config->log_file){
+			if((io->log_stream = fopen(log_file_exp.we_wordv[0], "a")) == NULL){
+				report_error("main(): fopen(\"%s\", \"a\"): %s", log_file_exp.we_wordv[0], strerror(errno));
+				return(-1);
+			}
 		}
 	}
 

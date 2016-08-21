@@ -19,6 +19,8 @@ int handle_signal_sigwinch(){
 
 	message = &io->message;
 
+//	fprintf(stderr, "\rDEBUG: handle_signal_sigwinch()\n");
+
 	if((retval = ioctl(io->local_out_fd, TIOCGWINSZ, io->tty_winsize)) == -1){
 		report_error("handle_signal_sigwinch(): ioctl(%d, TIOCGWINSZ, %lx): %s", io->local_out_fd, (unsigned long) io->tty_winsize, strerror(errno));
 		return(-1);
@@ -42,6 +44,8 @@ int handle_local_write(){
 
 	int retval;
 	struct message_helper *tmp_message;
+
+//	fprintf(stderr, "\rDEBUG: handle_local_write()\n");
 
 	while(io->tty_write_head){
 
@@ -69,16 +73,17 @@ int handle_local_write(){
 	return(0);
 }
 
-// -2 -> EOF. Fatal non-error condition.
+/* -2 -> EOF. Fatal non-error condition. */
 int handle_local_read(){
 
 	int retval;
 	struct message_helper *message = &(io->message);
 
+//	fprintf(stderr, "\rDEBUG: handle_local_read()\n");
+
 	message->data_type = DT_TTY;
 
 	if((retval = read(io->local_in_fd, message->data, io->message_data_size)) == -1){
-
 		if(errno != EINTR){
 			if(errno == EIO){
 				return(-2);
@@ -111,6 +116,8 @@ int handle_message_dt_tty(){
 	int retval;
 	struct message_helper *message = &(io->message);
 	struct message_helper *new_message, *tmp_message;
+
+//	fprintf(stderr, "\rDEBUG: handle_message_dt_tty()\n");
 
 	if(io->tty_write_head){
 		retval = 0;
@@ -149,8 +156,11 @@ int handle_message_dt_tty(){
 }
 
 int handle_message_dt_winresize(){
+
 	int retval;
 	struct message_helper *message = &(io->message);
+
+//	fprintf(stderr, "\rDEBUG: handle_message_dt_winresize()\n");
 
 	if(message->data_len != sizeof(io->tty_winsize->ws_row) + sizeof(io->tty_winsize->ws_col)){
 		report_error("handle_message_dt_winresize(): DT_WINRESIZE termios: not enough data!");
@@ -175,19 +185,22 @@ int handle_message_dt_winresize(){
 
 
 int handle_message_dt_proxy_ht_destroy(){
+
 	struct connection_node *cur_connection_node;
 	struct message_helper *message = &(io->message);
 	unsigned short header_errno;
 	
+
 	memcpy(&header_errno, message->data, sizeof(short));	
 	header_errno = ntohs(header_errno);
 	if((cur_connection_node = connection_node_find(message->header_origin, message->header_id))){
 		if(verbose && header_errno){
 			fprintf(stderr, "\rhandle_message_dt_proxy_ht_destroy(): Connection %s closed: %s\n", cur_connection_node->rhost_rport, strerror(header_errno));
 		}
+
+		connection_node_delete(cur_connection_node);
 	}
 
-	connection_node_delete(cur_connection_node);
 
 	return(0);
 }
@@ -202,6 +215,7 @@ int handle_message_dt_proxy_ht_create(){
 
 	unsigned short header_errno;
 
+//	fprintf(stderr, "\rDEBUG: handle_message_dt_proxy_ht_create()\n");
 
 	if((tmp_connection_node = connection_node_find(message->header_origin, message->header_id))){
 		connection_node_delete(tmp_connection_node);
@@ -301,6 +315,7 @@ int handle_con_activate(struct connection_node *cur_connection_node){
 
 	unsigned short header_errno;
 
+//	fprintf(stderr, "\rDEBUG: handle_con_activate()\n");
 
 	if(cur_connection_node->state == CON_EINPROGRESS){
 
@@ -388,6 +403,8 @@ int handle_message_dt_proxy_ht_response(){
 
 	struct message_helper *new_message, *tmp_message;
 
+//	fprintf(stderr, "\rDEBUG: handle_message_dt_proxy_ht_response()\n");
+
 	if((cur_connection_node = connection_node_find(message->header_origin, message->header_id)) == NULL){
 		message->header_type = DT_PROXY_HT_DESTROY;
 		message->data_len = 0;
@@ -459,9 +476,6 @@ int handle_message_dt_proxy_ht_response(){
 			}
 		}
 
-		// XXX after activation, free() cur_connection_node->buffer_head??
-		// XXX is it ever used after socks handshake is complete?
-
 		if(cur_connection_node->buffer_tail > cur_connection_node->buffer_ptr){
 
 			message->data_type = DT_CONNECTION;
@@ -471,6 +485,7 @@ int handle_message_dt_proxy_ht_response(){
 
 			message->data_len = cur_connection_node->buffer_tail - cur_connection_node->buffer_ptr;
 			memcpy(message->data, cur_connection_node->buffer_ptr, message->data_len);
+			cur_connection_node->buffer_ptr += message->data_len;
 
 			if((retval = message_push()) == -1){
 				report_error("handle_message_dt_proxy_ht_response(): message_push(): %s", strerror(errno));
@@ -478,6 +493,11 @@ int handle_message_dt_proxy_ht_response(){
 			}
 		}
 	}
+
+	free(cur_connection_node->buffer_head);
+	cur_connection_node->buffer_head = NULL;
+	cur_connection_node->buffer_ptr = NULL;
+	cur_connection_node->buffer_tail = NULL;
 
 	cur_connection_node->state = CON_ACTIVE;
 
@@ -492,6 +512,7 @@ int handle_message_dt_connection(){
 	struct connection_node *cur_connection_node;
 	int count, errno;
 
+//	fprintf(stderr, "\rDEBUG: handle_message_dt_connection()\n");
 
 	if((cur_connection_node = connection_node_find(message->header_origin, message->header_id)) == NULL){
 
@@ -542,6 +563,7 @@ int handle_message_dt_connection(){
 			connection_node_delete(cur_connection_node);
 			return(-2);
 		}
+		retval = 0;
 	}
 
 	if(retval != message->data_len){
@@ -587,6 +609,7 @@ int handle_proxy_read(struct proxy_node *cur_proxy_node){
 	int count;
 	struct connection_node *tmp_connection_node;
 
+//	fprintf(stderr, "\rDEBUG: handle_proxy_read()\n");
 
 	/* Create a new connection object. */
 	if((tmp_connection_node = connection_node_create()) == NULL){
@@ -633,6 +656,7 @@ int handle_proxy_read(struct proxy_node *cur_proxy_node){
 		handle_connection_read(tmp_connection_node);
 	}
 
+
 	return(0);
 }
 
@@ -643,6 +667,7 @@ int handle_connection_write(struct connection_node *cur_connection_node){
 	struct message_helper *message = &(io->message);
 	struct message_helper *tmp_message;
 
+//	fprintf(stderr, "\rDEBUG: handle_connection_write()\n");
 
 	while(cur_connection_node->write_head){
 
@@ -680,7 +705,7 @@ int handle_connection_write(struct connection_node *cur_connection_node){
 		cur_connection_node->write_head = tmp_message->next;
 		message_helper_destroy(tmp_message);
 
-		if(!io->tty_write_head){
+		if(!cur_connection_node->write_head){
 			message->data_type = DT_CONNECTION;
 			message->header_type = DT_CONNECTION_HT_ACTIVE;
 			message->header_origin = io->controller;
@@ -703,6 +728,8 @@ int handle_connection_read(struct connection_node *cur_connection_node){
 
 	unsigned short header_errno;
 
+//	fprintf(stderr, "\rDEBUG: handle_connection_read()\n");
+
 	return_code = 0;
 	if(cur_connection_node->state == CON_ACTIVE){
 
@@ -724,9 +751,10 @@ int handle_connection_read(struct connection_node *cur_connection_node){
 
 			connection_node_delete(cur_connection_node);
 			return_code = -2;
+		}else{
+			message->data_len = retval;
 		}
 
-		message->data_len = retval;
 		if((retval = message_push()) == -1){
 			report_error("handle_connection_read(): message_push(): %s", strerror(errno));
 			return_code = -1;
@@ -748,7 +776,6 @@ int handle_connection_read(struct connection_node *cur_connection_node){
 
 		cur_connection_node->buffer_tail = cur_connection_node->buffer_tail + retval;
 
-		// XXX Check parse_socks_request() return codes. Differentiate between fatal and non-fatal errors.
 		if((retval = parse_socks_request(cur_connection_node)) == -1){
 			report_error("handle_connection_read(): parse_sock_request(%lx): Malformed SOCKS request.", (unsigned long) cur_connection_node);
 			connection_node_delete(cur_connection_node);
@@ -772,7 +799,6 @@ int handle_connection_read(struct connection_node *cur_connection_node){
 
 			if(cur_connection_node->buffer_tail > cur_connection_node->buffer_ptr){
 
-				// XXX Check parse_socks_request() return codes. Differentiate between fatal and non-fatal errors.
 				if((retval = parse_socks_request(cur_connection_node)) == -1){
 					report_error("handle_connection_read(): parse_sock_request(%lx): Malformed SOCKS request.", (unsigned long) cur_connection_node);
 					connection_node_delete(cur_connection_node);
@@ -818,6 +844,8 @@ int handle_connection_read(struct connection_node *cur_connection_node){
 int handle_send_nop(){
 	struct message_helper *message = &(io->message);
 
+//	fprintf(stderr, "\rDEBUG: handle_send_nop()\n");
+
 	message->data_type = DT_NOP;
 	message->data_len = 0;
 	if(message_push() == -1){
@@ -835,10 +863,9 @@ struct connection_node *handle_tun_tap_init(int ifr_flag){
 
   struct connection_node *tmp_connection_node;
 
-  /* XXX Perform a full audit for memory leaks. */
-  /* XXX Perform static analysis. */
 
-  /* XXX Check the max data_size and set the mtu on the tun/tap fd accordingly! */
+//	fprintf(stderr, "\rDEBUG: handle_tun_tap_init()\n");
+
   if((tmp_connection_node = connection_node_create()) == NULL){
     report_error("tun_tap_init(): connection_node_create(): %s", strerror(errno));
     return(NULL);
@@ -868,9 +895,12 @@ struct connection_node *handle_tun_tap_init(int ifr_flag){
   count = strlen(ifr.ifr_name);
   if((tmp_connection_node->rhost_rport = (char *) calloc(count + 1, sizeof(char))) == NULL){
     report_error("tun_tap_init(): calloc(%d, %d): %s", count + 1, (int) sizeof(char), strerror(errno));
+    connection_node_delete(tmp_connection_node);
     return(NULL);
   }
   memcpy(tmp_connection_node->rhost_rport, ifr.ifr_name, count);
+  memset(&ifr, 0, sizeof(ifr));
+  memcpy(ifr.ifr_name, tmp_connection_node->rhost_rport, count);
 
   tmp_connection_node->state = CON_READY;
 
@@ -880,8 +910,32 @@ struct connection_node *handle_tun_tap_init(int ifr_flag){
     tmp_connection_node->proxy_type = PROXY_TAP;
   }
 
-  fcntl(tmp_connection_node->fd, F_SETFL, O_NONBLOCK);
+	fprintf(stderr, "\rDEBUG: ifr.ifr_name: %s\n", ifr.ifr_name);
 
-  return(tmp_connection_node);
+	if(ioctl(tmp_connection_node->fd, SIOCGIFMTU, (void *) &ifr) == -1){
+    report_error("tun_tap_init(): ioctl(%d, SIOCGIFMTU, %lx): %s", tmp_connection_node->fd, (unsigned long) &ifr, strerror(errno));
+    connection_node_delete(tmp_connection_node);
+    return(NULL);
+	}
+
+	/*
+		If the the mtu on the tun / tap device is larger than the message data buffer, reduce it.
+		This ensures the we can always fit a full frame / packet inside one message.
+		Given that the default is that the message data buffer is probably a page of memory, and that is probably 4k in size, this will 
+		probably never be needed.
+	*/
+	if(ifr.ifr_mtu > io->message_data_size){
+
+		ifr.ifr_mtu = io->message_data_size;
+		if(ioctl(tmp_connection_node->fd, SIOCSIFMTU, (void *) &ifr) == -1){
+			report_error("tun_tap_init(): ioctl(%d, SIOCSIFMTU, %lx): %s", tmp_connection_node->fd, (unsigned long) &ifr, strerror(errno));
+			connection_node_delete(tmp_connection_node);
+			return(NULL);
+		}
+	}
+
+	fcntl(tmp_connection_node->fd, F_SETFL, O_NONBLOCK);
+
+	return(tmp_connection_node);
 }
 

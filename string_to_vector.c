@@ -109,6 +109,7 @@ CLEAN_UP:
 	i = 0;
 	while(argv[i]){
 		free(argv[i]);
+		i++;
 	}
 
 	free(argv);

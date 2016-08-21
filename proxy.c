@@ -160,6 +160,8 @@ int proxy_connect(char *rhost_rport){
 	count = strlen(tmp_ptr);
 
 	if((rhost = (char *) calloc(count + 1, sizeof(char))) == NULL){
+		report_error("proxy_connect(): calloc(%d, %d): %s", count + 1, (int) sizeof(char), strerror(errno));
+		return(-1);
 	}
 	memcpy(rhost, tmp_ptr, count);
 
@@ -238,8 +240,6 @@ struct connection_node *connection_node_create(){
 	return(cur_connection_node);
 }
 
-//XXX  needs to take a point. Find it with connection_node_find().
-//XXX int connection_node_delete(unsigned short origin, unsigned short id){
 int connection_node_delete(struct connection_node *cur_connection_node){
 
 	if(cur_connection_node == io->connection_head){
@@ -295,13 +295,18 @@ void connection_node_queue(struct connection_node *cur_connection_node){
 	if(cur_connection_node == io->connection_head){
 		io->connection_head = cur_connection_node->next;
 	}
+
 	if(cur_connection_node->prev){
 		cur_connection_node->prev->next = cur_connection_node->next;
 	}
 
-	cur_connection_node->next->prev = cur_connection_node->prev;
+	if(cur_connection_node->next){
+		cur_connection_node->next->prev = cur_connection_node->prev;
+	}
 
 	io->connection_tail->next = cur_connection_node;
+	cur_connection_node->prev = io->connection_tail;
+	cur_connection_node->next = NULL;
 	io->connection_tail = cur_connection_node;
 
 }
@@ -427,7 +432,7 @@ int parse_socks_request(struct connection_node *cur_connection_node){
 					return(CON_SOCKS_NO_HANDSHAKE);
 				}
 
-				// XXX Someday we might implement more than the "NO AUTHENTICATION REQUIRED" method...
+				// Someday we might implement more than the "NO AUTHENTICATION REQUIRED" method...
 				if(head[index] == 0x00){
 					cur_connection_node->auth_method = 0x00;
 				}
@@ -502,6 +507,9 @@ int parse_socks_request(struct connection_node *cur_connection_node){
 				index += len;
 				dst_port_ptr = head + index;
 
+			}else{
+				report_error("parse_socks_request(): atype 0x%02x unknown.", atype);
+				return(-1);
 			}
 
 			index += 2;
@@ -661,7 +669,7 @@ int proxy_response(int sock, char ver, char cmd, char *buffer, int buffer_size){
 			return(buff_ptr - buffer);
 
 		}else if(cmd == 0x02){
-			// XXX ignored until we implement bind.
+			// ignored until we implement bind.
 		}
 	}else if(ver == 0x05){
 		if(cmd == 0x01){
@@ -706,7 +714,7 @@ int proxy_response(int sock, char ver, char cmd, char *buffer, int buffer_size){
 			return(buff_ptr - buffer);
 
 		}else if(cmd == 0x02){
-			// XXX ignored until we implement bind.
+			// ignored until we implement bind.
 		}
 	}
 

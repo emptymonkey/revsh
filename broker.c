@@ -81,30 +81,19 @@ int broker(struct config_helper *config){
 			if(config->tun){
 				if((cur_connection_node = handle_tun_tap_init(IFF_TUN)) == NULL){
 					report_error("broker(): handle_tun_tap_init(%d): %s", IFF_TUN, strerror(errno));
+				}else{
+					handle_connection_read(cur_connection_node);
 				}
-				handle_connection_read(cur_connection_node);
 			}
 
 			if(config->tap){
 				if((cur_connection_node = handle_tun_tap_init(IFF_TAP)) == NULL){
 					report_error("broker(): handle_tun_tap_init(%d): %s", IFF_TAP, strerror(errno));
+				}else{
+					handle_connection_read(cur_connection_node);
 				}
-				handle_connection_read(cur_connection_node);
 			}
 		}
-	}
-
-	io->fd_count = 2;
-	cur_proxy_node = io->proxy_head;
-	while(cur_proxy_node && io->fd_count < FD_SETSIZE){
-		io->fd_count++;
-		cur_proxy_node = cur_proxy_node->next;
-	}
-
-	cur_connection_node = io->connection_head;
-	while(cur_connection_node){
-		io->fd_count++;
-		cur_connection_node = cur_connection_node->next;
 	}
 
 	timeout_ptr = NULL;
@@ -125,23 +114,16 @@ int broker(struct config_helper *config){
 		FD_SET(io->remote_fd, &read_fds);
 		fd_max = io->remote_fd > fd_max ? io->remote_fd : fd_max;
 
-		/*
-			 Only add proxy file descriptors to select() if we have enough space for more connections.
-			 Skip the proxy listeners from the select() loop otherwise.
-		 */
-		if(io->fd_count < FD_SETSIZE){
-			cur_proxy_node = io->proxy_head;
-			while(cur_proxy_node){
-
-				FD_SET(cur_proxy_node->fd, &read_fds);
-				fd_max = cur_proxy_node->fd > fd_max ? cur_proxy_node->fd : fd_max;
-
-				cur_proxy_node = cur_proxy_node->next;
-			}
-		}
+		io->fd_count = 2;
 
 		cur_connection_node = io->connection_head;
-		while(cur_connection_node){
+		while((io->fd_count < FD_SETSIZE) && cur_connection_node){
+			/*
+				 fprintf(stderr, "\r-- FD_SET() --\n\rDEBUG: origin|id: %d|%d\n", cur_connection_node->origin, cur_connection_node->id);
+				 fprintf(stderr, "\rDEBUG: cur_connection_node: %lx\n", (unsigned long) cur_connection_node);
+				 fprintf(stderr, "\rDEBUG: cur_connection_node->state: %d\n", cur_connection_node->state); 
+				 fprintf(stderr, "\rDEBUG: cur_connection_node->write_head: %lx\n", (unsigned long) cur_connection_node->write_head);
+			 */
 
 			if(! ((cur_connection_node->state == CON_DORMANT) || (cur_connection_node->state == CON_READY) || (cur_connection_node->state == CON_EINPROGRESS))){
 				FD_SET(cur_connection_node->fd, &read_fds);
@@ -149,11 +131,32 @@ int broker(struct config_helper *config){
 			}
 
 			if(cur_connection_node->write_head || cur_connection_node->state == CON_EINPROGRESS){
+				/*
+					 fprintf(stderr, "\r-- FD_SET() write --\n\rDEBUG: origin|id: %d|%d\n", cur_connection_node->origin, cur_connection_node->id);
+					 fprintf(stderr, "\rDEBUG: cur_connection_node: %lx\n", (unsigned long) cur_connection_node);
+					 fprintf(stderr, "\rDEBUG: cur_connection_node->state: %d\n", cur_connection_node->state); 
+					 fprintf(stderr, "\rDEBUG: cur_connection_node->write_head: %lx\n", (unsigned long) cur_connection_node->write_head);
+				 */
 				FD_SET(cur_connection_node->fd, &write_fds);
 				fd_max = cur_connection_node->fd > fd_max ? cur_connection_node->fd : fd_max;
 			}
 
 			cur_connection_node = cur_connection_node->next;
+			io->fd_count++;
+		}
+
+		/*
+			 Only add proxy file descriptors to select() if we have enough space for more connections.
+			 Skip the proxy listeners from the select() loop otherwise.
+		 */
+		cur_proxy_node = io->proxy_head;
+		while((io->fd_count < FD_SETSIZE) && cur_proxy_node){
+
+			FD_SET(cur_proxy_node->fd, &read_fds);
+			fd_max = cur_proxy_node->fd > fd_max ? cur_proxy_node->fd : fd_max;
+
+			cur_proxy_node = cur_proxy_node->next;
+			io->fd_count++;
 		}
 
 		if(config->nop){
@@ -168,6 +171,8 @@ int broker(struct config_helper *config){
 					fd_max + 1, (unsigned long) &read_fds, (unsigned long) &write_fds, (unsigned long) timeout_ptr, strerror(errno));
 			goto CLEAN_UP;
 		}
+
+		//		fprintf(stderr, "\rDEBUG: select()\n");
 
 		if(!retval){
 			if((retval = handle_send_nop()) == -1){
@@ -346,7 +351,6 @@ int broker(struct config_helper *config){
 
 		cur_connection_node = io->connection_head;
 		while(cur_connection_node){
-
 			// Advancing to the next node in the list now, in case cur_connection_node gets deleted in the processing of the loop.
 			next_connection_node = cur_connection_node->next;
 
@@ -358,6 +362,12 @@ int broker(struct config_helper *config){
 						goto CLEAN_UP;
 					}
 				} else {
+					/*
+						 fprintf(stderr, "\r-- FD_ISSET() write --\n\rDEBUG: origin|id: %d|%d\n", cur_connection_node->origin, cur_connection_node->id);
+						 fprintf(stderr, "\rDEBUG: cur_connection_node: %lx\n", (unsigned long) cur_connection_node);
+						 fprintf(stderr, "\rDEBUG: cur_connection_node->state: %d\n", cur_connection_node->state); 
+						 fprintf(stderr, "\rDEBUG: cur_connection_node->write_head: %lx\n", (unsigned long) cur_connection_node->write_head);
+					 */
 					if((retval = handle_connection_write(cur_connection_node)) == -1){
 						report_error("broker(): handle_connection_write(%lx): %s", (unsigned long) cur_connection_node, strerror(errno));
 						goto CLEAN_UP;
