@@ -1,6 +1,116 @@
 
 #include "common.h"
 
+
+/***********************************************************************************************************************
+ *
+ * message_push()
+ *
+ * Input: Our io helper object.
+ * Output: 0 on success, -1 on error.
+ *
+ * Purpose: This is our message interface for sending data.
+ *
+ **********************************************************************************************************************/
+int message_push(){
+
+	unsigned short header_len;
+	struct message_helper *message;
+
+	unsigned short tmp_short;
+
+
+	/* We use this as a shorthand to make message syntax more readable. */
+	message = &io->message;
+
+	/* Send the header. */
+	header_len = sizeof(message->data_type) + sizeof(message->data_len);
+
+	if(message->data_type == DT_PROXY || message->data_type == DT_CONNECTION){
+		header_len += sizeof(message->header_type) + sizeof(message->header_origin) + sizeof(message->header_id);
+		if(message->header_type == DT_PROXY_HT_CREATE){
+			header_len += sizeof(message->header_proxy_type);
+		}
+	}
+
+	if(header_len > io->message_data_size){
+		report_error("message_push(): message: local header too long!");
+		return(-1);
+	}
+
+	tmp_short = htons(header_len);
+	if(io->remote_write(&tmp_short, sizeof(tmp_short)) == -1){
+		report_error("message_push(): remote_write(%lx, %d): %s", \
+				(unsigned long) &tmp_short, (int) sizeof(tmp_short), strerror(errno));
+		return(-1);
+	}
+
+	if(io->remote_write(&message->data_type, sizeof(message->data_type)) == -1){
+		report_error("message_push(): remote_write(%lx, %d): %s", \
+				(unsigned long) &message->data_type, (int) sizeof(message->data_type), strerror(errno));
+		return(-1);
+	}	
+
+	if(message->data_type == DT_NOP){
+		message->data_len = 0;
+	}
+
+	/* Send the data. */
+	if(message->data_len > io->message_data_size){
+		report_error("message_push(): message: local data too long!");
+		return(-1);
+	}
+
+	tmp_short = htons(message->data_len);
+	if(io->remote_write(&tmp_short, sizeof(tmp_short)) == -1){
+		report_error("message_push(): remote_write(%lx, %d): %s", \
+				(unsigned long) &tmp_short, (int) sizeof(tmp_short), strerror(errno));
+		return(-1);
+	}
+
+	if(message->data_type == DT_PROXY || message->data_type == DT_CONNECTION){
+		tmp_short = htons(message->header_type);
+		if(io->remote_write(&tmp_short, sizeof(tmp_short)) == -1){
+			report_error("message_push(): remote_write(%lx, %d): %s", \
+					(unsigned long) &tmp_short, (int) sizeof(tmp_short), strerror(errno));
+			return(-1);
+		}
+
+		tmp_short = htons(message->header_origin);
+		if(io->remote_write(&tmp_short, sizeof(tmp_short)) == -1){
+			report_error("%s: %d: remote_write(%lx, %d): %s", \
+					(unsigned long) &tmp_short, (int) sizeof(tmp_short), strerror(errno));
+			return(-1);
+		}
+
+		tmp_short = htons(message->header_id);
+		if(io->remote_write(&tmp_short, sizeof(tmp_short)) == -1){
+			report_error("message_push(): remote_write(%lx, %d): %s", \
+					(unsigned long) &tmp_short, (int) sizeof(tmp_short), strerror(errno));
+			return(-1);
+		}
+
+		if(message->header_type == DT_PROXY_HT_CREATE){
+			tmp_short = htons(message->header_proxy_type);
+			if(io->remote_write(&tmp_short, sizeof(tmp_short)) == -1){
+				report_error("message_push(): remote_write(%lx, %d): %s", \
+						(unsigned long) &tmp_short, (int) sizeof(tmp_short), strerror(errno));
+				return(-1);
+			}
+		}
+	}
+
+	if(io->remote_write(message->data, message->data_len) == -1){
+		report_error("message_push(): remote_write(%lx, %d): %s", \
+				(unsigned long) message->data, message->data_len, strerror(errno));
+		return(-1);
+	}	
+
+	return(0);
+}
+
+
+
 /***********************************************************************************************************************
  *
  * message_pull()
@@ -79,13 +189,15 @@ int message_pull(){
 		message->header_id = ntohs(message->header_id);
 		header_len -= sizeof(message->header_id);
 
-		if((retval = io->remote_read(&message->header_errno, sizeof(message->header_errno))) == -1){
-			report_error("message_pull(): remote_read(%lx, %d): %s", \
-					(unsigned long) &message->header_errno, (int) sizeof(message->header_errno), strerror(errno));
-			return(-1);
-		}	
-		message->header_errno = ntohs(message->header_errno);
-		header_len -= sizeof(message->header_errno);
+		if(message->header_type == DT_PROXY_HT_CREATE){
+			if((retval = io->remote_read(&message->header_proxy_type, sizeof(message->header_proxy_type))) == -1){
+				report_error("message_pull(): remote_read(%lx, %d): %s", \
+						(unsigned long) &message->header_proxy_type, (int) sizeof(message->header_proxy_type), strerror(errno));
+				return(-1);
+			}	
+			message->header_proxy_type = ntohs(message->header_proxy_type);
+			header_len -= sizeof(message->header_proxy_type);
+		}
 	}
 
 	/* Ignore any remaining header data as unknown, and probably from a more modern version of the */
@@ -113,107 +225,8 @@ int message_pull(){
 
 
 
-/***********************************************************************************************************************
- *
- * message_push()
- *
- * Input: Our io helper object.
- * Output: 0 on success, -1 on error.
- *
- * Purpose: This is our message interface for sending data.
- *
- **********************************************************************************************************************/
-int message_push(){
-
-	unsigned short header_len;
-	struct message_helper *message;
-
-	unsigned short tmp_short;
 
 
-	/* We use this as a shorthand to make message syntax more readable. */
-	message = &io->message;
-
-	/* Send the header. */
-	header_len = sizeof(message->data_type) + sizeof(message->data_len);
-
-	if(message->data_type == DT_PROXY || message->data_type == DT_CONNECTION){
-		header_len += sizeof(message->header_type) + sizeof(message->header_origin) + sizeof(message->header_id) + sizeof(message->header_errno);
-	}
-
-	if(header_len > io->message_data_size){
-		report_error("message_push(): message: local header too long!");
-		return(-1);
-	}
-
-	tmp_short = htons(header_len);
-	if(io->remote_write(&tmp_short, sizeof(tmp_short)) == -1){
-		report_error("message_push(): remote_write(%lx, %d): %s", \
-				(unsigned long) &tmp_short, (int) sizeof(tmp_short), strerror(errno));
-		return(-1);
-	}
-
-	if(io->remote_write(&message->data_type, sizeof(message->data_type)) == -1){
-		report_error("message_push(): remote_write(%lx, %d): %s", \
-				(unsigned long) &message->data_type, (int) sizeof(message->data_type), strerror(errno));
-		return(-1);
-	}	
-
-	if(message->data_type == DT_NOP){
-		message->data_len = 0;
-	}
-
-	/* Send the data. */
-	if(message->data_len > io->message_data_size){
-		report_error("message_push(): message: local data too long!");
-		return(-1);
-	}
-
-	tmp_short = htons(message->data_len);
-	if(io->remote_write(&tmp_short, sizeof(tmp_short)) == -1){
-		report_error("message_push(): remote_write(%lx, %d): %s", \
-				(unsigned long) &tmp_short, (int) sizeof(tmp_short), strerror(errno));
-		return(-1);
-	}	
-
-	if(message->data_type == DT_PROXY || message->data_type == DT_CONNECTION){
-		tmp_short = htons(message->header_type);
-		if(io->remote_write(&tmp_short, sizeof(tmp_short)) == -1){
-			report_error("message_push(): remote_write(%lx, %d): %s", \
-					(unsigned long) &tmp_short, (int) sizeof(tmp_short), strerror(errno));
-			return(-1);
-		}
-
-		tmp_short = htons(message->header_origin);
-		if(io->remote_write(&tmp_short, sizeof(tmp_short)) == -1){
-			report_error("%s: %d: remote_write(%lx, %d): %s", \
-					(unsigned long) &tmp_short, (int) sizeof(tmp_short), strerror(errno));
-			return(-1);
-		}
-
-		tmp_short = htons(message->header_id);
-		if(io->remote_write(&tmp_short, sizeof(tmp_short)) == -1){
-			report_error("message_push(): remote_write(%lx, %d): %s", \
-					(unsigned long) &tmp_short, (int) sizeof(tmp_short), strerror(errno));
-			return(-1);
-		}
-
-		tmp_short = htons(message->header_errno);
-		if(io->remote_write(&tmp_short, sizeof(tmp_short)) == -1){
-			report_error("message_push(): remote_write(%lx, %d): %s", \
-					(unsigned long) &tmp_short, (int) sizeof(tmp_short), strerror(errno));
-			return(-1);
-		}
-	}
-
-	if(io->remote_write(message->data, message->data_len) == -1){
-		report_error("message_push(): remote_write(%lx, %d): %s", \
-				(unsigned long) message->data, message->data_len, strerror(errno));
-		return(-1);
-	}	
-
-	return(0);
-}
 
 struct message_helper *message_helper_create(char *data, unsigned short data_len, unsigned short message_data_size){
 	// just the malloc and setup of a new message_helper node.

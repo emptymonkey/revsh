@@ -165,6 +165,10 @@ int main(int argc, char **argv){
 	config->keepalive = 0;
 	config->nop = 0;
 
+	// XXX Add opts for these when redoing the opts.
+	config->tun = 1;
+	config->tap = 1;
+
 #ifdef NOP
 	config->nop = 1;
 #endif

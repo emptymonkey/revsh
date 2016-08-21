@@ -173,81 +173,120 @@ int handle_message_dt_winresize(){
 	return(0);
 }
 
+
 int handle_message_dt_proxy_ht_destroy(){
 	struct connection_node *cur_connection_node;
 	struct message_helper *message = &(io->message);
-
+	unsigned short header_errno;
+	
+	memcpy(&header_errno, message->data, sizeof(short));	
+	header_errno = ntohs(header_errno);
 	if((cur_connection_node = connection_node_find(message->header_origin, message->header_id))){
-		if(verbose){
-			fprintf(stderr, "\rhandle_message_dt_proxy_ht_destroy(): Connection %s closed: %s\n", cur_connection_node->rhost_rport, strerror(message->header_errno));
+		if(verbose && header_errno){
+			fprintf(stderr, "\rhandle_message_dt_proxy_ht_destroy(): Connection %s closed: %s\n", cur_connection_node->rhost_rport, strerror(header_errno));
 		}
 	}
 
-	connection_node_delete(message->header_origin, message->header_id);
+	connection_node_delete(cur_connection_node);
 
 	return(0);
 }
+
 
 int handle_message_dt_proxy_ht_create(){
 	int retval;
 	struct message_helper *message = &(io->message);
 
-	struct connection_node *cur_connection_node, *tmp_connection_node;
-	int count, errno;
+	struct connection_node *tmp_connection_node;
+	int count, offset, errno;
+
+	unsigned short header_errno;
 
 
-	if((cur_connection_node = connection_node_find(message->header_origin, message->header_id))){
-		connection_node_delete(message->header_origin, message->header_id);
+	if((tmp_connection_node = connection_node_find(message->header_origin, message->header_id))){
+		connection_node_delete(tmp_connection_node);
 	}
 
-	if((tmp_connection_node = connection_node_create()) == NULL){
-		report_error("handle_message_dt_proxy_ht_create(): connection_node_create(): %s", strerror(errno));
-		return(-1);
-	}
-
-	tmp_connection_node->origin = message->header_origin;
-	tmp_connection_node->id = message->header_id;
-
-	// the +/- 2 below is to handle the leading two chars which are the ver and the cmd of the proxy request.
-	count = message->data_len;
-	tmp_connection_node->ver = *(message->data);
-	tmp_connection_node->cmd = *(message->data + 1);
-	count -= 2;
-
-	if((tmp_connection_node->rhost_rport = (char *) calloc(count + 1, sizeof(char))) == NULL){
-		report_error("handle_message_dt_proxy_ht_create(): calloc(%d, %d): %s", count + 1, (int) sizeof(char), strerror(errno));
-		return(-1);
-	}
-	memcpy(tmp_connection_node->rhost_rport, message->data + 2, count);
-	tmp_connection_node->origin = message->header_origin;
-	tmp_connection_node->id = message->header_id;
-
-	errno = 0;
-	if((tmp_connection_node->fd = proxy_connect(tmp_connection_node->rhost_rport)) == -1){
-
-		if(verbose){
-			fprintf(stderr, "\rproxy_connect(\"%s\"): Unable to connect: %s\n", tmp_connection_node->rhost_rport, strerror(errno));
+	if(message->header_proxy_type == PROXY_TUN){
+		if((tmp_connection_node = handle_tun_tap_init(IFF_TUN)) == NULL){
+			report_error("broker(): handle_tun_tap_init(%d): %s", IFF_TUN, strerror(errno));
+			return(-2);
 		}
 
-		message->data_type = DT_PROXY;
-		message->header_type = DT_PROXY_HT_DESTROY;
-		message->header_origin = tmp_connection_node->origin;
-		message->header_id = tmp_connection_node->id;
-		message->header_errno = errno;
+		tmp_connection_node->origin = message->header_origin;
+		tmp_connection_node->id = message->header_id;
 
-		if((retval = message_push()) == -1){
-			report_error("handle_message_dt_proxy_ht_create(): message_push(): %s", strerror(errno));
+	}else if(message->header_proxy_type == PROXY_TAP){
+		if((tmp_connection_node = handle_tun_tap_init(IFF_TAP)) == NULL){
+			report_error("broker(): handle_tun_tap_init(%d): %s", IFF_TAP, strerror(errno));
+			return(-2);
+		}
+
+		tmp_connection_node->origin = message->header_origin;
+		tmp_connection_node->id = message->header_id;
+
+	}else{
+
+		if((tmp_connection_node = connection_node_create()) == NULL){
+			report_error("handle_message_dt_proxy_ht_create(): connection_node_create(): %s", strerror(errno));
 			return(-1);
 		}
-		connection_node_delete(message->header_origin, message->header_id);
 
-		return(0);
+		tmp_connection_node->origin = message->header_origin;
+		tmp_connection_node->id = message->header_id;
+		tmp_connection_node->proxy_type = message->header_proxy_type;
+	
+		count = message->data_len;
+		offset = 0;
+
+		// the +/- 2 below is to handle the leading two chars which are the ver and the cmd of the proxy request.
+		if(tmp_connection_node->proxy_type == PROXY_DYNAMIC){
+			offset = 2;
+			tmp_connection_node->ver = *(message->data);
+			tmp_connection_node->cmd = *(message->data + 1);
+			count -= offset;
+		}
+
+		if((tmp_connection_node->rhost_rport = (char *) calloc(count + 1, sizeof(char))) == NULL){
+			report_error("handle_message_dt_proxy_ht_create(): calloc(%d, %d): %s", count + 1, (int) sizeof(char), strerror(errno));
+			return(-1);
+		}
+
+		memcpy(tmp_connection_node->rhost_rport, message->data + offset, count);
+
+		tmp_connection_node->origin = message->header_origin;
+		tmp_connection_node->id = message->header_id;
+
+		errno = 0;
+		if((tmp_connection_node->fd = proxy_connect(tmp_connection_node->rhost_rport)) == -1){
+
+			if(verbose){
+				fprintf(stderr, "\rproxy_connect(\"%s\"): Unable to connect: %s\n", tmp_connection_node->rhost_rport, strerror(errno));
+			}
+
+			message->data_type = DT_PROXY;
+			message->header_type = DT_PROXY_HT_DESTROY;
+			message->header_origin = tmp_connection_node->origin;
+			message->header_id = tmp_connection_node->id;
+			header_errno = htons(errno);
+			message->data_len = sizeof(short);
+			memcpy(message->data, &header_errno, message->data_len);
+
+			if((retval = message_push()) == -1){
+				report_error("handle_message_dt_proxy_ht_create(): message_push(): %s", strerror(errno));
+				return(-1);
+			}
+			connection_node_delete(tmp_connection_node);
+
+			return(0);
+		}
+
+		if(errno == EINPROGRESS){
+			tmp_connection_node->state = CON_EINPROGRESS;
+		}
 	}
 
-
-	if(errno == EINPROGRESS){
-		tmp_connection_node->state = CON_EINPROGRESS;
-	} else {
+	if(tmp_connection_node->state != EINPROGRESS){
 		handle_con_activate(tmp_connection_node);
 	}
 
@@ -260,19 +299,24 @@ int handle_con_activate(struct connection_node *cur_connection_node){
 	socklen_t optlen;
 	struct message_helper *message = &(io->message);
 
+	unsigned short header_errno;
+
+
 	if(cur_connection_node->state == CON_EINPROGRESS){
 
+		optlen = sizeof(optval);
 		if(getsockopt(cur_connection_node->fd, SOL_SOCKET, SO_ERROR, &optval, &optlen) == -1){
 			message->data_type = DT_PROXY;
 			message->header_type = DT_PROXY_HT_DESTROY;
 			message->header_origin = cur_connection_node->origin;
 			message->header_id = cur_connection_node->id;
+			message->data_len = 0;
 
 			if((retval = message_push()) == -1){
 				report_error("handle_message_dt_proxy_ht_activate(): message_push(): %s", strerror(errno));
 				return(-1);
 			}
-			connection_node_delete(message->header_origin, message->header_id);
+			connection_node_delete(cur_connection_node);
 			return(0);
 		}
 
@@ -284,13 +328,15 @@ int handle_con_activate(struct connection_node *cur_connection_node){
 			message->header_type = DT_PROXY_HT_DESTROY;
 			message->header_origin = cur_connection_node->origin;
 			message->header_id = cur_connection_node->id;
-			message->header_errno = optval;
+			header_errno = htons(optval);
+			message->data_len = sizeof(short);
+			memcpy(message->data, &header_errno, message->data_len);
 
 			if((retval = message_push()) == -1){
 				report_error("handle_message_dt_proxy_ht_activate(): message_push(): %s", strerror(errno));
 				return(-1);
 			}
-			connection_node_delete(message->header_origin, message->header_id);
+			connection_node_delete(cur_connection_node);
 			return(0);
 		}
 	}
@@ -298,22 +344,32 @@ int handle_con_activate(struct connection_node *cur_connection_node){
 	cur_connection_node->state = CON_ACTIVE;
 
 	// Set up the response buffer here, and send it through as a message!
-	if((retval = proxy_response(cur_connection_node->fd, cur_connection_node->ver, cur_connection_node->cmd, message->data, io->message_data_size)) == -1){
-		message->data_type = DT_PROXY;
-		message->header_type = DT_PROXY_HT_DESTROY;
-		message->header_origin = cur_connection_node->origin;
-		message->header_id = cur_connection_node->id;
+	if(cur_connection_node->proxy_type == PROXY_DYNAMIC){
+		if((retval = proxy_response(cur_connection_node->fd, cur_connection_node->ver, cur_connection_node->cmd, message->data, io->message_data_size)) == -1){
+			message->data_type = DT_PROXY;
+			message->header_type = DT_PROXY_HT_DESTROY;
+			message->header_origin = cur_connection_node->origin;
+			message->header_id = cur_connection_node->id;
+			message->data_len = 0;
 
-		if((retval = message_push()) == -1){
-			report_error("handle_message_dt_proxy_ht_activate(): message_push(): %s", strerror(errno));
-			return(-1);
+			if((retval = message_push()) == -1){
+				report_error("handle_message_dt_proxy_ht_activate(): message_push(): %s", strerror(errno));
+				return(-1);
+			}
+			connection_node_delete(cur_connection_node);
+			return(0);
 		}
-		connection_node_delete(message->header_origin, message->header_id);
-		return(0);
+
+		message->data_len = retval;
+	}else{
+		message->data_len = 0;
 	}
 
+	message->data_type = DT_PROXY;
 	message->header_type = DT_PROXY_HT_RESPONSE;
-	message->data_len = retval;
+	message->header_origin = cur_connection_node->origin;
+	message->header_id = cur_connection_node->id;
+
 	if((retval = message_push()) == -1){
 		report_error("handle_message_dt_proxy_ht_activate(): message_push(): %s", strerror(errno));
 		return(-1);
@@ -321,6 +377,7 @@ int handle_con_activate(struct connection_node *cur_connection_node){
 
 	return(0);
 }
+
 
 int handle_message_dt_proxy_ht_response(){
 	int retval;
@@ -333,88 +390,96 @@ int handle_message_dt_proxy_ht_response(){
 
 	if((cur_connection_node = connection_node_find(message->header_origin, message->header_id)) == NULL){
 		message->header_type = DT_PROXY_HT_DESTROY;
+		message->data_len = 0;
 
 		if((retval = message_push()) == -1){
 			report_error("handle_message_dt_proxy_ht_response(): message_push(): %s", strerror(errno));
 			return(-1);
 		}
+
+		return(0);
 	}
 
-	retval = write(cur_connection_node->fd, message->data, message->data_len);
+	if(cur_connection_node->proxy_type == PROXY_DYNAMIC){
+		retval = write(cur_connection_node->fd, message->data, message->data_len);
 
-	if(retval == -1){
-		if(errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK){
-			report_error("handle_message_dt_proxy_ht_response(): write(%d, %lx, %d): %s", \
-					cur_connection_node->fd, (unsigned long) message->data, message->data_len, strerror(errno));
+		if(retval == -1){
+			if(errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK){
+				report_error("handle_message_dt_proxy_ht_response(): write(%d, %lx, %d): %s", \
+						cur_connection_node->fd, (unsigned long) message->data, message->data_len, strerror(errno));
 
-			message->data_type = DT_PROXY;
-			message->header_type = DT_PROXY_HT_DESTROY;
-			message->header_origin = cur_connection_node->origin;
-			message->header_id = cur_connection_node->id;
-
-			if((retval = message_push()) == -1){
-				report_error("handle_message_dt_proxy_ht_response(): message_push(): %s", strerror(errno));
-				return(-1);
-			}
-			connection_node_delete(cur_connection_node->origin, cur_connection_node->id);
-			return(-2);
-		}
-	}
-
-	if(retval != message->data_len){
-		new_message = message_helper_create(message->data + retval, message->data_len - retval, io->message_data_size);
-
-		if(!new_message){
-			report_error("handle_message_dt_proxy_ht_response(): message_helper_create(%lx, %d, %d): %s", \
-					(unsigned long) message->data + retval, message->data_len - retval, io->message_data_size, strerror(errno));
-			return(-1);
-		}
-
-		if(!cur_connection_node->write_head){
-			cur_connection_node->write_head = new_message;
-		}else{
-
-			count = 1;
-			tmp_message = cur_connection_node->write_head;
-			while(tmp_message->next){
-				tmp_message = tmp_message->next;
-				count++;
-			}
-			tmp_message->next = new_message;
-
-			if(count == MESSAGE_DEPTH_MAX){
-				message->data_type = DT_CONNECTION;
-				message->header_type = DT_CONNECTION_HT_DORMANT;
-				message->header_origin = io->controller;
-				message->header_id = cur_connection_node->fd;
+				message->data_type = DT_PROXY;
+				message->header_type = DT_PROXY_HT_DESTROY;
+				message->header_origin = cur_connection_node->origin;
+				message->header_id = cur_connection_node->id;
+				message->data_len = 0;
 
 				if((retval = message_push()) == -1){
 					report_error("handle_message_dt_proxy_ht_response(): message_push(): %s", strerror(errno));
 					return(-1);
 				}
+				connection_node_delete(cur_connection_node);
+				return(-2);
+			}
+		}
+
+		if(retval != message->data_len){
+			new_message = message_helper_create(message->data + retval, message->data_len - retval, io->message_data_size);
+
+			if(!new_message){
+				report_error("handle_message_dt_proxy_ht_response(): message_helper_create(%lx, %d, %d): %s", \
+						(unsigned long) message->data + retval, message->data_len - retval, io->message_data_size, strerror(errno));
+				return(-1);
+			}
+
+			if(!cur_connection_node->write_head){
+				cur_connection_node->write_head = new_message;
+			}else{
+
+				count = 1;
+				tmp_message = cur_connection_node->write_head;
+				while(tmp_message->next){
+					tmp_message = tmp_message->next;
+					count++;
+				}
+				tmp_message->next = new_message;
+
+				if(count == MESSAGE_DEPTH_MAX){
+					message->data_type = DT_CONNECTION;
+					message->header_type = DT_CONNECTION_HT_DORMANT;
+					message->header_origin = io->controller;
+					message->header_id = cur_connection_node->fd;
+					message->data_len = 0;
+
+					if((retval = message_push()) == -1){
+						report_error("handle_message_dt_proxy_ht_response(): message_push(): %s", strerror(errno));
+						return(-1);
+					}
+				}
+			}
+		}
+
+		// XXX after activation, free() cur_connection_node->buffer_head??
+		// XXX is it ever used after socks handshake is complete?
+
+		if(cur_connection_node->buffer_tail > cur_connection_node->buffer_ptr){
+
+			message->data_type = DT_CONNECTION;
+			message->header_type = DT_CONNECTION_HT_DATA;
+			message->header_origin = cur_connection_node->origin;
+			message->header_id = cur_connection_node->id;
+
+			message->data_len = cur_connection_node->buffer_tail - cur_connection_node->buffer_ptr;
+			memcpy(message->data, cur_connection_node->buffer_ptr, message->data_len);
+
+			if((retval = message_push()) == -1){
+				report_error("handle_message_dt_proxy_ht_response(): message_push(): %s", strerror(errno));
+				return(-1);
 			}
 		}
 	}
 
 	cur_connection_node->state = CON_ACTIVE;
-	// XXX after activation, free() cur_connection_node->buffer_head??
-	// XXX is it ever used after socks handshake is complete?
-
-	if(cur_connection_node->buffer_tail > cur_connection_node->buffer_ptr){
-
-		message->data_type = DT_CONNECTION;
-		message->header_type = DT_CONNECTION_HT_DATA;
-		message->header_origin = cur_connection_node->origin;
-		message->header_id = cur_connection_node->id;
-
-		message->data_len = cur_connection_node->buffer_tail - cur_connection_node->buffer_ptr;
-		memcpy(message->data, cur_connection_node->buffer_ptr, message->data_len);
-
-		if((retval = message_push()) == -1){
-			report_error("handle_message_dt_proxy_ht_response(): message_push(): %s", strerror(errno));
-			return(-1);
-		}
-	}
 
 	return(0);
 }
@@ -432,6 +497,7 @@ int handle_message_dt_connection(){
 
 		message->data_type = DT_PROXY;
 		message->header_type = DT_PROXY_HT_DESTROY;
+		message->data_len = 0;
 
 		if((retval = message_push()) == -1){
 			report_error("handle_message_dt_connection(): message_push(): %s", strerror(errno));
@@ -467,12 +533,13 @@ int handle_message_dt_connection(){
 			message->header_type = DT_PROXY_HT_DESTROY;
 			message->header_origin = cur_connection_node->origin;
 			message->header_id = cur_connection_node->id;
+			message->data_len = 0;
 
 			if((retval = message_push()) == -1){
 				report_error("handle_message_dt_connection(): message_push(): %s", strerror(errno));
 				return(-1);
 			}
-			connection_node_delete(cur_connection_node->origin, cur_connection_node->id);
+			connection_node_delete(cur_connection_node);
 			return(-2);
 		}
 	}
@@ -503,6 +570,7 @@ int handle_message_dt_connection(){
 				message->header_type = DT_CONNECTION_HT_DORMANT;
 				message->header_origin = io->controller;
 				message->header_id = cur_connection_node->fd;
+				message->data_len = 0;
 
 				if((retval = message_push()) == -1){
 					report_error("handle_message_dt_connection(): message_push(): %s", strerror(errno));
@@ -548,6 +616,9 @@ int handle_proxy_read(struct proxy_node *cur_proxy_node){
 		tmp_connection_node->buffer_tail = tmp_connection_node->buffer_head;
 		tmp_connection_node->buffer_ptr = tmp_connection_node->buffer_head;
 		tmp_connection_node->buffer_size = io->message_data_size;
+
+		tmp_connection_node->proxy_type = PROXY_DYNAMIC;
+
 	}else if(cur_proxy_node->type == PROXY_LOCAL){
 
 		count = strlen(cur_proxy_node->rhost_rport);
@@ -555,8 +626,11 @@ int handle_proxy_read(struct proxy_node *cur_proxy_node){
 			report_error("handle_proxy_read(): calloc(%d, %d): %s", count + 1, (int) sizeof(char), strerror(errno));
 			return(-1);
 		}
-		memcpy(tmp_connection_node->rhost_rport, cur_proxy_node, count);
-		tmp_connection_node->state = CON_ACTIVE;
+		memcpy(tmp_connection_node->rhost_rport, cur_proxy_node->rhost_rport, count);
+		tmp_connection_node->state = CON_READY;
+		tmp_connection_node->proxy_type = PROXY_LOCAL;
+
+		handle_connection_read(tmp_connection_node);
 	}
 
 	return(0);
@@ -585,12 +659,13 @@ int handle_connection_write(struct connection_node *cur_connection_node){
 				message->header_type = DT_PROXY_HT_DESTROY;
 				message->header_origin = cur_connection_node->origin;
 				message->header_id = cur_connection_node->id;
+				message->data_len = 0;
 
 				if((retval = message_push()) == -1){
 					report_error("handle_message_dt_proxy_ht_response(): message_push(): %s", strerror(errno));
 					return(-1);
 				}
-				connection_node_delete(cur_connection_node->origin, cur_connection_node->id);
+				connection_node_delete(cur_connection_node);
 
 				return(-2);
 			}
@@ -610,6 +685,7 @@ int handle_connection_write(struct connection_node *cur_connection_node){
 			message->header_type = DT_CONNECTION_HT_ACTIVE;
 			message->header_origin = io->controller;
 			message->header_id = cur_connection_node->fd;
+			message->data_len = 0;
 
 			if((retval = message_push()) == -1){
 				report_error("handle_connection_write(): message_push(): %s", strerror(errno));
@@ -622,9 +698,10 @@ int handle_connection_write(struct connection_node *cur_connection_node){
 
 int handle_connection_read(struct connection_node *cur_connection_node){
 
-	int return_code, retval, count;
+	int return_code, retval, count, offset;
 	struct message_helper *message = &(io->message);
 
+	unsigned short header_errno;
 
 	return_code = 0;
 	if(cur_connection_node->state == CON_ACTIVE){
@@ -634,17 +711,18 @@ int handle_connection_read(struct connection_node *cur_connection_node){
 		message->header_origin = cur_connection_node->origin;
 		message->header_id = cur_connection_node->id;
 
-
+		errno = 0;
 		if((retval = read(cur_connection_node->fd, message->data, io->message_data_size)) < 1){
-			if(verbose){
+			if(verbose && retval){
 				fprintf(stderr, "\rhandle_connection_read(): Connection %s closed: %s\n", cur_connection_node->rhost_rport, strerror(errno));
 			}
 			message->data_type = DT_PROXY;
 			message->header_type = DT_PROXY_HT_DESTROY;
-			message->header_errno = errno;
+			header_errno = htons(errno);
+			message->data_len = sizeof(short);
+			memcpy(message->data, &header_errno, message->data_len);
 
-			connection_node_delete(cur_connection_node->origin, cur_connection_node->id);
-			retval = 0;
+			connection_node_delete(cur_connection_node);
 			return_code = -2;
 		}
 
@@ -658,48 +736,50 @@ int handle_connection_read(struct connection_node *cur_connection_node){
 	}
 
 	// Socks connection, not finished initializing.
+	if(cur_connection_node->proxy_type == PROXY_DYNAMIC){
 
-	if((retval = read(cur_connection_node->fd, cur_connection_node->buffer_tail, cur_connection_node->buffer_size - (cur_connection_node->buffer_tail - cur_connection_node->buffer_head))) < 1){
-		if(retval && verbose){
-			fprintf(stderr, "\rConnection %s closed: %s\n", cur_connection_node->rhost_rport, strerror(errno));
-		}
-		connection_node_delete(cur_connection_node->origin, cur_connection_node->id);
-		return(-2);
-	}
-
-	cur_connection_node->buffer_tail = cur_connection_node->buffer_tail + retval;
-
-	// XXX Check parse_socks_request() return codes. Differentiate between fatal and non-fatal errors.
-	if((retval = parse_socks_request(cur_connection_node)) == -1){
-		report_error("handle_connection_read(): parse_sock_request(%lx): Malformed SOCKS request.", (unsigned long) cur_connection_node);
-		connection_node_delete(cur_connection_node->origin, cur_connection_node->id);
-		return(-2);
-	}
-	cur_connection_node->state = retval;
-
-	if(cur_connection_node->state == CON_SOCKS_V5_AUTH){
-
-		cur_connection_node->buffer_head[0] = 0x05;
-		cur_connection_node->buffer_head[1] = cur_connection_node->auth_method;
-		retval = write(cur_connection_node->fd, cur_connection_node->buffer_head, 2);
-
-		if(retval == -1 || cur_connection_node->auth_method == 0xff){
-			if(verbose){
+		if((retval = read(cur_connection_node->fd, cur_connection_node->buffer_tail, cur_connection_node->buffer_size - (cur_connection_node->buffer_tail - cur_connection_node->buffer_head))) < 1){
+			if(retval && verbose){
 				fprintf(stderr, "\rConnection %s closed: %s\n", cur_connection_node->rhost_rport, strerror(errno));
 			}
-			connection_node_delete(cur_connection_node->origin, cur_connection_node->id);
+			connection_node_delete(cur_connection_node);
 			return(-2);
 		}
 
-		if(cur_connection_node->buffer_tail > cur_connection_node->buffer_ptr){
+		cur_connection_node->buffer_tail = cur_connection_node->buffer_tail + retval;
 
-			// XXX Check parse_socks_request() return codes. Differentiate between fatal and non-fatal errors.
-			if((retval = parse_socks_request(cur_connection_node)) == -1){
-				report_error("handle_connection_read(): parse_sock_request(%lx): Malformed SOCKS request.", (unsigned long) cur_connection_node);
-				connection_node_delete(cur_connection_node->origin, cur_connection_node->id);
+		// XXX Check parse_socks_request() return codes. Differentiate between fatal and non-fatal errors.
+		if((retval = parse_socks_request(cur_connection_node)) == -1){
+			report_error("handle_connection_read(): parse_sock_request(%lx): Malformed SOCKS request.", (unsigned long) cur_connection_node);
+			connection_node_delete(cur_connection_node);
+			return(-2);
+		}
+		cur_connection_node->state = retval;
+
+		if(cur_connection_node->state == CON_SOCKS_V5_AUTH){
+
+			cur_connection_node->buffer_head[0] = 0x05;
+			cur_connection_node->buffer_head[1] = cur_connection_node->auth_method;
+			retval = write(cur_connection_node->fd, cur_connection_node->buffer_head, 2);
+
+			if(retval == -1 || cur_connection_node->auth_method == 0xff){
+				if(verbose){
+					fprintf(stderr, "\rConnection %s closed: %s\n", cur_connection_node->rhost_rport, strerror(errno));
+				}
+				connection_node_delete(cur_connection_node);
 				return(-2);
 			}
-			cur_connection_node->state = retval;
+
+			if(cur_connection_node->buffer_tail > cur_connection_node->buffer_ptr){
+
+				// XXX Check parse_socks_request() return codes. Differentiate between fatal and non-fatal errors.
+				if((retval = parse_socks_request(cur_connection_node)) == -1){
+					report_error("handle_connection_read(): parse_sock_request(%lx): Malformed SOCKS request.", (unsigned long) cur_connection_node);
+					connection_node_delete(cur_connection_node);
+					return(-2);
+				}
+				cur_connection_node->state = retval;
+			}
 		}
 	}
 
@@ -709,21 +789,27 @@ int handle_connection_read(struct connection_node *cur_connection_node){
 		message->header_type = DT_PROXY_HT_CREATE;
 		message->header_origin = cur_connection_node->origin;
 		message->header_id = cur_connection_node->id;
+		message->header_proxy_type = cur_connection_node->proxy_type;
 
-		memset(message->data, '\0', io->message_data_size);
+		memset(message->data, 0, io->message_data_size);
 		count = strlen(cur_connection_node->rhost_rport);
-		count += 2; // account for the ver and cmd to be sent first.
-		count = count < io->message_data_size ? count : io->message_data_size;
-		*(message->data) = cur_connection_node->ver;
-		*(message->data + 1) = cur_connection_node->cmd;
-		memcpy(message->data + 2, cur_connection_node->rhost_rport, count - 2);
+		offset = 0;
+
+		if(cur_connection_node->proxy_type == PROXY_DYNAMIC){
+			offset = 2;
+			count += offset; // account for the ver and cmd to be sent first.
+			count = count < io->message_data_size ? count : io->message_data_size;
+			*(message->data) = cur_connection_node->ver;
+			*(message->data + 1) = cur_connection_node->cmd;
+		}
+
+		memcpy(message->data + offset, cur_connection_node->rhost_rport, count);
 		message->data_len = count;
 
 		if((retval = message_push()) == -1){
 			report_error("handle_connection_read(): message_push(): %s", strerror(errno));
 			return(-1);
 		}
-
 	}
 
 	return(0);
@@ -733,6 +819,7 @@ int handle_send_nop(){
 	struct message_helper *message = &(io->message);
 
 	message->data_type = DT_NOP;
+	message->data_len = 0;
 	if(message_push() == -1){
 		report_error("handle_send_nop(): message_push(): %s", strerror(errno));
 		return(-1);
@@ -740,3 +827,61 @@ int handle_send_nop(){
 
 	return(0);
 }
+
+struct connection_node *handle_tun_tap_init(int ifr_flag){
+
+  int count;
+  struct ifreq ifr;
+
+  struct connection_node *tmp_connection_node;
+
+  /* XXX Perform a full audit for memory leaks. */
+  /* XXX Perform static analysis. */
+
+  /* XXX Check the max data_size and set the mtu on the tun/tap fd accordingly! */
+  if((tmp_connection_node = connection_node_create()) == NULL){
+    report_error("tun_tap_init(): connection_node_create(): %s", strerror(errno));
+    return(NULL);
+  }
+
+  if((tmp_connection_node->fd = open(DEV_NET_TUN, O_RDWR)) == -1){
+		connection_node_delete(tmp_connection_node);
+
+		report_error("tun_tap_init(): open(%s, O_RDWR): %s", DEV_NET_TUN, strerror(errno));
+		if(errno == EACCES){
+			report_error("Root needed to initialize tun/tap devices. Ignoring.");
+		}
+    return(NULL);
+  }
+  tmp_connection_node->origin = io->controller;
+  tmp_connection_node->id = tmp_connection_node->fd;
+
+  memset(&ifr, 0, sizeof(ifr));
+  ifr.ifr_flags = ifr_flag | IFF_NO_PI;
+
+  if(ioctl(tmp_connection_node->fd, TUNSETIFF, (void *) &ifr) == -1){
+    report_error("tun_tap_init(): ioctl(%d, TUNSETIFF, %lx): %s", tmp_connection_node->fd, (unsigned long) ((void *) &ifr), strerror(errno));
+    connection_node_delete(tmp_connection_node);
+    return(NULL);
+  }
+
+  count = strlen(ifr.ifr_name);
+  if((tmp_connection_node->rhost_rport = (char *) calloc(count + 1, sizeof(char))) == NULL){
+    report_error("tun_tap_init(): calloc(%d, %d): %s", count + 1, (int) sizeof(char), strerror(errno));
+    return(NULL);
+  }
+  memcpy(tmp_connection_node->rhost_rport, ifr.ifr_name, count);
+
+  tmp_connection_node->state = CON_READY;
+
+  if(ifr_flag == IFF_TUN){
+    tmp_connection_node->proxy_type = PROXY_TUN;
+  }else if(ifr_flag == IFF_TAP){
+    tmp_connection_node->proxy_type = PROXY_TAP;
+  }
+
+  fcntl(tmp_connection_node->fd, F_SETFL, O_NONBLOCK);
+
+  return(tmp_connection_node);
+}
+

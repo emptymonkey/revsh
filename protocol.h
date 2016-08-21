@@ -4,15 +4,16 @@
  * Message Bus Protocol Specification:
  *
  *	Header:
- *		- header_len		: unsigned short (network order)
- *			-- This is the size of the remaining header data.
+ *		- header_len		: unsigned short (network order)	:	size of the remaining header data.
  *		- data_type			:	unsigned char
  *		- data_len			:	unsigned short (network order)
- *		- Other data_type specific headers, as needed.
+ *		- Other data_type specific headers, if applicable, as noted below.
  *
  *	Other headers used with DT_PROXY and DT_CONNECTION:
- *		- header_type		: unsigned short (network order)
- *		- header_id			: unsigned long (network order)
+ *		- header_type				: unsigned short (network order)
+ *		- header_origin			: unsigned long (network order)	:	Lists if controller or target is the owner.
+ *		- header_id					: unsigned long (network order)	:	FD of the connection at it's origin.
+ *		- header_proxy_type	: unsigned long (network order)	: Used during DT_PROXY_HT_CREATE to relay proxy type.
  *
  *	Body:
  *		- data					:	void *
@@ -20,7 +21,7 @@
  *
  *	The naming convetion below is DT for "Data Type" and HT for "Header Type".
  *	E.g. DT_PROXY_HT_CREATE denotes a message where the data type is that of a proxy, but the header will have
- *  additional information relating to the type of request, in this case "create" the proxy.
+ *  additional information relating to the type of request, in this case "create" the proxy connection.
  *
  **********************************************************************************************************************/
 
@@ -67,5 +68,16 @@
 #define DT_ERROR			7
 
 /* DT_TAP and DT_TUN allow for forwarding raw ethernet frames and raw ip packets, respectfully, via a tun/tap device. */
-#define DT_TAP				8
-#define DT_TUN				9
+#define DT_TUN				8
+#define DT_TAP				9
+
+/* 
+	Other protocol constants used in messaging.
+*/
+
+/* Proxy types. Set in message->header_proxy_type for DT_PROXY_HT_CREATE messages. */
+#define PROXY_LOCAL   0
+#define PROXY_DYNAMIC 1
+#define PROXY_TUN     2
+#define PROXY_TAP     3
+

@@ -2,7 +2,7 @@
 #ifndef FREEBSD
 # define _POSIX_C_SOURCE 200112L
 # define _XOPEN_SOURCE  1
-#endif /* FREEBSD */
+#endif 
 
 
 #include <ctype.h>
@@ -40,6 +40,10 @@
 #include <sys/types.h>
 #include <sys/utsname.h>
 
+#include <net/if.h>
+// XXX find freebsd equivalent.
+# include <linux/if.h>
+# include <linux/if_tun.h>
 
 #include "helper_objects.h"
 #include "config.h"
@@ -54,11 +58,8 @@
 #define ADH 1
 #define EDH 2
 
-/* Proxy types */
-#define PROXY_LOCAL 0
-#define PROXY_DYNAMIC 1
-
 #define DEFAULT_PROXY_ADDR "127.0.0.1"
+#define DEV_NET_TUN	"/dev/net/tun"
 
 /* Connection states for proxy connections. */
 #define CON_SOCKS_NO_HANDSHAKE	0
@@ -132,9 +133,10 @@ int proxy_listen(struct proxy_node *cur_proxy_node);
 int proxy_connect(char *rhost_rport);
 
 struct connection_node *connection_node_create();
-int connection_node_delete(unsigned short origin, unsigned short id);
+int connection_node_delete(struct connection_node *);
 struct connection_node *connection_node_find(unsigned short origin, unsigned short id);
 void connection_node_queue(struct connection_node *cur_connection_node);
+struct connection_node *handle_tun_tap_init(int ifr_flag);
 
 int parse_socks_request(struct connection_node *cur_connection_node);
 char *addr_to_string(int atype, char *addr, char *port, int len);
@@ -154,4 +156,3 @@ int handle_proxy_read(struct proxy_node *cur_proxy_node);
 int handle_connection_write(struct connection_node *cur_connection_node);
 int handle_connection_read(struct connection_node *cur_connection_node);
 int handle_send_nop();
-

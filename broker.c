@@ -39,28 +39,29 @@ int broker(struct config_helper *config){
 	/* We use this as a shorthand to make message syntax more readable. */
 	message = &io->message;
 
-	/* Set up proxies requested during launch. */
-	cur_proxy_req_node = config->proxy_request_head;	
-	while(cur_proxy_req_node){
-
-		cur_proxy_node = proxy_node_new(cur_proxy_req_node->request_string, cur_proxy_req_node->type);	
-
-		if(!cur_proxy_node){
-			report_error("do_control(): proxy_node_new(%s, %d): %s", cur_proxy_req_node->request_string, cur_proxy_req_node->type, strerror(errno));
-		}else{
-
-			if(!io->proxy_head){
-				io->proxy_head = cur_proxy_node;
-				io->proxy_tail = cur_proxy_node;
-			}else{
-				io->proxy_tail->next = cur_proxy_node;
-				io->proxy_tail = cur_proxy_node;
-			}
-		}
-		cur_proxy_req_node = cur_proxy_req_node->next;
-	}
-
 	if(config->interactive){
+
+		/* Set up proxies requested during launch. */
+		cur_proxy_req_node = config->proxy_request_head;	
+		while(cur_proxy_req_node){
+
+			cur_proxy_node = proxy_node_new(cur_proxy_req_node->request_string, cur_proxy_req_node->type);	
+
+			if(!cur_proxy_node){
+				report_error("do_control(): proxy_node_new(%s, %d): %s", cur_proxy_req_node->request_string, cur_proxy_req_node->type, strerror(errno));
+			}else{
+
+				if(!io->proxy_head){
+					io->proxy_head = cur_proxy_node;
+					io->proxy_tail = cur_proxy_node;
+				}else{
+					io->proxy_tail->next = cur_proxy_node;
+					io->proxy_tail = cur_proxy_node;
+				}
+			}
+			cur_proxy_req_node = cur_proxy_req_node->next;
+		}
+
 
 		/* Prepare for window resize event handling. */
 		memset(&act, 0, sizeof(act));
@@ -75,6 +76,22 @@ int broker(struct config_helper *config){
 			report_error("broker(): calloc(1, %d): %s", (int) sizeof(struct winsize), strerror(errno));
 			return(-1);
 		}
+
+		if(io->controller){
+			if(config->tun){
+				if((cur_connection_node = handle_tun_tap_init(IFF_TUN)) == NULL){
+					report_error("broker(): handle_tun_tap_init(%d): %s", IFF_TUN, strerror(errno));
+				}
+				handle_connection_read(cur_connection_node);
+			}
+
+			if(config->tap){
+				if((cur_connection_node = handle_tun_tap_init(IFF_TAP)) == NULL){
+					report_error("broker(): handle_tun_tap_init(%d): %s", IFF_TAP, strerror(errno));
+				}
+				handle_connection_read(cur_connection_node);
+			}
+		}
 	}
 
 	io->fd_count = 2;
@@ -82,6 +99,12 @@ int broker(struct config_helper *config){
 	while(cur_proxy_node && io->fd_count < FD_SETSIZE){
 		io->fd_count++;
 		cur_proxy_node = cur_proxy_node->next;
+	}
+
+	cur_connection_node = io->connection_head;
+	while(cur_connection_node){
+		io->fd_count++;
+		cur_connection_node = cur_connection_node->next;
 	}
 
 	timeout_ptr = NULL;

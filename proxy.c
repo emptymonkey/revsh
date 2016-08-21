@@ -238,38 +238,34 @@ struct connection_node *connection_node_create(){
 	return(cur_connection_node);
 }
 
-int connection_node_delete(unsigned short origin, unsigned short id){
+//XXX  needs to take a point. Find it with connection_node_find().
+//XXX int connection_node_delete(unsigned short origin, unsigned short id){
+int connection_node_delete(struct connection_node *cur_connection_node){
 
-	struct connection_node *tmp_connection_node;
-
-	if((tmp_connection_node = connection_node_find(origin, id)) == NULL){
-		return(-2);
+	if(cur_connection_node == io->connection_head){
+		io->connection_head = cur_connection_node->next;
 	}
-
-	if(tmp_connection_node == io->connection_head){
-		io->connection_head = tmp_connection_node->next;
+	if(cur_connection_node == io->connection_tail){
+		io->connection_tail = cur_connection_node->prev;
 	}
-	if(tmp_connection_node == io->connection_tail){
-		io->connection_tail = tmp_connection_node->prev;
+	if(cur_connection_node->prev){
+		cur_connection_node->prev->next = cur_connection_node->next;
 	}
-	if(tmp_connection_node->prev){
-		tmp_connection_node->prev->next = tmp_connection_node->next;
-	}
-	if(tmp_connection_node->next){
-		tmp_connection_node->next->prev = tmp_connection_node->prev;
+	if(cur_connection_node->next){
+		cur_connection_node->next->prev = cur_connection_node->prev;
 	}
 
-	if(tmp_connection_node->fd){
-		close(tmp_connection_node->fd);
+	if(cur_connection_node->fd){
+		close(cur_connection_node->fd);
 	}
-	if(tmp_connection_node->rhost_rport){
-		free(tmp_connection_node->rhost_rport);
+	if(cur_connection_node->rhost_rport){
+		free(cur_connection_node->rhost_rport);
 	}
-	if(tmp_connection_node->buffer_head){
-		free(tmp_connection_node->buffer_head);
+	if(cur_connection_node->buffer_head){
+		free(cur_connection_node->buffer_head);
 	}
-	if(tmp_connection_node){
-		free(tmp_connection_node);
+	if(cur_connection_node){
+		free(cur_connection_node);
 	}
 
 	io->fd_count--;
@@ -494,7 +490,7 @@ int parse_socks_request(struct connection_node *cur_connection_node){
 				index += len;
 				dst_port_ptr = head + index;
 
-			} else if(atype == 0x04){
+			}else if(atype == 0x04){
 				len = 16;
 
 				// From the diagram above. 4 + Variable + 2, where Variable is 16 in the ipv6 case.
@@ -508,7 +504,8 @@ int parse_socks_request(struct connection_node *cur_connection_node){
 
 			}
 
-			index += len + 2;
+			index += 2;
+
 
 			if((cur_connection_node->rhost_rport = addr_to_string(atype, dst_addr_ptr, dst_port_ptr, len)) == NULL){
 				report_error("parse_socks_request(): addr_to_string(%d, %lx, %lx, 0): %s", \

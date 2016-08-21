@@ -11,7 +11,7 @@ struct message_helper {
 	unsigned short header_type;
 	unsigned short header_origin;
 	unsigned short header_id;
-	unsigned short header_errno;
+	unsigned short header_proxy_type;
 
 	char *data;
 
@@ -26,12 +26,14 @@ struct proxy_request_node {
 	struct proxy_request_node *next;
 };
 
-/* An object acting as a collection of different configuration states. */
+/* An object representing how the different configuration options were set for this run. */
 struct config_helper {
 
 	unsigned char interactive;
 
 	int bindshell;
+	int tun;
+	int tap;
 
 	char *ip_addr;
 	char *keys_dir;
@@ -73,7 +75,9 @@ struct connection_node {
 
 	unsigned short origin;
 	unsigned short id;
+	unsigned short proxy_type;
 	int fd;
+
 
 	// A copy of the original rhost_rport string in the related proxy_node struct, to simplify retry requests.
 	// Note, this has to be a copy, because in the remote connection state, the original proxy node does not exist.
