@@ -863,6 +863,7 @@ struct connection_node *handle_tun_tap_init(int ifr_flag){
 
   struct connection_node *tmp_connection_node;
 
+	int tmp_sock = 0;
 
 //	fprintf(stderr, "\rDEBUG: handle_tun_tap_init()\n");
 
@@ -908,32 +909,44 @@ struct connection_node *handle_tun_tap_init(int ifr_flag){
     tmp_connection_node->proxy_type = PROXY_TUN;
   }else if(ifr_flag == IFF_TAP){
     tmp_connection_node->proxy_type = PROXY_TAP;
-  }
+	}
 
-	fprintf(stderr, "\rDEBUG: ifr.ifr_name: %s\n", ifr.ifr_name);
+//	fprintf(stderr, "\rDEBUG: ifr.ifr_name: %s\n", ifr.ifr_name);
 
-	if(ioctl(tmp_connection_node->fd, SIOCGIFMTU, (void *) &ifr) == -1){
-    report_error("tun_tap_init(): ioctl(%d, SIOCGIFMTU, %lx): %s", tmp_connection_node->fd, (unsigned long) &ifr, strerror(errno));
-    connection_node_delete(tmp_connection_node);
-    return(NULL);
+	/*
+		 Really Linux?! Are you fucking kidding me?? I can't perform the MTU set on the tun/tap fd directly??
+		 I have to open a *random unrelated socket* just to pass it's fd to the MTU ioctl() call, only to close it out 
+		 immediately after?! Holy shit that's janky!!
+	 */
+	if((tmp_sock = socket(AF_LOCAL, SOCK_DGRAM, 0)) == -1){
+		report_error("tun_tap_init(): socket(AF_LOCAL, SOCK_DGRAM, 0): %s", strerror(errno));
+		connection_node_delete(tmp_connection_node);
+		return(NULL);
+	}
+
+	if(ioctl(tmp_sock, SIOCGIFMTU, (void *) &ifr) == -1){
+		report_error("tun_tap_init(): ioctl(%d, SIOCGIFMTU, %lx): %s", tmp_connection_node->fd, (unsigned long) &ifr, strerror(errno));
+		connection_node_delete(tmp_connection_node);
+		return(NULL);
 	}
 
 	/*
-		If the the mtu on the tun / tap device is larger than the message data buffer, reduce it.
-		This ensures the we can always fit a full frame / packet inside one message.
-		Given that the default is that the message data buffer is probably a page of memory, and that is probably 4k in size, this will 
-		probably never be needed.
-	*/
+		 If the the mtu on the tun / tap device is larger than the message data buffer, reduce it.
+		 This ensures the we can always fit a full frame / packet inside one message.
+		 Given that the default is that the message data buffer is probably a page of memory, and that is probably 4k in size, this will 
+		 probably never be needed.
+	 */
 	if(ifr.ifr_mtu > io->message_data_size){
 
 		ifr.ifr_mtu = io->message_data_size;
-		if(ioctl(tmp_connection_node->fd, SIOCSIFMTU, (void *) &ifr) == -1){
+		if(ioctl(tmp_sock, SIOCSIFMTU, (void *) &ifr) == -1){
 			report_error("tun_tap_init(): ioctl(%d, SIOCSIFMTU, %lx): %s", tmp_connection_node->fd, (unsigned long) &ifr, strerror(errno));
 			connection_node_delete(tmp_connection_node);
 			return(NULL);
 		}
 	}
 
+	close(tmp_sock);
 	fcntl(tmp_connection_node->fd, F_SETFL, O_NONBLOCK);
 
 	return(tmp_connection_node);
