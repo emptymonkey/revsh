@@ -121,6 +121,9 @@ install:
 		cp revsh $(HOME)/.revsh/$(KEYS_DIR) ; \
 		if [ ! -e $(HOME)/.revsh/revsh ]; then \
 			ln -s $(HOME)/.revsh/$(KEYS_DIR)/revsh $(HOME)/.revsh/revsh ; \
+		fi ; \
+		if [ ! -e $(HOME)/.revsh/rc ]; then \
+			cp rc $(HOME)/.revsh/ ; \
 		fi \
 	fi
 

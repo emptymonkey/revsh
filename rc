@@ -1,0 +1,4 @@
+unset HISTFILE
+export PATH=/bin:/usr/bin:/usr/local/bin:/sbin:/usr/sbin:/usr/local/sbin
+export PS1="\[\033[4;33m\]\u@\h\[\033[0;33m\]:\[\033[34m\]\w\[\033[0;33m\]$ \[\033[0m\]"
+id
