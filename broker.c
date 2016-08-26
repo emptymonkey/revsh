@@ -25,19 +25,14 @@ int broker(struct config_helper *config){
 	struct sigaction act;
 	int current_sig;
 
-	struct message_helper *message;
-
 	struct proxy_node *cur_proxy_node;
-	struct connection_node *cur_connection_node, *next_connection_node;
-	
+	struct connection_node *cur_connection_node;
+
 	unsigned long tmp_ulong;
 	struct timeval timeout, *timeout_ptr;
 
 	struct proxy_request_node *cur_proxy_req_node;
 
-
-	/* We use this as a shorthand to make message syntax more readable. */
-	message = &io->message;
 
 	if(config->interactive){
 
@@ -80,17 +75,23 @@ int broker(struct config_helper *config){
 		if(io->controller){
 			if(config->tun){
 				if((cur_connection_node = handle_tun_tap_init(IFF_TUN)) == NULL){
-					report_error("broker(): handle_tun_tap_init(%d): %s", IFF_TUN, strerror(errno));
+					report_error("broker(): handle_tun_tap_init(IFF_TUN): %s", strerror(errno));
 				}else{
-					handle_connection_read(cur_connection_node);
+					if(handle_send_dt_proxy_ht_create(cur_connection_node) == -1){
+						report_error("broker(): handle_send_dt_proxy_ht_create(%lx): %s", (unsigned long) cur_connection_node, strerror(errno));
+						return(-1);
+					}
 				}
 			}
 
 			if(config->tap){
 				if((cur_connection_node = handle_tun_tap_init(IFF_TAP)) == NULL){
-					report_error("broker(): handle_tun_tap_init(%d): %s", IFF_TAP, strerror(errno));
+					report_error("broker(): handle_tun_tap_init(IFF_TAP): %s", strerror(errno));
 				}else{
-					handle_connection_read(cur_connection_node);
+					if(handle_send_dt_proxy_ht_create(cur_connection_node) == -1){
+						report_error("broker(): handle_send_dt_proxy_ht_create(%lx): %s", (unsigned long) cur_connection_node, strerror(errno));
+						return(-1);
+					}
 				}
 			}
 		}
@@ -118,25 +119,13 @@ int broker(struct config_helper *config){
 
 		cur_connection_node = io->connection_head;
 		while((io->fd_count < FD_SETSIZE) && cur_connection_node){
-			/*
-				 fprintf(stderr, "\r-- FD_SET() --\n\rDEBUG: origin|id: %d|%d\n", cur_connection_node->origin, cur_connection_node->id);
-				 fprintf(stderr, "\rDEBUG: cur_connection_node: %lx\n", (unsigned long) cur_connection_node);
-				 fprintf(stderr, "\rDEBUG: cur_connection_node->state: %d\n", cur_connection_node->state); 
-				 fprintf(stderr, "\rDEBUG: cur_connection_node->write_head: %lx\n", (unsigned long) cur_connection_node->write_head);
-			 */
 
-			if(! ((cur_connection_node->state == CON_DORMANT) || (cur_connection_node->state == CON_READY) || (cur_connection_node->state == CON_EINPROGRESS))){
+			if(! ((cur_connection_node->state == CON_DORMANT) || (cur_connection_node->state == CON_EINPROGRESS))){
 				FD_SET(cur_connection_node->fd, &read_fds);
 				fd_max = cur_connection_node->fd > fd_max ? cur_connection_node->fd : fd_max;
 			}
 
 			if(cur_connection_node->write_head || cur_connection_node->state == CON_EINPROGRESS){
-				/*
-					 fprintf(stderr, "\r-- FD_SET() write --\n\rDEBUG: origin|id: %d|%d\n", cur_connection_node->origin, cur_connection_node->id);
-					 fprintf(stderr, "\rDEBUG: cur_connection_node: %lx\n", (unsigned long) cur_connection_node);
-					 fprintf(stderr, "\rDEBUG: cur_connection_node->state: %d\n", cur_connection_node->state); 
-					 fprintf(stderr, "\rDEBUG: cur_connection_node->write_head: %lx\n", (unsigned long) cur_connection_node->write_head);
-				 */
 				FD_SET(cur_connection_node->fd, &write_fds);
 				fd_max = cur_connection_node->fd > fd_max ? cur_connection_node->fd : fd_max;
 			}
@@ -172,11 +161,10 @@ int broker(struct config_helper *config){
 			goto CLEAN_UP;
 		}
 
-		//		fprintf(stderr, "\rDEBUG: select()\n");
 
 		if(!retval){
-			if((retval = handle_send_nop()) == -1){
-				report_error("broker(): handle_send_nop(): %s", strerror(errno));
+			if((retval = handle_send_dt_nop()) == -1){
+				report_error("broker(): handle_send_dt_nop(): %s", strerror(errno));
 				goto CLEAN_UP;
 			}
 		}
@@ -282,13 +270,6 @@ int broker(struct config_helper *config){
 							goto CLEAN_UP;
 						}
 
-					}else if(message->header_type == DT_PROXY_HT_RESPONSE){
-
-						if((retval = handle_message_dt_proxy_ht_response()) == -1){
-							report_error("broker(): handle_message_dt_proxy_ht_response(): %s", strerror(errno));
-							goto CLEAN_UP;
-						}
-
 					}else{
 						// Malformed request.
 						report_error("broker(): Unknown Proxy Header Type: %d", message->header_type);
@@ -351,8 +332,6 @@ int broker(struct config_helper *config){
 
 		cur_connection_node = io->connection_head;
 		while(cur_connection_node){
-			// Advancing to the next node in the list now, in case cur_connection_node gets deleted in the processing of the loop.
-			next_connection_node = cur_connection_node->next;
 
 			if(FD_ISSET(cur_connection_node->fd, &write_fds)){
 
@@ -362,12 +341,6 @@ int broker(struct config_helper *config){
 						goto CLEAN_UP;
 					}
 				} else {
-					/*
-						 fprintf(stderr, "\r-- FD_ISSET() write --\n\rDEBUG: origin|id: %d|%d\n", cur_connection_node->origin, cur_connection_node->id);
-						 fprintf(stderr, "\rDEBUG: cur_connection_node: %lx\n", (unsigned long) cur_connection_node);
-						 fprintf(stderr, "\rDEBUG: cur_connection_node->state: %d\n", cur_connection_node->state); 
-						 fprintf(stderr, "\rDEBUG: cur_connection_node->write_head: %lx\n", (unsigned long) cur_connection_node->write_head);
-					 */
 					if((retval = handle_connection_write(cur_connection_node)) == -1){
 						report_error("broker(): handle_connection_write(%lx): %s", (unsigned long) cur_connection_node, strerror(errno));
 						goto CLEAN_UP;
@@ -378,10 +351,16 @@ int broker(struct config_helper *config){
 			}
 
 			if(FD_ISSET(cur_connection_node->fd, &read_fds)){
-
-				if((retval = handle_connection_read(cur_connection_node)) == -1){
-					report_error("broker(): handle_connection_read(%lx): %s", (unsigned long) cur_connection_node, strerror(errno));
-					goto CLEAN_UP;
+				if(cur_connection_node->state == CON_ACTIVE){
+					if((retval = handle_connection_read(cur_connection_node)) == -1){
+						report_error("broker(): handle_connection_read(%lx): %s", (unsigned long) cur_connection_node, strerror(errno));
+						goto CLEAN_UP;
+					}
+				}else if(cur_connection_node->state == CON_SOCKS_INIT || cur_connection_node->state == CON_SOCKS_V5_AUTH){
+					if((retval = handle_con_socks_init(cur_connection_node)) == -1){
+						report_error("broker(): handle_con_socks_init(%lx): %s", (unsigned long) cur_connection_node, strerror(errno));
+						goto CLEAN_UP;
+					}
 				}
 
 				if(retval == 0){
@@ -391,7 +370,7 @@ int broker(struct config_helper *config){
 				break;
 			}
 
-			cur_connection_node = next_connection_node;
+			cur_connection_node = cur_connection_node->next;
 		}
 
 	}

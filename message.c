@@ -15,13 +15,8 @@
 int message_push(){
 
 	unsigned short header_len;
-	struct message_helper *message;
 
 	unsigned short tmp_short;
-
-
-	/* We use this as a shorthand to make message syntax more readable. */
-	message = &io->message;
 
 
 	/* Send the header. */
@@ -125,12 +120,8 @@ int message_push(){
 int message_pull(){
 
 	unsigned short header_len;
-	struct message_helper *message;
 
 	int retval;
-
-  /* We use this as a shorthand to make message syntax more readable. */
-	message = &io->message;
 
 
 	memset(message->data, '\0', io->message_data_size);

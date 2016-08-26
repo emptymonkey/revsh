@@ -51,3 +51,10 @@
 /* Korean		"we are guardians of peace" */
 /* #define CALLING_CARD "우리는 평화의 수호자" */
 
+/*
+Edit:
+	 For those not getting the humor of the CALLING_CARD, it is intended as a cynical commentary on the current state
+	 of APT attribution. If your methodology for attribution doesn't at a minimum rely upon fingerprinting the operator
+	 through analysis of the digital artifacts unique to that operator's interaction with the system, then please
+	 re-roll your cyber-identity. /usr/bin/strings is not a cyber-attribution tool.
+*/

@@ -76,7 +76,7 @@
 */
 
 /* Proxy types. Set in message->header_proxy_type for DT_PROXY_HT_CREATE messages. */
-#define PROXY_LOCAL   0
+#define PROXY_STATIC   0
 #define PROXY_DYNAMIC 1
 #define PROXY_TUN     2
 #define PROXY_TAP     3

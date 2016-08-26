@@ -20,7 +20,6 @@ void report_error(char *fmt, ...){
 
 	int retval;
 	va_list list_ptr;
-	struct message_helper *message;
 
 	char error_string[ERROR_BUFF_SIZE] = {0};
 
@@ -49,7 +48,6 @@ void report_error(char *fmt, ...){
 	if(!io){
 		return;
 	}
-	message = &io->message;
 
 	if(io->controller || io->init_complete){
 
@@ -102,6 +100,10 @@ int report_log(char *fmt, ...){
 					(unsigned long) error_string, ERROR_BUFF_SIZE - 1, (unsigned long) fmt, (unsigned long) list_ptr, strerror(errno));
 		}
 		return(retval);
+	}
+
+	if(verbose){
+		fprintf(stderr, "\r%s\n", error_string);
 	}
 
 	return(report_log_string(error_string));

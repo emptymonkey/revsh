@@ -58,7 +58,7 @@ struct config_helper {
 
 };
 
-/* A node for a linked list of proxies. */
+/* A node for a linked list of proxy listeners. */
 struct proxy_node {
 	char *lhost;
 	char *lport;
@@ -70,7 +70,7 @@ struct proxy_node {
 	struct proxy_node *next;
 };
 
-/* A node for a linked list of connections. Used for tracking established proxy connections. */
+/* A node for a linked list of tunneled data connections. */
 struct connection_node {
 
 	unsigned short origin;
@@ -78,22 +78,17 @@ struct connection_node {
 	unsigned short proxy_type;
 	int fd;
 
-
 	// A copy of the original rhost_rport string in the related proxy_node struct, to simplify retry requests.
 	// Note, this has to be a copy, because in the remote connection state, the original proxy node does not exist.
 	char *rhost_rport;
 
-	// May be useful for debugging stats.
-	// unsigned long data_count;
-
-	// This buffer is used for socks raw data during socks setup.
+	// This buffer is used to cache socks request data during a proxy setup.
 	char *buffer_head;
 	char *buffer_ptr;
 	char *buffer_tail;
 	unsigned int buffer_size;
 
-	// Used during the connection initialization to track the state of the socks handshake.
-	// Used after initialization to track active vs domrmant mode of a connection. 
+	// Current state of the connecction. (E.g. CON_EINPROGRESS, CON_ACTIVE, etc.)
 	unsigned int state;
 	
 	unsigned char ver;
@@ -108,11 +103,9 @@ struct connection_node {
 	 */
 
 	// This will allow for write queues.
-	struct message_helper *write_head;
 	//  Note, no write_tail element. Iterate through every time you want to add an element, thus calculating the message depth dynamically.
   //  If MAX_MESSAGE_DEPTH is hit, do the needful.
-
-	unsigned short dormant_flag;
+	struct message_helper *write_head;
 
 	struct connection_node *next;
 	struct connection_node *prev;

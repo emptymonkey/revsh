@@ -33,13 +33,8 @@ int do_target(struct config_helper *config){
 	struct sockaddr addr;
 	socklen_t addrlen = (socklen_t) sizeof(addr);
 
-	struct message_helper *message;
-
   struct utsname uname_info;
 
-
-	/* We will be using the internal message struct inside of io quite a bit, so this will be a nice shorthand. */
-	message = &io->message;
 
 	/* Initialize the structures we will be using. */
 	if((tty_winsize = (struct winsize *) calloc(1, sizeof(struct winsize))) == NULL){
@@ -228,7 +223,7 @@ int do_target(struct config_helper *config){
 		return(-1);
 	}
 
-	remote_printf("################################################################################\r\n");
+	remote_printf("\n\r################################################################################\r\n");
 	remote_printf("# Hostname:\t\t%s\r\n", uname_info.nodename);
 	remote_printf("# OS Name:\t\t%s\r\n", uname_info.sysname);
 	remote_printf("# OS Release:\t\t%s\r\n", uname_info.release);
@@ -401,10 +396,6 @@ int remote_printf(char *fmt, ...){
 	int retval;
 	va_list list_ptr;
 
-	struct message_helper *message;
-
-
-	message = &io->message;
 
 	message->data_type = DT_TTY;
 

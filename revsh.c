@@ -146,6 +146,8 @@ int main(int argc, char **argv){
 		return(-1);
 	}
 
+	/* message is used throughout the code as a shorthand for io->message. */
+	message = &io->message;
 
 	/* Set defaults. */
 	io->local_in_fd = fileno(stdin);
@@ -254,7 +256,7 @@ int main(int argc, char **argv){
 				}
 				cur_proxy_ptr->request_string = optarg;
 
-				cur_proxy_ptr->type = PROXY_LOCAL;
+				cur_proxy_ptr->type = PROXY_STATIC;
 				if(opt == 'D'){
 					cur_proxy_ptr->type = PROXY_DYNAMIC;
 				}

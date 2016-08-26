@@ -23,7 +23,7 @@ struct proxy_node *proxy_node_new(char *proxy_string, int proxy_type){
 	}
 
 	if((proxy_type == PROXY_DYNAMIC && !(count == 0 || count == 1)) \
-			|| (proxy_type == PROXY_LOCAL && !(count == 2 || count == 3))){
+			|| (proxy_type == PROXY_STATIC && !(count == 2 || count == 3))){
 		report_error("proxy_node_new(): Improper port forward syntax for proxy type '%d': %s", proxy_type, proxy_string);
 		return(NULL);
 	} 
@@ -57,7 +57,7 @@ struct proxy_node *proxy_node_new(char *proxy_string, int proxy_type){
 			new_node->lport = first;
 		}
 
-	} else if(proxy_type == PROXY_LOCAL) {
+	} else if(proxy_type == PROXY_STATIC) {
 
 		if(!second || (third = strchr(second, ':')) == NULL){
 			report_error("proxy_node_new(): Malformed proxy string: %s", proxy_string);
@@ -148,7 +148,7 @@ int proxy_connect(char *rhost_rport){
 
 	int count;
 	int yes = 1;
-	int rv, connector = -1;
+	int rv, connector = -2;
 	struct addrinfo hints, *ai, *p;
 	char *rhost, *rport, *tmp_ptr;
 
@@ -168,13 +168,14 @@ int proxy_connect(char *rhost_rport){
 	if(tmp_ptr != rhost_rport){
 		if((tmp_ptr = strchr(rhost, ']')) == NULL){
 			free(rhost);
-			return(connector);
+			return(-2);
 		}
 		*(tmp_ptr) = '\0';
 	}
+
 	if((rport = strrchr(rhost, ':')) == NULL){
 		free(rhost);
-		return(connector);
+		return(-2);
 	}
 	*(rport++) = '\0';
 
@@ -187,7 +188,7 @@ int proxy_connect(char *rhost_rport){
 	if((rv = getaddrinfo(rhost, rport, &hints, &ai)) != 0) {
 		report_error("proxy_connect(): getaddrinfo(%s, %s, %lx, %lx): %s", rhost, rport, (unsigned long) &hints, (unsigned long) &ai, gai_strerror(rv));
 		free(rhost);
-		return(connector);
+		return(-2);
 	}
 
 	for(p = ai; p != NULL; p = p->ai_next) {
@@ -211,7 +212,7 @@ int proxy_connect(char *rhost_rport){
 	free(rhost);
 
 	if(p == NULL){
-		return(-1);
+		return(-2);
 	}
 
 	return(connector);
@@ -318,20 +319,20 @@ int parse_socks_request(struct connection_node *cur_connection_node){
 	int len = 0;
 
 	char *domain_name;
-	char *head, *ptr;
+	char *head;
 	char *dst_port_ptr = NULL;
 	char *dst_addr_ptr = NULL;
 
 	int atype = 0x01;
+	int noauth_found;
 
 
 	head = cur_connection_node->buffer_ptr;
-	ptr = cur_connection_node->buffer_tail;
-	size = ptr - head;
+	size = cur_connection_node->buffer_tail - cur_connection_node->buffer_ptr;
 	index = 0;
 
 	if(!size){
-		return(CON_SOCKS_NO_HANDSHAKE);
+		return(CON_SOCKS_INIT);
 	}
 
 	cur_connection_node->ver = *(head);
@@ -348,7 +349,7 @@ int parse_socks_request(struct connection_node *cur_connection_node){
 		 */
 
 		if(size < 9){
-			return(CON_SOCKS_NO_HANDSHAKE);
+			return(CON_SOCKS_INIT);
 		}
 
 		index += 1;
@@ -362,13 +363,10 @@ int parse_socks_request(struct connection_node *cur_connection_node){
 		dst_addr_ptr = head + index;
 		index += 4;
 
-		// Step through the "userid" we don't care about.
-		while(head[index]){
-
-			index++;
-			if(index == size){
-				return(CON_SOCKS_NO_HANDSHAKE);
-			}
+		// We don't accept connections with a USERID field.
+		if(head[index]){
+			report_error("parse_socks_request(): USERID found, but not supported by this implementation.");
+			return(-1);
 		}
 
 		// Step through and grab the domain_name, if this is 4a.
@@ -381,14 +379,14 @@ int parse_socks_request(struct connection_node *cur_connection_node){
 			){
 
 			if(!(index < size)){
-				return(CON_SOCKS_NO_HANDSHAKE);
+				return(CON_SOCKS_INIT);
 			}
 
 			domain_name = head + index;
 			while(head[index]){
 				index++;
 				if(index == size){
-					return(CON_SOCKS_NO_HANDSHAKE);
+					return(CON_SOCKS_INIT);
 				}
 			}
 
@@ -402,7 +400,7 @@ int parse_socks_request(struct connection_node *cur_connection_node){
 			index++;
 			cur_connection_node->buffer_ptr = head + index;
 
-			return(CON_READY);
+			return(CON_ACTIVE);
 		}
 
 		if((cur_connection_node->rhost_rport = addr_to_string(atype, dst_addr_ptr, dst_port_ptr, 0)) == NULL){
@@ -413,41 +411,44 @@ int parse_socks_request(struct connection_node *cur_connection_node){
 
 		cur_connection_node->buffer_ptr = head + index;
 
-		return(CON_READY);
+		return(CON_ACTIVE);
 
 	}else if(head[index] == 5){
 		// SOCKS 5
 
-		if(cur_connection_node->state == CON_SOCKS_NO_HANDSHAKE){
+		if(cur_connection_node->state == CON_SOCKS_INIT){
 			index += 1;	
 			if(!(index < size)){
-				return(CON_SOCKS_NO_HANDSHAKE);
+				return(CON_SOCKS_INIT);
 			}
 
-			cur_connection_node->auth_method = 0xff;
+			noauth_found = 0;
 			nmethods = head[index++];
 			for(i = 0; i < nmethods; i++){
 
 				if(!(index < size)){
-					return(CON_SOCKS_NO_HANDSHAKE);
+					return(CON_SOCKS_INIT);
 				}
 
 				// Someday we might implement more than the "NO AUTHENTICATION REQUIRED" method...
 				if(head[index] == 0x00){
-					cur_connection_node->auth_method = 0x00;
+					noauth_found = 1;
 				}
 
 				index++;
 			}
 
 			cur_connection_node->buffer_ptr = head + index;
-			return(CON_SOCKS_V5_AUTH);
+			if(noauth_found){
+				return(CON_SOCKS_V5_AUTH);
+			}else{
+				report_error("parse_socks_request(): No supported auth type found. Only \"No Authentication Required\" is supported.");
+				return(-1);
+			}
 
 		}else if(cur_connection_node->state == CON_SOCKS_V5_AUTH){
 
-
 			/*
-
 				 +----+-----+-------+------+----------+----------+
 				 |VER | CMD |  RSV  | ATYP | DST.ADDR | DST.PORT |
 				 +----+-----+-------+------+----------+----------+
@@ -459,13 +460,15 @@ int parse_socks_request(struct connection_node *cur_connection_node){
 				 = 5  Minimum number of bytes before we can do anything interesting.
 			 */
 
-			if(size < 5){
-				return(CON_SOCKS_NO_HANDSHAKE);
+			if(size < 7){
+				return(CON_SOCKS_INIT);
 			}
 
 			index += 1;
 
-			cur_connection_node->cmd = head[index];
+			if(head[index] != 1){
+				report_error("parse_socks_request(): Unsupported CMD. Only CMD \"Connect\" is supported.");
+			}
 			index += 2;
 
 			atype = head[index];
@@ -475,7 +478,7 @@ int parse_socks_request(struct connection_node *cur_connection_node){
 				len = 4;
 				// From the diagram above. 4 + Variable + 2, where Variable is 4 in the ipv4 case.
 				if(size < (4 + len + 2)){
-					return(CON_SOCKS_NO_HANDSHAKE);
+					return(CON_SOCKS_INIT);
 				}
 
 				dst_addr_ptr = head + index;
@@ -487,7 +490,7 @@ int parse_socks_request(struct connection_node *cur_connection_node){
 
 				// From the diagram above. 4 + Variable + 2, where Variable length is defined in the first octet.
 				if(size < (4 + 1 + len + 2)){
-					return(CON_SOCKS_NO_HANDSHAKE);
+					return(CON_SOCKS_INIT);
 				}
 
 				index++;  // Move past the length variable.
@@ -500,7 +503,7 @@ int parse_socks_request(struct connection_node *cur_connection_node){
 
 				// From the diagram above. 4 + Variable + 2, where Variable is 16 in the ipv6 case.
 				if(size < (4 + len + 2)){
-					return(CON_SOCKS_NO_HANDSHAKE);
+					return(CON_SOCKS_INIT);
 				}
 
 				dst_addr_ptr = head + index;
@@ -523,7 +526,7 @@ int parse_socks_request(struct connection_node *cur_connection_node){
 
 			cur_connection_node->buffer_ptr = head + index;
 
-			return(CON_READY);
+			return(CON_ACTIVE);
 		}
 	}
 
@@ -571,152 +574,4 @@ char *addr_to_string(int atype, char *addr, char *port, int len){
 	}
 
 	return(ptr);
-}
-
-/*
-Cases:
-4 / 4A:
-+----+----+-----+-----+
-|VER |CMD |PORT |ADDR |
-+----+----+-----+-----+
-|1   |1   |2    |4    |
-+----+----+-----+-----+
-
-Connect:
-VER -> 0x00
-CMD -> 0x5A
-PORT -> // ignored, pad w/zeros
-ADDR -> // ignored, pad w/zeros
-
-Bind:
-VER -> 0x00
-CMD -> 0x5A
-PORT -> // port of the listenting socket
-ADDR -> // address of the listening socket
-
-5:
-+----+----+-----+-----+--------+-----+
-|VER |CMD |RSV  |ATYP |ADDR    |PORT |
-+----+----+-----+-----+--------+-----+
-|1   |1   |'\0' |1    |4 or 16 |2    |
-+----+----+-----+-----+--------+-----+
-
-Connect:
-VN -> 0x05
-CD -> 0x00
-ATYP -> // address type
-PORT -> // port of the connecting socket
-ADDR -> // address of the connecting socket
-
-Bind (first reply):
-VN -> 0x05
-CD -> 0x00
-ATYP -> // address type
-PORT -> // port of the listening socket
-ADDR -> // address of the listening socket
-
-Bind (second reply):
-VN -> 0x05
-CD -> 0x00
-ATYP -> // address type
-PORT -> // port of the connectin socket
-ADDR -> // address of the connecting socket
-
-Case with largest response size:
-Socks 5, IPv6, bind (which requires *two* responses)
-(1 + 1 + 1 + 1 + 16 + 2) * 2
-= (22) * 2
-= 44 bytes
- */
-#define MAX_RESPONSE_SIZE 44
-
-// Use the new DT_PROXY_HT_RESPONSE to send back port / addr info.
-// - Actually, just have the response be the exact response to be sent back to the client!
-// - And don't worry about a new buffer. Just stuff it into the message buffer and pass it through!
-// - Use getsockname() to gather the data.
-// - http://beej.us/guide/bgnet/output/html/multipage/sockaddr_inman.html
-// - http://long.ccaba.upc.edu/long/045Guidelines/eva/ipv6.html
-
-int proxy_response(int sock, char ver, char cmd, char *buffer, int buffer_size){
-
-	int retval;
-	char *buff_ptr;
-	struct sockaddr_storage addr;
-	socklen_t addrlen = sizeof(addr);
-
-
-	// Response for a point-to-point proxy being requested. NOP out.
-	if(ver == 0){
-		return(0);
-	}
-
-	if(buffer_size < MAX_RESPONSE_SIZE){
-		return(-1);
-	}
-	memset(buffer, 0x00, MAX_RESPONSE_SIZE);	
-
-	buff_ptr = buffer;
-	if(ver == 0x04){
-		if(cmd == 0x01){
-
-			// ver
-			*(buff_ptr++) = 0x00;
-			// cmd
-			*((unsigned char *) buff_ptr++) = 0x5a;
-			// port and addr are already 0x00 from the memset above.
-			buff_ptr += 6;
-
-			return(buff_ptr - buffer);
-
-		}else if(cmd == 0x02){
-			// ignored until we implement bind.
-		}
-	}else if(ver == 0x05){
-		if(cmd == 0x01){
-
-			// ver
-			*(buff_ptr++) = 0x05;
-			// cmd
-			*(buff_ptr++) = 0x00;
-			// rsv 
-			*(buff_ptr++) = 0x00;
-
-			if((retval = getsockname(sock, (struct sockaddr *)&addr, &addrlen)) == -1){
-				report_error("proxy_response(): getsockname(%d, %lx, %lx): %s", \
-						sock, (unsigned long) &addr, (unsigned long) &addrlen, strerror(errno));
-				return(-1);
-			}
-
-			if(addr.ss_family == AF_INET){
-
-				// atyp
-				*(buff_ptr++) = 0x01;
-				// addr
-				memcpy(buff_ptr, &(((struct sockaddr_in *) &addr)->sin_addr), 4);
-				buff_ptr += 4;
-				// port
-				memcpy(buff_ptr, &(((struct sockaddr_in *) &addr)->sin_port), 2);
-				buff_ptr += 2;
-
-			}else if(addr.ss_family == AF_INET6){
-
-				// atyp
-				*(buff_ptr++) = 0x04;
-				// addr
-				memcpy(buff_ptr, &(((struct sockaddr_in6 *) &addr)->sin6_addr), 16);
-				buff_ptr += 16;
-				// port
-				memcpy(buff_ptr, &(((struct sockaddr_in6 *) &addr)->sin6_port), 2);
-				buff_ptr += 2;
-
-			}
-
-			return(buff_ptr - buffer);
-
-		}else if(cmd == 0x02){
-			// ignored until we implement bind.
-		}
-	}
-
-	return(-1);	
 }

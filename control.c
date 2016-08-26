@@ -25,12 +25,9 @@ int do_control(struct config_helper *config){
 	int rc_fd;
 	wordexp_t rc_file_exp;
 
-	struct message_helper *message;
 	char *tmp_ptr;
 	int io_bytes;
 
-  /* We use this as a shorthand to make message syntax more readable. */
-	message = &io->message;
 
 	/* Initialize the structures we will leverage. */
 	if((tty_winsize = (struct winsize *) calloc(1, sizeof(struct winsize))) == NULL){

@@ -25,13 +25,10 @@
  **********************************************************************************************************************/
 int negotiate_protocol(){
 
-	struct message_helper *message;
 	unsigned short remote_data_size;
 
 	int fcntl_flags;
 
-
-	message = &io->message;
 
 	io->message_data_size = 0;
 	io->message_data_size--;
