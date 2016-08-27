@@ -591,16 +591,28 @@ int handle_con_socks_init(struct connection_node *cur_connection_node){
 	int new_state;
 
 	if((retval = read(cur_connection_node->fd, cur_connection_node->buffer_tail, cur_connection_node->buffer_size - (cur_connection_node->buffer_tail - cur_connection_node->buffer_head))) < 1){
-		if(retval && verbose){
-			fprintf(stderr, "\rConnection %s closed: %s\n", cur_connection_node->rhost_rport, strerror(errno));
-		}
 
-		if(handle_send_dt_proxy_ht_destroy(cur_connection_node->origin, cur_connection_node->id, 0) == -1){
-			report_error("handle_con_socks_init(): handle_send_dt_proxy_ht_destroy(%d, %d, 0): %s", cur_connection_node->origin, cur_connection_node->id, strerror(errno));
-			return(-1);
+		// Sorry if this syntax feels awkward. The case defined below is the re-call of the handle_con_socks_init() by the handle_con_socks_init() 
+		// when CON_SOCKS_V5_AUTH has occured and the buffer may already be ready for processing. It will generally fail the read and want to drop
+		// though below for processing. We are if()'ing on the negation of that case to handle when it's just a normal good ol'fashioned read() 
+		// failure.
+		if( !( \
+					(cur_connection_node->state == CON_SOCKS_V5_AUTH) && \
+					(cur_connection_node->buffer_tail - cur_connection_node->buffer_ptr) && \
+					(errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK)
+				 )){
+
+			if(retval && verbose){
+				fprintf(stderr, "\rConnection %s closed: %s\n", cur_connection_node->rhost_rport, strerror(errno));
+			}
+
+			if(handle_send_dt_proxy_ht_destroy(cur_connection_node->origin, cur_connection_node->id, 0) == -1){
+				report_error("handle_con_socks_init(): handle_send_dt_proxy_ht_destroy(%d, %d, 0): %s", cur_connection_node->origin, cur_connection_node->id, strerror(errno));
+				return(-1);
+			}
+			connection_node_delete(cur_connection_node);
+			return(-2);
 		}
-		connection_node_delete(cur_connection_node);
-		return(-2);
 	}
 
 	cur_connection_node->buffer_tail = cur_connection_node->buffer_tail + retval;
@@ -665,39 +677,11 @@ int handle_con_socks_init(struct connection_node *cur_connection_node){
 	// Handle the case where we have a rude client that doesn't wait for data and just fills our buffer with both halves of the 
 	// socks 5 request in one read.
 	if((cur_connection_node->state == CON_SOCKS_V5_AUTH) && (cur_connection_node->buffer_tail - cur_connection_node->buffer_ptr)){
-
-		if((new_state = parse_socks_request(cur_connection_node)) == -1){
-			report_error("handle_con_socks_init(): parse_sock_request(%lx): Malformed SOCKS request.", (unsigned long) cur_connection_node);
-			if(handle_send_dt_proxy_ht_destroy(cur_connection_node->origin, cur_connection_node->id, 0) == -1){
-				report_error("handle_con_socks_init(): handle_send_dt_proxy_ht_destroy(%d, %d, 0): %s", cur_connection_node->origin, cur_connection_node->id, strerror(errno));
-				return(-1);
-			}
-			connection_node_delete(cur_connection_node);
-			return(-2);
+		if((retval = handle_con_socks_init(cur_connection_node)) == -1){
+			report_error("broker(): handle_con_socks_init(%lx): %s", (unsigned long) cur_connection_node, strerror(errno));
+			return(-1);
 		}
-
-		if(new_state == CON_ACTIVE){
-			reply_buff = SOCKS_V5_REPLY;
-			reply_buff_len = SOCKS_V5_REPLY_LEN;
-
-			retval = write(cur_connection_node->fd, reply_buff, reply_buff_len);
-
-			if(retval == -1){
-				report_error("handle_con_socks_init(): write(%d, %lx, %d): %s", cur_connection_node->fd, (unsigned long) reply_buff, reply_buff_len, strerror(errno));
-				return(-1);
-			}
-
-			if(retval != reply_buff_len){
-				report_error("handle_con_socks_init(): write(%d, %lx, %d): Unable to send SOCKS reply.", cur_connection_node->fd, (unsigned long) reply_buff, reply_buff_len);
-				if(handle_send_dt_proxy_ht_destroy(cur_connection_node->origin, cur_connection_node->id, 0) == -1){
-					report_error("handle_con_socks_init(): handle_send_dt_proxy_ht_destroy(%d, %d, 0): %s", cur_connection_node->origin, cur_connection_node->id, strerror(errno));
-					return(-1);
-				}
-				connection_node_delete(cur_connection_node);
-			}
-
-			cur_connection_node->state = new_state;
-		}
+		return(retval);
 	}
 
 	if(cur_connection_node->state == CON_ACTIVE){

@@ -1,10 +1,51 @@
 
 This document is intended as an overview of the structure of the revsh codebase.
-Minor helper functions will be ommited from the descriptions.
+Minor helper functions may be omitted from this document.
+
+A note on vocabulary:
+	I have avoided the terms "listener", "client / server", and "RHOST / LHOST", 
+	etc. The standard model of network programming does not apply here cleanly.
+	In the case of netcat, calling one end the listener is reasonable. It's such
+	a simple tool (by design, of course) that even though it can be used for a 
+	reverse shell it still fits reasonably well in the traditional client server
+	model. 
+
+	In revsh, I use the terms "control" and "target" instead. The control node is
+	generally the system the operator is sitting in front of. It is named as a 
+	reference to its role as a command and control host. (Aka "C2".) The target
+	host is, obviously, the target of the operation. It is important to remove 
+	the client / server idea because the target can be set in reverse shell or 
+	bind shell mode. Regardless of the direction of the initial tcp connection, 
+	the control node is authoritative in all decisions relating to that 
+	connection (as it should be.)
+
+	I apologize for the inconvenience of a change in terminology from other tools
+	but the change of functionality in this tool seemed to warrant it.
+
+	As a result, the normal cli flag to launch in control mode is '-c', but '-l' 
+	will still work as expected.
 
 ################################################################################
 # revsh
 ################################################################################
+
+# Initialization: 
+
+
+- revsh.c
+	-- main()
+		--- Perform basic initialization.
+		--- Calls the appropriate conductor, either do_control() or do_target() as appropriate.
+
+
+
+
+
+
+
+
+
+
 
 
 # Headers:
@@ -24,11 +65,6 @@ Minor helper functions will be ommited from the descriptions.
 
 
 # Code: 
-
-- revsh.c
-	-- main()
-		--- Perform basic initialization.
-		--- Calls the appropriate conductor, either do_control() or do_target() as appropriate.
 
 - control.c
 	-- do_control()

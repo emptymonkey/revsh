@@ -1,8 +1,8 @@
 
-#ifndef FREEBSD
+//#ifndef FREEBSD
 # define _POSIX_C_SOURCE 200112L
 # define _XOPEN_SOURCE  1
-#endif 
+//#endif 
 
 
 /******************************************************************************
@@ -45,9 +45,14 @@
 #include <sys/utsname.h>
 
 #include <net/if.h>
-// XXX find freebsd equivalent.
+
+#ifdef FREEBSD
+# include <net/tun.h>
+# include <net/tap.h>
+#else
 # include <linux/if.h>
 # include <linux/if_tun.h>
+#endif
 
 
 /******************************************************************************

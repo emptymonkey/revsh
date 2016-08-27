@@ -1,0 +1,93 @@
+
+################################################################################
+# Overview
+################################################################################
+
+The revsh tool is a remote terminal and reverse vpn tool designed by and for
+professional pentesters to empower them with a functioning tty and superior
+pivoting options.
+
+This tool is not replacement for netcat, as their stated goals are entirely
+different. With the addition of revsh to the pentester toolkit, both netcat
+and revsh can be viewed as partners in the "Control Bootstrap" process, 
+outlined below.
+
+
+################################################################################
+# The Control Bootstrap process.
+################################################################################
+
+Control Stage 0 - No RCE
+
+	You have no control over the target system.
+
+
+Control Stage 1 - Minimal RCE
+
+	You have RCE on the target system, probably though a vulnerable web application.
+	If the execution isn't entirely arbitrary or repeatable, you will want to pursue
+	that goal in this stage. In general this is done by dropping a minimal webshell
+	on the system.
+
+
+Control Stage 2 - Arbitrary RCE
+
+	You now can execute arbitrary RCE. Use this download a copy of netcat with
+	GAPING_SECURITY_HOLE enabled, and then launch it. I recommend using netcat to 
+	perform this action and move to stage 3 instead of downloading revsh and 
+	skipping directly to stage 4. Netcat is a minimalist tool with little to no 
+	dependence on libraries or system interfaces. It is infinitely backwards 
+	compatible and at this stage you haven't had a chance to perform a proper 
+	analysis of the system locally. Netcat will give you a simple but stable shell.
+
+
+Control Stage 3 - Reverse Shell
+
+	While stable, the netcat reverse shell can be frustrating to use for system
+	analysis and its pivoting capabilities quickly become overly complex. Use this
+	simple reverse shell to download a copy of revsh and launch it.
+
+	In this stage many operators will drop an ssh key and login 
+	directly. This is dangerous in an environment with centralized logging and 
+	automated analysis of ssh logins. Further, ssh won't open a reverse shell 
+	without the operator enabling logins to his kali box and leaving credentials
+	in some form on the target host for Incident Responders to find. This leaves 
+	the operator open to a counter-hack operation. 
+
+
+Control Stage 4 - Reverse Terminal / VPN
+
+	At this stage you have a full reverse terminal as though you had loggedin 
+	properly, but without any such login appearing in 'who' or 'last'. (revsh 
+	does not opt-in to the utmp/wtmp process.) Further, revsh offers traditional
+	point-to-point proxies, socks proxies, and tun / tap support for forwarding
+	of raw ip packets / ethernet frames. This range of options makes pivoting
+	trivial. (Want to pivot? Setup a bridge device on the remote host then 
+	simply perform a dchp request on tap0 from your kali box. Now you have an IP
+	address on the target network.)
+
+
+################################################################################
+# A note about vocabulary.
+################################################################################
+
+I have avoided the terms "listener", "client / server", and "RHOST / LHOST", 
+etc. The standard model of network programming does not apply here cleanly.
+In the case of netcat, calling one end the listener is reasonable. It's such
+a simple tool (by design, of course) that even though it can be used for a 
+reverse shell it still fits reasonably well in the traditional client server
+networking model. 
+
+In revsh, I use the terms "control" and "target" instead. The control node will
+be the system that the operator is working from. It is named as in reference to
+its role as a command and control host. (Aka "C2".) The target host is,
+obviously, the target of the operation. It is important to remove the
+client / server idea because the target can be set in reverse shell or bind
+shell mode. Regardless of the direction of the initial tcp connection, the
+control node is authoritative in all decisions relating to that connection
+(as it should be.)
+
+I apologize for the inconvenience of a change in terminology from other tools
+but the change of functionality in this tool seemed to warrant it. As a result,
+the normal cli flag to launch in control mode is '-c', however '-l' will also
+work as expected.
