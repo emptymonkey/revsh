@@ -1,0 +1,62 @@
+
+The broker() loop was getting cluttered and the fds were being dealt with inconsistently. (e.g. Blocking vs
+	non-blocking.) As such, I decided to put together some design goals to aid in the clean up. This file is an
+	artifact of that cleanup.
+
+########################################################################################################################
+
+* All fds are non-blocking.
+* Message bus is atomic. (Implemented with it's own internal select() loop.) If the message bus hangs, nothing else 
+	should move either. One message enters, one message leaves!
+* Incoming read()s are sent off immediately through the atomic message bus.
+* Full outgoing write()s are attempted immediately.
+* Partial data left over from an unsuccessful outgoing write()s will go into a write buffer.
+* If the write buffer is not empty and a new message comes in for writing, add it to a linked list of messages (on a 
+  per connection basis.) 
+* When an arbitrary number of messages have queued up, send a request for the associated fd on the remote end to 
+  stop reading from that fd until further notice.
+**  Implement the arbitrary message queue depth as:
+***  #define MESSAGE_DEPTH_MAX 64
+****  Once everything works, go back and load test this to determine the optimal value.
+**  Implement the request for the remote end to pause reading from the associated fd with:
+***  #define DT_CONNECTION_HT_DORMANT #
+**  When the congestion seems to have eased, send a request for the remote end to continue reading from the associated
+    fd with:
+***  #define DT_CONNECTION_HT_ACTIVE #
+**  The tty / shell connection will have a message write queue, but will never go dormant. We will queue messages for
+    as long as we have memory to do so.
+* Because all fds are non-blocking, socket connect() will be a non-blocking connect(). Deal with this by leveraging 
+	write_fds. Will probably need to implement an EINPROGRESS flag. (Leverage socks_flag?)
+* Keep a counter of open fds. When the counter == FD_SETSIZE, stop adding the proxy_nodes to the select() call. This 
+	will prevent any new connections (and thus fds) from being opened. As they clear up (from partial write()s 
+	completing, or EINPROGRESS connections closing) then reduce the counter and allow proxy_nodes to be added to 
+	select() and thus resume acceptance of new connections. This should allow us (with the non-blocking connect 
+	above) to handle ~1024 connections at a time. (3 std fds + 1 message bus fd + 1 proxy listener fd = 5 overhead
+	fds. Thus 1024 - 5 = 1019 open connections at any given moment.)
+* Implement a crude fair queue for connections by setting them up with a round-robin scheme. As a connection node is
+  processed for reading, place it at the end of it's linked list allowing other connections a chance to talk out. This
+  is probably a good idea for a small number of connections, but won't scale. Then again, we are using select(),
+  so "scaling" isn't really a thing, is it? It should be enough though to "do the needful". (The tty should always be a
+  priority. Humans are slow, so it won't ever "behave badly". Further, a super active proxy shouldn't supersede the 
+  user terminal experience.)
+
+########################################################################################################################
+
+* The above queuing methodology should be implemented by examining the connection nodes before the select() call every
+  time through the broker loop. 
+** Connection nodes should have a flag that describes if the associated read_fd has been paused or not. (Implemented
+   as the dormant_flag.) ACTIVE connections will be added to the read_fds.
+** If a connection has a nonzero partial write buffer nonzero (or further, a queue of full messages to deliver) then it
+   will be added into the write_fds.
+** write_fds, which are implicit in the suboptimal flow of data, should have priority.
+
+|------------------|-------------------||-------------------||-------------------|-----------------|
+|     Control      |     broker()      ||    message bus    ||     broker()      |     Target      |
+|------------------|-------------------||-------------------||-------------------|-----------------|
+|------------------|-------------------||-------------------||-------------------|-----------------|
+|   tty / proxies  |      read_fds ->  || internal select() ||   <- read_fds     | shell / proxies |
+|                  |  <- write_fds     ||  atomic messages  ||     write_fds ->  |                 |
+|------------------|-------------------||-------------------||-------------------|-----------------|
+                                                            ||                   |    connect()    |
+                                                            ||     write_fds     |  w/EINPROGRESS  |
+                                                            ||-------------------|-----------------|
