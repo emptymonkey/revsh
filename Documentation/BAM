@@ -7,7 +7,7 @@ The revsh tool is a remote terminal and reverse vpn tool designed by and for
 professional pentesters to empower them with a functioning tty and superior
 pivoting options.
 
-This tool is not replacement for netcat, as their stated goals are entirely
+This tool is not a replacement for netcat, as their stated goals are entirely
 different. With the addition of revsh to the pentester toolkit, both netcat
 and revsh can be viewed as partners in the "Bootstrap Attack Methodology",
 outlined below.
@@ -17,12 +17,15 @@ outlined below.
 # The Bootstrap Attack Methodology
 ################################################################################
 
-Stage 0 - No RCE
+This methodology describes the stages involved in a remote compromise in the
+general case. A specific engagement may not have (or need) all of the stages 
+outlined here.
 
-	You have no control over the target system.
 
-
-Stage 1 - Minimal RCE - Non-privileged User
+Stage 0:
+	Goal: Gain Minimal RCE.
+	Vector: Remote Vulnerability
+	Privilege: Non-privileged User
 
 	You have RCE on the target system, probably though a vulnerable web application.
 	If the execution isn't entirely arbitrary or repeatable, you will want to pursue
@@ -30,7 +33,10 @@ Stage 1 - Minimal RCE - Non-privileged User
 	on the system.
 
 
-Stage 2 - Arbitrary RCE - Non-privileged User
+Stage 1:
+	Goal: Gain Arbitrary RCE 
+	Vector: Variable (E.g. web-shell)
+	Privilege: Non-privileged User
 
 	You now can execute arbitrary RCE. Use this download a copy of netcat with
 	GAPING_SECURITY_HOLE enabled, and then launch it. I recommend using netcat to 
@@ -41,7 +47,10 @@ Stage 2 - Arbitrary RCE - Non-privileged User
 	analysis of the system locally. Netcat will give you a simple but stable shell.
 
 
-Stage 3 - Reverse Shell - Non-privileged User
+Stage 2:
+	Goal: Establish a reverse shell.
+	Vector: netcat
+	Privilege: Non-privileged User
 
 	While stable, the netcat reverse shell can be frustrating to use for system
 	analysis and its pivoting capabilities quickly become overly complex. Use this
@@ -55,7 +64,10 @@ Stage 3 - Reverse Shell - Non-privileged User
 	the operator open to a counter-hack operation. 
 
 
-Stage 4 - Reverse Terminal - Non-privileged User
+Stage 3:
+	Goal: Establish a reverse terminal.
+	Vector: revsh
+	Privilege: Non-privileged User
 
 	At this stage you have a full reverse terminal as though you had loggedin 
 	properly, but without any such login appearing in 'who' or 'last'. (revsh 
@@ -66,7 +78,19 @@ Stage 4 - Reverse Terminal - Non-privileged User
 	point-to-point passthrough for specific targets, burpsuite for web attacks,
 	and proxychains for all others.)
 
-Stage 5 - Reverse Terminal / Reverse VPN - Privileged User
+
+Stage 4:
+	Goal: Gain LPE.
+	Vector: Initial LPE vulnerability.
+	Privilege: Non-privileged User
+
+	XXX Add verbiage.
+
+
+Stage 5:
+	Goal: Establish a reverse VPN.
+	Vector: revsh
+	Privilege: root
 
 	XXX Add verbiage.
 	... tun / tap support for forwarding
