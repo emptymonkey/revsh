@@ -1,8 +1,9 @@
 
-//#ifndef FREEBSD
+
+#ifndef FREEBSD
 # define _POSIX_C_SOURCE 200112L
 # define _XOPEN_SOURCE  1
-//#endif 
+#endif 
 
 
 /******************************************************************************
@@ -12,6 +13,7 @@
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <getopt.h>
 #include <limits.h>
 #include <netdb.h>
 #include <pwd.h>
@@ -46,12 +48,20 @@
 
 #include <net/if.h>
 
+/******************************************************************************
+ * OS specific headers
+ ******************************************************************************/
+
 #ifdef FREEBSD
+
 # include <net/tun.h>
 # include <net/tap.h>
-#else
+
+#else // Linux
+
 # include <linux/if.h>
 # include <linux/if_tun.h>
+
 #endif
 
 
@@ -98,10 +108,10 @@
 /* Maximum possible size of a socks request. */
 /*
 	 Max size cases:
-		Socks 4: 9 byte header. (Our implementation ignores USERID.)  =  9
-		Socks 4a: 9 byte header + domain name (255 max) + null byte  =  265
-		Socks 5: 2 bytes for auth header + 255 max auth types + 6 byte header + domain name size byte + domain name (255 max)  =  265
-*/
+	 Socks 4: 9 byte header. (Our implementation ignores USERID.)  =  9
+	 Socks 4a: 9 byte header + domain name (255 max) + null byte  =  265
+	 Socks 5: 2 bytes for auth header + 255 max auth types + 6 byte header + domain name size byte + domain name (255 max)  =  265
+ */
 #define SOCKS_REQ_MAX	520
 
 

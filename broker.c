@@ -36,8 +36,18 @@ int broker(struct config_helper *config){
 
 	if(config->interactive){
 
-		/* Set up proxies requested during launch. */
 		cur_proxy_req_node = config->proxy_request_head;	
+		/* Set up the default proxy. */
+		if(io->controller && config->socks){
+
+			if((cur_proxy_node = proxy_node_new(config->socks, PROXY_DYNAMIC)) == NULL){
+				report_error("do_control(): proxy_node_new(%s, %d): %s", config->socks, PROXY_DYNAMIC, strerror(errno));
+			}
+			io->proxy_head = cur_proxy_node;
+			io->proxy_tail = cur_proxy_node;
+		}
+
+		/* Set up proxies requested during launch. */
 		while(cur_proxy_req_node){
 
 			cur_proxy_node = proxy_node_new(cur_proxy_req_node->request_string, cur_proxy_req_node->type);	

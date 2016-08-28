@@ -779,11 +779,20 @@ struct connection_node *handle_tun_tap_init(int ifr_flag){
 
 	int count;
 	struct ifreq ifr;
+	char *ifr_flag_name;
 
 	struct connection_node *cur_connection_node;
 
 	int tmp_sock = 0;
 
+  if(ifr_flag == IFF_TUN){
+		ifr_flag_name = "TUN";
+	}else if(ifr_flag == IFF_TAP){
+		ifr_flag_name = "TAP";
+	}else{
+		report_error("handle_tun_tap_init(): Unknown ifr_flag: %d", ifr_flag);
+		return(NULL);
+	}
 
 	if((cur_connection_node = connection_node_create()) == NULL){
 		report_error("handle_tun_tap_init(): connection_node_create(): %s", strerror(errno));
@@ -803,10 +812,10 @@ struct connection_node *handle_tun_tap_init(int ifr_flag){
 	ifr.ifr_flags = ifr_flag | IFF_NO_PI;
 
 	if(ioctl(cur_connection_node->fd, TUNSETIFF, (void *) &ifr) == -1){
-		report_error("handle_tun_tap_init(): ioctl(%d, TUNSETIFF, %lx): %s", cur_connection_node->fd, (unsigned long) ((void *) &ifr), strerror(errno));
+		report_error("handle_tun_tap_init(): ioctl(%d, TUNSETIFF, %lx): %s: %s", cur_connection_node->fd, (unsigned long) ((void *) &ifr), ifr_flag_name, strerror(errno));
 
 		if(errno == EPERM){
-			report_error("CAP_SYSADMIN (i.e. root) needed to initialize tun/tap devices. Ignoring.");
+			fprintf(stderr, "\rOnly root can initialize %s devices. Skipping...\n", ifr_flag_name);
 		}
 
 		connection_node_delete(cur_connection_node);

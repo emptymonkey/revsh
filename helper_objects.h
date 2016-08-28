@@ -32,6 +32,8 @@ struct config_helper {
 	unsigned char interactive;
 
 	int bindshell;
+
+	char *socks;
 	int tun;
 	int tap;
 

