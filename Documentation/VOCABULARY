@@ -1,0 +1,25 @@
+
+################################################################################
+# A note about vocabulary.
+################################################################################
+
+I have avoided the terms "listener", "client / server", and "RHOST / LHOST", 
+etc. The standard model of network programming does not apply here cleanly.
+In the case of netcat, calling one end the "listener" is reasonable. It's such
+a simple tool (by design, of course) that even though it can be used for a 
+reverse shell it still fits reasonably well in the traditional client server
+networking model. 
+
+In revsh, I use the terms "control" and "target" instead. The control node will
+be the system that the operator is working from. It is named as in reference to
+its role as a command and control "C2" host. The "target" host is, obviously,
+the target of the operation. It is important to avoid the client / server idea
+because the target can be set in a reverse shell or bind shell mode. Additionally,
+the control node is authoritative in all decisions relating to how the target 
+behaves regardless of the direction of the initial tcp connection (as it should
+be.)
+
+I apologize for the inconvenience of a change in terminology from other tools
+but the change of functionality in this tool seemed to warrant it. As a result,
+the normal cli flag to launch in control mode is '-c', however '-l' will also
+work as expected. (See "the principle of least suprise'.)

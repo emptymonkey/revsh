@@ -62,6 +62,11 @@ volatile sig_atomic_t sig_found = 0;
  **********************************************************************************************************************/
 
 // XXX
+// Add mimic code.
+// Add set_target_pid code.
+// Switch to libressl's libtls?
+// Make static binary default.
+// Fix -k keepalive for persistance after disconnect. Make target node try to connect back forever.
 // Remove -a switch. 
 // -e : ephemeral dh.
 //		Add check for #ifdef GENERIC_BUILD that sets default to ADH and prints a friendly error message if c2 invoked w/-e.
@@ -72,6 +77,10 @@ volatile sig_atomic_t sig_found = 0;
 // -w : Disable default proxy.  (Just set config->socks to NULL.)
 // -x : Disable default tun.
 // -y : Disable default tap.
+
+// XXX
+// Test on freebsd.
+
 
 void usage(int ret_code){
 	FILE *out_stream = stdout;
