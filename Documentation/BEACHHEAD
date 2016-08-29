@@ -1,0 +1,90 @@
+
+Beachhead Expansion with revsh
+
+################################################################################
+# Beachhead Expansion Maneuver
+################################################################################
+
+revsh is a reverse terminal and reverse VPN tool built by pentesters for 
+pentesters. 
+
+revsh is not intended as a replacement for netcat. In fact netcat's simplicity
+allows for an initial remote shell to be established on a target system with
+high certainty, even when such a system may be obsolete, eccentric, or just
+plain broken. Using netcat and revsh together allows for a more robust and
+powerful interaction with the target environment; a tactic I feel best described
+as a "beachhead expansion maneuver". The purpose of this document is to outline
+and describe each stage of this maneuver. It should be noted that the stages
+outlined below are meant to demonstrate the general case. A specific engagement
+may not have (or need) all of these stages. 
+
+ 
+Stage 0:
+	Goal: Gain limited remote functionality.
+	Vector: Remote Vulnerability
+	Privilege: Non-privileged User
+
+		Identify a remote vulnerability and exploit it. This may only grant you limited remote functionality
+		such as file upload to the webroot or database field extraction. In the case of remote command injection
+		you will be able to advance to stage 2. If you have been able to fingerprint the system already in the 
+		reconnaissance phase and feel feel it is reasonably stable, you can proceed to stage 3. If the vulnerable
+		application is running with elevated privileges then you will be able to move directly to stage 5.
+
+Stage 1:
+	Goal: Gain arbitrary RCE.
+	Vector: Variable
+	Privilege: Non-privileged User
+
+		Once you have found a limited remote functionality vulnerability, you will want to leverage it to grant 
+		repeatable arbitrary RCE. In the example above of a vulnerable web-application with file upload to the 
+		webroot, this stage would be performed by uploading a webshell.
+
+Stage 2:
+	Goal: Establish a reverse shell.
+	Vector: netcat
+	Privilege: Non-privileged User
+
+		In this stage, the arbitrary RCE from stage 1 is leveraged to download a netcat version with GAPING_SECURITY_HOLE
+		enabled and launch a reverse shell. Once this reverse shell is established it can be used for several
+		high priority / low impact tasks such as fingerprinting the host, assessing the level of system usage by it's owners,
+		as well as identifying other services provided by this host. Once those initial tasks are complete the operator 
+		may find that further tasks, such as privilege escalation or lateral movement are best performed from a proper terminal.
+
+Stage 3:
+	Goal: Establish a reverse terminal.
+	Vector: revsh
+	Privilege: Non-privileged User
+
+		Leverage the netcat shell established in stage 2 to download and launch revsh. Beyond a basic shell, there is now
+		a full terminal for the operator to take advantage of. Ctrl-c will now do the appropriate thing. Many system commands
+		that require a terminal to work properly (e.g sudo and less) are now available. Another reason to move quickly from 
+		the netcat reverse shell to a revsh reverse terminal would be revsh's defensive features, including encryption with 
+		perfect forward secrecy, randomized auto-connect-back timers, and process mimicking for stealth.		// XXX  Remove this if I don't implement it!
+
+		In this stage, even as a non-privileged user, revsh allows for point-to-point passthrough network proxies, as well as
+		dynamic socks proxy tunnels. This enables the operator to leverage "behind the host firewall" style attacks, burpsuite,
+		and the use of most system tools on kali by way of proxychains. If privilege escalation is determined to be too risky
+		(for either system stability or covertness of action) the operator can stop here and still have a fully functioning
+		beachhead within the target environment.
+
+Stage 4:
+	Goal: Gain LPE.
+	Vector: LPE Vulnerability
+	Privilege: Non-privileged User
+
+		Gaining root level access on a server is only necessary for some offensive forensics (e.g. root ssh keys, memory dumps for in memory passwords, etc.)
+		or to leverage certain system resources, such as ports below 1024 or virtual networking / bridging interfaces. Gaining LPE will open access to 
+		these methods, and thus allow us to move forward with establishing a reverse VPN.
+
+Stage 5:
+	Goal: Establish a reverse VPN.
+	Vector: revsh
+	Privilege: root
+
+		Once root, relaunch revsh. It will automatically enable tun / tap support on both ends to allow forwarding of raw IP packets / ethernet frames.
+		Setup an iptables nat rule on the compromised host, or enable a bridge device between the new tap and a live eth device, then dhcp request
+		an IP address on the target network. Now all kali tools will work natively. No further tools need to be moved to the target host, reducing
+		the forensic footprint.
+
+
+:wq

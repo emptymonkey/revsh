@@ -64,8 +64,6 @@ volatile sig_atomic_t sig_found = 0;
 // XXX
 // Add mimic code.
 // Add set_target_pid code.
-// Switch to libressl's libtls?
-// Make static binary default.
 // Fix -k keepalive for persistance after disconnect. Make target node try to connect back forever.
 // Remove -a switch. 
 // -e : ephemeral dh.
@@ -79,6 +77,7 @@ volatile sig_atomic_t sig_found = 0;
 // -y : Disable default tap.
 
 // XXX
+// Make static binary default.
 // Test on freebsd.
 
 
