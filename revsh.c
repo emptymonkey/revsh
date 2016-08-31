@@ -62,8 +62,6 @@ volatile sig_atomic_t sig_found = 0;
  **********************************************************************************************************************/
 
 // XXX
-// Add mimic code.
-// Add set_target_pid code.
 // Fix -k keepalive for persistance after disconnect. Make target node try to connect back forever.
 // Remove -a switch. 
 // -e : ephemeral dh.
@@ -78,32 +76,11 @@ volatile sig_atomic_t sig_found = 0;
 
 // XXX
 // Make static binary default.
+// Make a man page.
 // Test on freebsd.
 
 
 void usage(int ret_code){
-	FILE *out_stream = stdout;
-
-	if(ret_code){
-		out_stream = stderr;
-	}
-
-	fprintf(out_stream, "\n");
-	fprintf(out_stream, "C2 usage:\t%s -c [-b] [-v] [-h] [-H] [ADDRESS:PORT]\n", program_invocation_short_name);
-	fprintf(out_stream, "Target usage:\t%s    [-b] [-v]           [ADDRESS:PORT]\n", program_invocation_short_name);
-	fprintf(out_stream, "\n");
-	fprintf(out_stream, "\t-c\t\tRun as a command and control listener.\n");
-	fprintf(out_stream, "\t-b\t\tBind shell mode. Must be specified on both ends.\n");
-	fprintf(out_stream, "\t-v\t\tVerbose error reporting.\n");
-	fprintf(out_stream, "\t-h\t\tPrint this short help with common options.\n");
-	fprintf(out_stream, "\t-H\t\tPrint a much longer help with all options.\n");
-	fprintf(out_stream, "\tADDRESS:PORT\tThe address and port of the C2 listener.\t(Default is \"%s\".)\n", ADDRESS);
-	fprintf(out_stream, "\n");
-
-	exit(ret_code);
-}
-
-void usage_long(int ret_code){
 	FILE *out_stream = stdout;
 
 	if(ret_code){
@@ -259,10 +236,6 @@ int main(int argc, char **argv){
 
 			case 'h':
 				usage(0);
-				break;
-
-			case 'H':
-				usage_long(0);
 				break;
 
 			/*  The plaintext case is an undocumented "feature" which should be difficult to use. */
