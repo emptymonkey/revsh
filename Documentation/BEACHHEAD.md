@@ -1,7 +1,7 @@
 
 # The Beachhead Landing Process
 
-![Go, Joe!](https://upload.wikimedia.org/wikipedia/en/9/91/Beachhead_G.I._Joe.png)
+![https://en.wikipedia.org/wiki/Beach_Head_(G.I._Joe)](https://upload.wikimedia.org/wikipedia/en/9/91/Beachhead_G.I._Joe.png)
 
 ## Table of Contents
 
