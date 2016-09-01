@@ -22,8 +22,8 @@ There are many documents online that break down a cyber attack into various stag
 1. Passive reconnaissance. (e.g. Google, Shodan, Linkedin, etc.)
 2. Active reconnaissance. (e.g. nmap, dns forward / reverse lookups, etc.)
 3. Initial compromise.
-4. Establish persistence.
-5. Move laterally.
+4. Move laterally.
+5. Establish persistence.
 6. *...wash, rinse, repeat on your way to the actual target...*
 7. Data exfiltration, modification, or destruction.
 
@@ -41,7 +41,7 @@ revsh was written specifically to enable several of the later stages of this pro
 *Vector: Remote Vulnerability*<br>
 *Privilege: Non-privileged User*
 
-The operator will need to begin by identifying a remote vulnerability and exploiting it. This may only grant the operator limited control over the server, such as file upload to the webroot or database field extraction.
+The operator will need to begin by identifying a remote vulnerability and exploiting it. This may only grant the operator limited control over the server, such as file upload to the webroot or database field extraction. Beyond a direct attack on a server, other methods used in this phase may include hosting a drive-by malicious web page or by phishing the target's employees in order to gain access directly to their internal network.
 
 ### Stage 2 - Remote Code Execution (RCE) <a name="toc2b"></a>
 
@@ -49,7 +49,7 @@ The operator will need to begin by identifying a remote vulnerability and exploi
 *Vector: Variable*<br>
 *Privilege: Non-privileged User*
 
-Once the operator has found a vulnerability that grants them limited control, they will want to leverage it to expand their control to repeatable arbitrary remote code execution. In the above example of a vulnerable web application with a file upload to webroot vulnerability, this stage could be performed by uploading a webshell.
+Once the operator has found a vulnerability that grants them limited control, they should then expand that control until achieving repeatable arbitrary remote code execution. In the above example of a vulnerable web application with a file upload to webroot vulnerability, this stage could be performed by uploading a webshell.
 
 ### Stage 3 - Reverse Shell <a name="toc2c"></a>
 
@@ -57,7 +57,7 @@ Once the operator has found a vulnerability that grants them limited control, th
 *Vector: netcat*<br>
 *Privilege: Non-privileged User*
 
-In this stage, the arbitrary RCE from stage 2 will be leveraged to download a copy of netcat that has the GAPING_SECURITY_HOLE feature enabled. Once downloaded, the operator will open a reverse shell with netcat then proceed with several high priority / low impact tasks. (E.g. fingerprinting the host, assessing the level of system usage by it's owners, as well as identifying any additional services provided by this host.) After the completion of the initial tasks the operator may find that further tasks, such as privilege escalation or lateral movement would best be performed from a proper terminal.
+In this stage, the arbitrary RCE from stage 2 should be invoked to download a copy of netcat that has the GAPING_SECURITY_HOLE feature enabled. Once downloaded, the operator will open a reverse shell with netcat then proceed with several high priority / low impact tasks. (E.g. fingerprinting the host, assessing the level of system usage by it's owners, as well as identifying any additional services provided by this host.) After the completion of those initial tasks the operator will find that further tasks, such as privilege escalation or lateral movement will be easier to perform from a proper terminal.
 
 ### Stage 4 - Reverse Terminal <a name="toc2d"></a>
 
@@ -65,9 +65,9 @@ In this stage, the arbitrary RCE from stage 2 will be leveraged to download a co
 *Vector: revsh*<br>
 *Privilege: Non-privileged User*
 
-The operator will now Leverage the netcat shell established in stage 3 to download and launch revsh. Beyond a basic shell, there will now be a full terminal for the operator to take advantage of. Ctrl-c will do the appropriate thing and many system commands that require a terminal to work properly will also be available.
+The operator will now Leverage the netcat shell established in stage 3 to download and launch revsh. Beyond a basic shell, there will now be a full terminal for the operator to take advantage of. System interaction will feel more normal at this point with keybindings such as Ctrl-c doing the appropriate thing and several tty aware userland tools becoming available.
 
-In this stage, even as a non-privileged user, revsh allows for point-to-point passthrough network proxies, as well as dynamic socks proxy tunnels. This enables the operator to leverage "behind the host firewall" style attacks, burpsuite, and the use of most system tools on Kali by way of proxychains. If privilege escalation is determined to be too risky (for reasons of either system stability or covertness of action) the operator can stop here and still have a fully functioning beachhead within the target environment.
+In this stage, even as a non-privileged user, revsh allows for point-to-point passthrough network proxies, as well as dynamic socks proxy tunnels. This enables the operator to perform a "behind the host firewall" style attack, run burpsuite through the socks proxy, and use most of the other system tools on Kali by way of proxychains. If privilege escalation is determined to be too risky (for reasons of either system stability or covertness of action) the operator can stop here and still have a fully functioning beachhead within the target environment.
 
 ### Stage 5 - Local Privilege Escalation (LPE) <a name="toc2e"></a>
 
@@ -75,7 +75,7 @@ In this stage, even as a non-privileged user, revsh allows for point-to-point pa
 *Vector: LPE Vulnerability*<br>
 *Privilege: Non-privileged User*
 
-Gaining root level access on a server is only necessary for some offensive forensics (e.g. accessing root SSH keys, memory dumps for in-memory password / key / cert exfiltration, etc.) or to leverage certain system resources, such as ports below 1024 or virtual networking / bridging interfaces. Gaining local privilege escalation will open access to these resources, and thus allow us to move forward with establishing a reverse VPN. In order to move forward to stage 6 the operator should now examine the system for poor configurations, improperly handled credentials, or any known privilege escalations for OS / services that could be used in privilege escalation.
+Gaining root level access on a server is only necessary for some offensive forensics (e.g. accessing root SSH keys, memory dumps for in-memory password / key / cert exfiltration, etc.) or to leverage certain system resources, such as ports below 1024 or virtual networking / bridging interfaces. Gaining local privilege escalation will open access to these resources, allowing the operator to establish reverse VPNs. With a normalized system interaction mediated by a terminal, the operator should now move forward by examining the system for poor configurations, improperly handled credentials, or any known privilege escalations for OS / services that could be used for privilege escalation.
 
 ### Stage 6 - Reverse VPN <a name="toc2f"></a>
 
@@ -83,7 +83,7 @@ Gaining root level access on a server is only necessary for some offensive foren
 *Vector: revsh*<br>
 *Privilege: root*
 
-Upon gaining root privileges on the system the operator will want to relaunch revsh to take advantage of the TUN/TAP support. This will allow the operator to forward raw IP packets / ethernet frames. This feature can then be leveraged by using the TUN device and setting up an iptables nat rule on the compromised host. Even better, the operator could enable a bridge device between the new TAP device and a live eth device, then simply dhcp request an IP address on the target network. Either way, now with a proper IP address that routes onto the target network, all of Kali's tools will work natively. As a result, no further tools need to be moved to the target host, thus reducing the forensic footprint. The operator is now set up to begin the lateral movement phase from a much better position than was the case in a pre reverse-vpn world.
+Upon gaining root privileges on the system the operator will want to relaunch revsh to take advantage of the TUN/TAP support. This will allow for the forwarding of raw IP packets / ethernet frames. This feature can used by either coupling the TUN interface with an iptables nat rule on the compromised host, or even better, enabling a bridge device between the new TAP interface and a live eth device then simply dhcp requesting an IP address on the target network. Either way, now with a proper IP address that routes onto the target network, all of Kali's tools will work natively. As a result, no further tools need to be moved to the target host, thus reducing the forensic footprint. (No need to build out nmap on the compromised host ever again.) The operator is now set up to begin the lateral movement phase from a much better position than was the case in a pre reverse-vpn world.
 
 ## A note on netcat. <a name="toc3"></a>
 
