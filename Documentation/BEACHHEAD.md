@@ -1,6 +1,22 @@
 
 # The Beachhead Landing Process
 
+## Table of Contents
+
+* [Introduction](#toc1)
+* [Stages of a Beachhead Landing](#toc2)
+ * [Stage 1 - Limited Control](#toc2a)
+ * [Stage 2 - Remote Code Execution (RCE)](#toc2b)
+ * [Stage 3 - Reverse Shell](#toc2c)
+ * [Stage 4 - Reverse Terminal](#toc2d)
+ * [Stage 5 - Local Privilege Escalation (LPE)](#toc2e)
+ * [Stage 6 - Reverse VPN](#toc2f)
+* [A note on netcat.](#toc3)
+* [A note on SSH.](#toc4)
+* [A note on further training.](#toc5)
+
+## Introduction <a name="toc1"></a>
+
 There are many documents online that break down a cyber attack into various stages. Roughly, these stages are:
 
 1. Passive reconnaissance. (e.g. Google, Shodan, Linkedin, etc.)
@@ -17,9 +33,9 @@ It should be noted that the stages outlined below are meant as an enumeration of
 
 revsh was written specifically to enable several of the later stages of this process, and thus empower the operator to escalate, persist, and move laterally with greater ease.
 
-## Stages of a Beachhead Landing 
+## Stages of a Beachhead Landing <a name="toc2"></a>
 
-### Stage 1 - Limited Control
+### Stage 1 - Limited Control <a name="toc2a"></a>
 
 *Goal: Gain limited Control.*<br>
 *Vector: Remote Vulnerability*<br>
@@ -27,7 +43,7 @@ revsh was written specifically to enable several of the later stages of this pro
 
 The operator will need to begin by identifying a remote vulnerability and exploiting it. This may only grant the operator limited control over the server, such as file upload to the webroot or database field extraction.
 
-### Stage 2 - Remote Code Execution (RCE)
+### Stage 2 - Remote Code Execution (RCE) <a name="toc2b"></a>
 
 *Goal: Gain arbitrary RCE.*<br>
 *Vector: Variable*<br>
@@ -35,7 +51,7 @@ The operator will need to begin by identifying a remote vulnerability and exploi
 
 Once the operator has found a vulnerability that grants them limited control, they will want to leverage it to expand their control to repeatable arbitrary remote code execution. In the above example of a vulnerable web application with a file upload to webroot vulnerability, this stage could be performed by uploading a webshell.
 
-### Stage 3 - Reverse Shell
+### Stage 3 - Reverse Shell <a name="toc2c"></a>
 
 *Goal: Establish a reverse shell.*<br>
 *Vector: netcat*<br>
@@ -43,7 +59,7 @@ Once the operator has found a vulnerability that grants them limited control, th
 
 In this stage, the arbitrary RCE from stage 2 will be leveraged to download a copy of netcat that has the GAPING_SECURITY_HOLE feature enabled. Once downloaded, the operator will open a reverse shell with netcat then proceed with several high priority / low impact tasks. (E.g. fingerprinting the host, assessing the level of system usage by it's owners, as well as identifying any additional services provided by this host.) After the completion of the initial tasks the operator may find that further tasks, such as privilege escalation or lateral movement would best be performed from a proper terminal.
 
-### Stage 4 - Reverse Terminal
+### Stage 4 - Reverse Terminal <a name="toc2d"></a>
 
 *Goal: Establish a reverse terminal.*<br>
 *Vector: revsh*<br>
@@ -53,7 +69,7 @@ The operator will now Leverage the netcat shell established in stage 3 to downlo
 
 In this stage, even as a non-privileged user, revsh allows for point-to-point passthrough network proxies, as well as dynamic socks proxy tunnels. This enables the operator to leverage "behind the host firewall" style attacks, burpsuite, and the use of most system tools on Kali by way of proxychains. If privilege escalation is determined to be too risky (for reasons of either system stability or covertness of action) the operator can stop here and still have a fully functioning beachhead within the target environment.
 
-### Stage 5 - Local Privilege Escalation (LPE)
+### Stage 5 - Local Privilege Escalation (LPE) <a name="toc2e"></a>
 
 *Goal: Gain LPE.*<br>
 *Vector: LPE Vulnerability*<br>
@@ -61,7 +77,7 @@ In this stage, even as a non-privileged user, revsh allows for point-to-point pa
 
 Gaining root level access on a server is only necessary for some offensive forensics (e.g. accessing root SSH keys, memory dumps for in-memory password / key / cert exfiltration, etc.) or to leverage certain system resources, such as ports below 1024 or virtual networking / bridging interfaces. Gaining local privilege escalation will open access to these resources, and thus allow us to move forward with establishing a reverse VPN. In order to move forward to stage 6 the operator should now examine the system for poor configurations, improperly handled credentials, or any known privilege escalations for OS / services that could be used in privilege escalation.
 
-### Stage 6 - Reverse VPN
+### Stage 6 - Reverse VPN <a name="toc2f"></a>
 
 *Goal: Establish a reverse VPN.*<br>
 *Vector: revsh*<br>
@@ -69,13 +85,13 @@ Gaining root level access on a server is only necessary for some offensive foren
 
 Upon gaining root privileges on the system the operator will want to relaunch revsh to take advantage of the TUN/TAP support. This will allow the operator to forward raw IP packets / ethernet frames. This feature can then be leveraged by using the TUN device and setting up an iptables nat rule on the compromised host. Even better, the operator could enable a bridge device between the new TAP device and a live eth device, then simply dhcp request an IP address on the target network. Either way, now with a proper IP address that routes onto the target network, all of Kali's tools will work natively. As a result, no further tools need to be moved to the target host, thus reducing the forensic footprint. The operator is now set up to begin the lateral movement phase from a much better position than was the case in a pre reverse-vpn world.
 
-## A note on netcat.
+## A note on netcat. <a name="toc3"></a>
 
 revsh is not intended as a replacement for netcat. In fact netcat's simplicity allows for an initial remote shell to be established on a target system with high certainty, even when such a system may be obsolete, eccentric, or just plain broken. Using netcat and revsh together allows for a more robust and powerful interaction with the target environment. 
 
 Stages 3 and 4 are broken out into separate stages to account for the worst case in which the target system is unwilling to cooperate with revsh out of the box. I have come across instances where netcat would work where revsh couldn't initially, but after fingerprinting and analysing the target host I was able to finally establish a terminal with a custom revsh built specifically for that target. In the average case, however, the operator won't need to step through both of these stages.
 
-## A note on SSH.
+## A note on SSH. <a name="toc4"></a>
 
 SSH is a powerful tool with many of the same features as revsh. There are positives and negatives to using it, however.
 
@@ -92,7 +108,7 @@ Negatives:
 
 This is not meant to imply that I believe SSH has no place in the cyber threat toolkit; but rather, like netcat, the operator should accept it as yet another tool, while keeping in mind its limitations.
 
-## A note on further training.
+## A note on further training. <a name="toc5"></a>
 
 I chose not to delve too deeply into the skills / techniques required for gaining RCE and LPE, as these are all well documented online and elsewhere. For a more formalized training approach, I would recommend the [Offensive Security Certified Professional](https://www.offensive-security.com/information-security-certifications/oscp-offensive-security-certified-professional/) course offered by [Offensive Security](https://www.offensive-security.com/). This course culminates with a grueling 24 hour exam that bestows the fabled OSCP certification. This training / cert represents the state of the art.
 
