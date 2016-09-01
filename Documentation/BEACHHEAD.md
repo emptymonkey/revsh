@@ -80,7 +80,7 @@ Stages 3 and 4 are broken out into separate stages to account for the worst case
 
 SSH is a powerful tool with many of the same features as revsh. There are positives and negatives to using it, however.
 
-Positive:
+Positives:
 - It exists on every machine.
 - It is feature rich.
 - After years of use, it is extremely stable.
