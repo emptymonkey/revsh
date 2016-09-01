@@ -15,7 +15,7 @@ These lists, while generally intended as overviews, always leave me feeling as t
 
 It should be noted that the stages outlined below are meant as an enumeration of all possible steps in this process. A specific engagement may not have (or need) all of these stages. For example, when faced with a web application with command injection running as root, the operator will be able to skip from stage 1 all the way to stage 6 in one maneuver. In general though, most of the stages listed below will come into play in some form.
 
-This document is a part of the revsh source tree for a reason; with revsh in the operators toolkit, several of the later stages of this process are enabled / greatly eased.
+revsh was written specifically to enable / greatly ease several of the later stages of this process.
 
 ## Stages of a Beachhead Landing 
 
