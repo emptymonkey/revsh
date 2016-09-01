@@ -53,13 +53,13 @@ The operator will now Leverage the netcat shell established in stage 3 to downlo
 
 In this stage, even as a non-privileged user, revsh allows for point-to-point passthrough network proxies, as well as dynamic socks proxy tunnels. This enables the operator to leverage "behind the host firewall" style attacks, burpsuite, and the use of most system tools on Kali by way of proxychains. If privilege escalation is determined to be too risky (for reasons of either system stability or covertness of action) the operator can stop here and still have a fully functioning beachhead within the target environment.
 
-### Stage 5 - LPE
+### Stage 5 - Local Privilege Escalation (LPE)
 
 *Goal: Gain LPE.*<br>
 *Vector: LPE Vulnerability*<br>
 *Privilege: Non-privileged User*
 
-Gaining root level access on a server is only necessary for some offensive forensics (e.g. root SSH keys, memory dumps for in-memory password / key exfil, etc.) or to leverage certain system resources, such as ports below 1024 or virtual networking / bridging interfaces. Gaining "local privilege escalation" (aka LPE) will open access to these resources, and thus allow us to move forward with establishing a reverse VPN. In order to move forward to stage 6 the operator should now examine the system for poor configurations, improperly handled credentials, or any known privilege escalations for OS / services that could be used in privilege escalation.
+Gaining root level access on a server is only necessary for some offensive forensics (e.g. root SSH keys, memory dumps for in-memory password / key exfil, etc.) or to leverage certain system resources, such as ports below 1024 or virtual networking / bridging interfaces. Gaining local privilege escalation will open access to these resources, and thus allow us to move forward with establishing a reverse VPN. In order to move forward to stage 6 the operator should now examine the system for poor configurations, improperly handled credentials, or any known privilege escalations for OS / services that could be used in privilege escalation.
 
 ### Stage 6 - Reverse VPN
 
