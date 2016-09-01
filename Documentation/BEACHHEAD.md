@@ -19,7 +19,7 @@ This document is a part of the revsh source tree for a reason; with revsh in the
 
 ## Stages of a Beachhead Landing 
 
-### Stage 1 - Identify Vulnerability
+### Stage 1 - Limited Control
 
 *Goal: Gain limited Control.*<br>
 *Vector: Remote Vulnerability*<br>
