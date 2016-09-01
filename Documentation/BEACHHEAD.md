@@ -19,7 +19,7 @@ This document is a part of the revsh source tree for a reason; with revsh in the
 
 ## Stages of a Beachhead Landing 
 
-### Stage 1
+### Stage 1 - Identify Vulnerability
 
 *Goal: Gain limited Control.*<br>
 *Vector: Remote Vulnerability*<br>
@@ -27,15 +27,15 @@ This document is a part of the revsh source tree for a reason; with revsh in the
 
 The operator will need to begin by identifying a remote vulnerability and exploiting it. This may only grant the operator limited control over the server, such as file upload to the webroot or database field extraction.
 
-### Stage 2
+### Stage 2 - Remote Code Execution (RCE)
 
 *Goal: Gain arbitrary RCE.*<br>
 *Vector: Variable*<br>
 *Privilege: Non-privileged User*
 
-Once the operator has found a limited remote functionality vulnerability, they will want to leverage it to grant repeatable arbitrary "remote code execution" (aka RCE). In the above example of a vulnerable web application with file upload to the webroot, this stage could be performed by uploading a webshell.
+Once the operator has found a limited remote functionality vulnerability, they will want to leverage it to grant repeatable arbitrary remote code execution. In the above example of a vulnerable web application with file upload to the webroot, this stage could be performed by uploading a webshell.
 
-### Stage 3
+### Stage 3 - Reverse Shell
 
 *Goal: Establish a reverse shell.*<br>
 *Vector: netcat*<br>
@@ -43,7 +43,7 @@ Once the operator has found a limited remote functionality vulnerability, they w
 
 In this stage, the arbitrary RCE from stage 2 will be leveraged to download a copy of netcat that has the GAPING_SECURITY_HOLE feature enabled. Once downloaded, the operator will open a reverse shell with netcat then proceed with several high priority / low impact tasks. (E.g. fingerprinting the host, assessing the level of system usage by it's owners, as well as identifying any additional services provided by this host.) After the completion of the initial tasks the operator may find that further tasks, such as privilege escalation or lateral movement would best be performed from a proper terminal.
 
-### Stage 4
+### Stage 4 - Reverse Terminal
 
 *Goal: Establish a reverse terminal.*<br>
 *Vector: revsh*<br>
@@ -53,7 +53,7 @@ The operator will now Leverage the netcat shell established in stage 3 to downlo
 
 In this stage, even as a non-privileged user, revsh allows for point-to-point passthrough network proxies, as well as dynamic socks proxy tunnels. This enables the operator to leverage "behind the host firewall" style attacks, burpsuite, and the use of most system tools on Kali by way of proxychains. If privilege escalation is determined to be too risky (for reasons of either system stability or covertness of action) the operator can stop here and still have a fully functioning beachhead within the target environment.
 
-### Stage 5
+### Stage 5 - LPE
 
 *Goal: Gain LPE.*<br>
 *Vector: LPE Vulnerability*<br>
@@ -61,7 +61,7 @@ In this stage, even as a non-privileged user, revsh allows for point-to-point pa
 
 Gaining root level access on a server is only necessary for some offensive forensics (e.g. root SSH keys, memory dumps for in-memory password / key exfil, etc.) or to leverage certain system resources, such as ports below 1024 or virtual networking / bridging interfaces. Gaining "local privilege escalation" (aka LPE) will open access to these resources, and thus allow us to move forward with establishing a reverse VPN. In order to move forward to stage 6 the operator should now examine the system for poor configurations, improperly handled credentials, or any known privilege escalations for OS / services that could be used in privilege escalation.
 
-### Stage 6
+### Stage 6 - Reverse VPN
 
 *Goal: Establish a reverse VPN.*<br>
 *Vector: revsh*<br>
