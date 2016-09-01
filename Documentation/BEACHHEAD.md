@@ -59,6 +59,8 @@ Once the operator has found a vulnerability that grants them limited control, th
 
 In this stage, the arbitrary RCE from stage 2 should be invoked to download a copy of netcat that has the GAPING_SECURITY_HOLE feature enabled. Once downloaded, the operator will open a reverse shell with netcat then proceed with several high priority / low impact tasks. (E.g. fingerprinting the host, assessing the level of system usage by it's owners, as well as identifying any additional services provided by this host.) After the completion of those initial tasks the operator will find that further tasks, such as privilege escalation or lateral movement will be easier to perform from a proper terminal.
 
+It should be noted that there are many other ways to establish a reverse shell without netcat. For a fairly exhaustive list of these techniques, please refer to [pentestmonkey's Reverse Shell Cheat Sheet](http://pentestmonkey.net/cheat-sheet/shells/reverse-shell-cheat-sheet).
+
 ### Stage 4 - Reverse Terminal <a name="toc2d"></a>
 
 *Goal: Establish a reverse terminal.*<br>
