@@ -2,6 +2,7 @@
 # Beachhead Landing Process
 
 There are many documents online that break down a cyber attack into various stages. Roughly, these stages are:
+
 1. Passive reconnaissance. (e.g. Google, Shodan, Linkedin, etc.)
 2. Active reconnaissance. (e.g. nmap, dns forward / reverse lookups, etc.)
 3. Server compromise.
