@@ -216,8 +216,8 @@ int init_io_controller(struct config_helper *config){
 		return(-1);
 	}
 
-	/* Sepuku if left alone too long. */
-	act->sa_handler = catch_alarm;
+	/* Seppuku if left alone too long. */
+	act->sa_handler = seppuku;
 
 	if(sigaction(SIGALRM, act, NULL) == -1){
 		report_error("init_io_controller(): sigaction(%d, %lx, %p): %s", SIGALRM, (unsigned long) act, NULL, strerror(errno));
@@ -363,7 +363,7 @@ int init_io_target(struct config_helper *config){
 	}
 
 	/* Sepuku if left alone too long. */
-	act->sa_handler = catch_alarm;
+	act->sa_handler = seppuku;
 
 	if(sigaction(SIGALRM, act, NULL) == -1){
 		report_error("init_io_target(): sigaction(%d, %lx, %p): %s", SIGALRM, (unsigned long) act, NULL, strerror(errno));

