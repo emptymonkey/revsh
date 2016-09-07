@@ -20,17 +20,6 @@ connections (including tun/tap virtual networking interfaces) are handled in a
 loop. These connections live in a linked list with a primitive form of
 round-robin scheduling.
 
-There are abstraction layers to how the data is sent and received. These 
-layers form a hierarchy for modularity of design. These layers are:
-	- The broker layer pushes and pulls "messages" of data.
-	- The messaging layer reads and writes data through remote_read() and
-	  remote_write() functions. This layer offers the idea of a message and is
-	  aware of the different data types and their headers.
-	- The io layer reads and writes data using the underlying system read()
-	  and write() calls. This layer handles SSL (if applicable) and
-	  implements the second select() loop, ensuring that all the expected data
-	  is read or written.
-
 That's it. That's the main idea.
 
 
