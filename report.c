@@ -35,7 +35,7 @@ void report_error(char *fmt, ...){
 		return;
 	}
 
-	if(verbose){
+	if(verbose > 1){
 		if(io && io->controller){
 			// io->controller's tty is raw right now. Stick a \r in there for legibility.
 			fprintf(stderr, "\r");
@@ -102,7 +102,7 @@ int report_log(char *fmt, ...){
 		return(retval);
 	}
 
-	if(verbose){
+	if(verbose > 1){
 		fprintf(stderr, "\r%s\n", error_string);
 	}
 

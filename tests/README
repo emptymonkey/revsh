@@ -1,6 +1,31 @@
-Files contain basic hex patterns for the socks handshakes of various flavors. Finishes with a basic http request. You will need to change the IP address to your dev target that should be running a webserver on port 80.
+
+The files in this directory are the remenants of my socks protocol test cases. I've included them in the repo in case they are helpful for future debugging.
+
+These files contain basic hex patterns for the socks handshakes of various flavors, then finishes with a basic http request. You will need to change the IP address to your dev target that should be running a webserver on port 80. 
 
 Use with netcat for quick testing of the SOCKS handshakes:
-cat socks4a | xxd -p -r | nc -v 127.0.0.1 4444
+cat socks4a | xxd -p -r | nc -v 127.0.0.1 2080
 
-In each file the second line is the ip address (which will change depending on your test target.) In the case of socks4a, the second line is the hex representation of the ascii characters that represent the ip address. In the socks4 and socks5 files, the second line is the hex representation of the four octets that directly compose the ip address.
+The second line in each file is the ip address (which will change depending on your test target.) In the case of socks4a, the second line is the hex representation of the ascii characters that represent the ip address. In the socks4 and socks5 files, the second line is the hex representation of the four octets that directly compose the ip address.
+
+Further reading:
+http://www.openssh.com/txt/socks4.protocol
+http://www.openssh.com/txt/socks4a.protocol
+https://tools.ietf.org/html/rfc1928
+
+--
+
+Mini rant...
+
+Socks 4a is a super cool hack that makes socks 4 extensible to DNS lookups and ipv6 without breaking backward compatibility.
+Socks 5 is a crappy over-engineered steaming pile that mandates support for crazy shit noone will ever use. That's why no tools supports socks 5.
+As an example of the socks 5 crappyness, keep in mind it mandates UDP support and :
+	"Compliant implementations MUST support GSSAPI and SHOULD support USERNAME/PASSWORD authentication methods." (That's USERNAME/PASSWORD as in cleartext over the wire.)
+I've come so close to ripping out the socks 5 support from revsh. I haven't because at this point it seems to work. Even then, I *may* rip it out in the future just for the pure enjoyment of it all.
+
+revsh only supports tcp connect. Bah! Back in my day we didn't have _fancy gssapi or tcp bind support_! You kids'll get TCP connect and you'll like it! We also didn't have _fire retardant materials for our pajamas_!! You went to bed smoking, you woke up in flames. That's the way it was!! Now toughen the fuck up!!! Damn kids...
+
+We also may have worn onions on our belt, as was the fashion of the day...
+
+
+tl;dr socks 4a is amazeballs. socks 5 killed your grandma. emptymonkey is a grumpy old man.

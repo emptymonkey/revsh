@@ -737,7 +737,7 @@ int init_io_controller(struct config_helper *config){
 				return(-1);
 			}
 
-			if(verbose){
+			if(verbose > 2){
 				printf(" Remote fingerprint expected: ");
 				for(i = 0; i < (int) allowed_fingerprint_len; i++){
 					printf("%02x", allowed_fingerprint[i]);
@@ -763,7 +763,7 @@ int init_io_controller(struct config_helper *config){
 				return(-1);
 			}
 
-			if(verbose){
+			if(verbose > 2){
 				printf(" Remote fingerprint received: ");
 				for(i = 0; i < (int) remote_fingerprint_len; i++){
 					printf("%02x", remote_fingerprint[i]);

@@ -346,8 +346,8 @@ int broker(struct config_helper *config){
 			if(FD_ISSET(cur_connection_node->fd, &write_fds)){
 
 				if(cur_connection_node->state == CON_EINPROGRESS){
-					if((retval = handle_con_activate(cur_connection_node)) == -1){
-						report_error("broker(): handle_con_activate(%lx): %s", (unsigned long) cur_connection_node, strerror(errno));
+					if((retval = handle_connection_activate(cur_connection_node)) == -1){
+						report_error("broker(): handle_connection_activate(%lx): %s", (unsigned long) cur_connection_node, strerror(errno));
 						goto CLEAN_UP;
 					}
 				} else {
@@ -367,8 +367,8 @@ int broker(struct config_helper *config){
 						goto CLEAN_UP;
 					}
 				}else if(cur_connection_node->state == CON_SOCKS_INIT || cur_connection_node->state == CON_SOCKS_V5_AUTH){
-					if((retval = handle_con_socks_init(cur_connection_node)) == -1){
-						report_error("broker(): handle_con_socks_init(%lx): %s", (unsigned long) cur_connection_node, strerror(errno));
+					if((retval = handle_connection_socks_init(cur_connection_node)) == -1){
+						report_error("broker(): handle_connection_socks_init(%lx): %s", (unsigned long) cur_connection_node, strerror(errno));
 						goto CLEAN_UP;
 					}
 				}

@@ -245,7 +245,7 @@ int handle_message_dt_proxy_ht_create(){
 			}
 		}
 
-		if(verbose){
+		if(verbose > 2){
 			fprintf(stderr, "\rproxy_connect(\"%s\"): Unable to connect: %s\n", cur_connection_node->rhost_rport, strerror(errno));
 		}
 
@@ -305,7 +305,7 @@ int handle_message_dt_proxy_ht_create_tun_tap(){
 }
 
 
-int handle_con_activate(struct connection_node *cur_connection_node){
+int handle_connection_activate(struct connection_node *cur_connection_node){
 
 	int optval;
 	socklen_t optlen;
@@ -315,7 +315,7 @@ int handle_con_activate(struct connection_node *cur_connection_node){
 	if(getsockopt(cur_connection_node->fd, SOL_SOCKET, SO_ERROR, &optval, &optlen) == -1){
 
 		if(handle_send_dt_proxy_ht_destroy(cur_connection_node->origin, cur_connection_node->id, errno) == -1){
-			report_error("handle_con_activate(): handle_send_dt_proxy_ht_destroy(%d, %d, errno): %s", cur_connection_node->origin, cur_connection_node->id, strerror(errno));
+			report_error("handle_connection_activate(): handle_send_dt_proxy_ht_destroy(%d, %d, errno): %s", cur_connection_node->origin, cur_connection_node->id, strerror(errno));
 			return(-1);
 		}
 
@@ -324,12 +324,12 @@ int handle_con_activate(struct connection_node *cur_connection_node){
 	}
 
 	if(optval != 0){
-		if(verbose){
+		if(verbose > 2){
 			fprintf(stderr, "\rConnection failed: %s, %s\n", cur_connection_node->rhost_rport, strerror(optval));
 		}
 
 		if(handle_send_dt_proxy_ht_destroy(cur_connection_node->origin, cur_connection_node->id, 0) == -1){
-			report_error("handle_con_activate(): handle_send_dt_proxy_ht_destroy(%d, %d, 0): %s", cur_connection_node->origin, cur_connection_node->id, strerror(errno));
+			report_error("handle_connection_activate(): handle_send_dt_proxy_ht_destroy(%d, %d, 0): %s", cur_connection_node->origin, cur_connection_node->id, strerror(errno));
 			return(-1);
 		}
 
@@ -558,7 +558,7 @@ int handle_connection_read(struct connection_node *cur_connection_node){
 
 	errno = 0;
 	if((retval = read(cur_connection_node->fd, message->data, io->message_data_size)) < 1){
-		if(verbose && retval){
+		if((verbose > 2) && retval){
 			fprintf(stderr, "\rhandle_connection_read(): Connection %s closed: %s\n", cur_connection_node->rhost_rport, strerror(errno));
 		}
 
@@ -584,7 +584,7 @@ int handle_connection_read(struct connection_node *cur_connection_node){
 
 
 // Long story short, I hate Socks 5.
-int handle_con_socks_init(struct connection_node *cur_connection_node){
+int handle_connection_socks_init(struct connection_node *cur_connection_node){
 	int retval;
 	char *reply_buff = NULL;
 	int reply_buff_len = 0;
@@ -592,7 +592,7 @@ int handle_con_socks_init(struct connection_node *cur_connection_node){
 
 	if((retval = read(cur_connection_node->fd, cur_connection_node->buffer_tail, cur_connection_node->buffer_size - (cur_connection_node->buffer_tail - cur_connection_node->buffer_head))) < 1){
 
-		// Sorry if this syntax feels awkward. The case defined below is the re-call of the handle_con_socks_init() by the handle_con_socks_init() 
+		// Sorry if this syntax feels awkward. The case defined below is the re-call of the handle_connection_socks_init() by the handle_connection_socks_init() 
 		// when CON_SOCKS_V5_AUTH has occured and the buffer may already be ready for processing. It will generally fail the read and want to drop
 		// though below for processing. We are if()'ing on the negation of that case to handle when it's just a normal good ol'fashioned read() 
 		// failure.
@@ -602,12 +602,12 @@ int handle_con_socks_init(struct connection_node *cur_connection_node){
 					(errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK)
 				 )){
 
-			if(retval && verbose){
+			if(retval && (verbose > 2)){
 				fprintf(stderr, "\rConnection %s closed: %s\n", cur_connection_node->rhost_rport, strerror(errno));
 			}
 
 			if(handle_send_dt_proxy_ht_destroy(cur_connection_node->origin, cur_connection_node->id, 0) == -1){
-				report_error("handle_con_socks_init(): handle_send_dt_proxy_ht_destroy(%d, %d, 0): %s", cur_connection_node->origin, cur_connection_node->id, strerror(errno));
+				report_error("handle_connection_socks_init(): handle_send_dt_proxy_ht_destroy(%d, %d, 0): %s", cur_connection_node->origin, cur_connection_node->id, strerror(errno));
 				return(-1);
 			}
 			connection_node_delete(cur_connection_node);
@@ -618,9 +618,9 @@ int handle_con_socks_init(struct connection_node *cur_connection_node){
 	cur_connection_node->buffer_tail = cur_connection_node->buffer_tail + retval;
 
 	if((new_state = parse_socks_request(cur_connection_node)) == -1){
-		report_error("handle_con_socks_init(): parse_sock_request(%lx): Malformed SOCKS request.", (unsigned long) cur_connection_node);
+		report_error("handle_connection_socks_init(): parse_sock_request(%lx): Malformed SOCKS request.", (unsigned long) cur_connection_node);
 		if(handle_send_dt_proxy_ht_destroy(cur_connection_node->origin, cur_connection_node->id, 0) == -1){
-			report_error("handle_con_socks_init(): handle_send_dt_proxy_ht_destroy(%d, %d, 0): %s", cur_connection_node->origin, cur_connection_node->id, strerror(errno));
+			report_error("handle_connection_socks_init(): handle_send_dt_proxy_ht_destroy(%d, %d, 0): %s", cur_connection_node->origin, cur_connection_node->id, strerror(errno));
 			return(-1);
 		}
 		connection_node_delete(cur_connection_node);
@@ -631,9 +631,9 @@ int handle_con_socks_init(struct connection_node *cur_connection_node){
 
 		// Buffer is full, but still no complete socks request?!
 		if(!(cur_connection_node->buffer_size - (cur_connection_node->buffer_tail - cur_connection_node->buffer_head))){
-			report_error("handle_con_socks_init(): parse_sock_request(%lx): Malformed SOCKS request.", (unsigned long) cur_connection_node);
+			report_error("handle_connection_socks_init(): parse_sock_request(%lx): Malformed SOCKS request.", (unsigned long) cur_connection_node);
 			if(handle_send_dt_proxy_ht_destroy(cur_connection_node->origin, cur_connection_node->id, 0) == -1){
-				report_error("handle_con_socks_init(): handle_send_dt_proxy_ht_destroy(%d, %d, 0): %s", cur_connection_node->origin, cur_connection_node->id, strerror(errno));
+				report_error("handle_connection_socks_init(): handle_send_dt_proxy_ht_destroy(%d, %d, 0): %s", cur_connection_node->origin, cur_connection_node->id, strerror(errno));
 				return(-1);
 			}
 			connection_node_delete(cur_connection_node);
@@ -659,14 +659,14 @@ int handle_con_socks_init(struct connection_node *cur_connection_node){
 	retval = write(cur_connection_node->fd, reply_buff, reply_buff_len);
 
 	if(retval == -1){
-		report_error("handle_con_socks_init(): write(%d, %lx, %d): %s", cur_connection_node->fd, (unsigned long) reply_buff, reply_buff_len, strerror(errno));
+		report_error("handle_connection_socks_init(): write(%d, %lx, %d): %s", cur_connection_node->fd, (unsigned long) reply_buff, reply_buff_len, strerror(errno));
 		return(-1);
 	}
 
 	if(retval != reply_buff_len){
-		report_error("handle_con_socks_init(): write(%d, %lx, %d): Unable to send SOCKS reply.", cur_connection_node->fd, (unsigned long) reply_buff, reply_buff_len);
+		report_error("handle_connection_socks_init(): write(%d, %lx, %d): Unable to send SOCKS reply.", cur_connection_node->fd, (unsigned long) reply_buff, reply_buff_len);
 		if(handle_send_dt_proxy_ht_destroy(cur_connection_node->origin, cur_connection_node->id, 0) == -1){
-			report_error("handle_con_socks_init(): handle_send_dt_proxy_ht_destroy(%d, %d, 0): %s", cur_connection_node->origin, cur_connection_node->id, strerror(errno));
+			report_error("handle_connection_socks_init(): handle_send_dt_proxy_ht_destroy(%d, %d, 0): %s", cur_connection_node->origin, cur_connection_node->id, strerror(errno));
 			return(-1);
 		}
 		connection_node_delete(cur_connection_node);
@@ -677,8 +677,8 @@ int handle_con_socks_init(struct connection_node *cur_connection_node){
 	// Handle the case where we have a rude client that doesn't wait for data and just fills our buffer with both halves of the 
 	// socks 5 request in one read.
 	if((cur_connection_node->state == CON_SOCKS_V5_AUTH) && (cur_connection_node->buffer_tail - cur_connection_node->buffer_ptr)){
-		if((retval = handle_con_socks_init(cur_connection_node)) == -1){
-			report_error("broker(): handle_con_socks_init(%lx): %s", (unsigned long) cur_connection_node, strerror(errno));
+		if((retval = handle_connection_socks_init(cur_connection_node)) == -1){
+			report_error("broker(): handle_connection_socks_init(%lx): %s", (unsigned long) cur_connection_node, strerror(errno));
 			return(-1);
 		}
 		return(retval);
@@ -687,7 +687,7 @@ int handle_con_socks_init(struct connection_node *cur_connection_node){
 	if(cur_connection_node->state == CON_ACTIVE){
 
 		if(handle_send_dt_proxy_ht_create(cur_connection_node) == -1){
-			report_error("handle_con_socks_init(): handle_send_dt_proxy_ht_create(%lx): %s", (unsigned long) cur_connection_node, strerror(errno));
+			report_error("handle_connection_socks_init(): handle_send_dt_proxy_ht_create(%lx): %s", (unsigned long) cur_connection_node, strerror(errno));
 			return(-1);
 		}
 
@@ -701,7 +701,7 @@ int handle_con_socks_init(struct connection_node *cur_connection_node){
 			message->data_len = cur_connection_node->buffer_tail - cur_connection_node->buffer_ptr;
 
 			if((retval = message_push()) == -1){
-				report_error("handle_con_socks_init(): message_push(): %s", strerror(errno));
+				report_error("handle_connection_socks_init(): message_push(): %s", strerror(errno));
 				return(-1);
 			}
 		}

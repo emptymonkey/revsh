@@ -10,12 +10,12 @@
  * 2013-07-17: Original release.
  * 2014-08-22: Complete overhaul w/SSL support.
  * 2015-01-16: YACO (Yet another complete overhaul.) Added the internal messaging interface.
- * 2016-08-27: YACO (Yet another complete overhaul.) Added proxies and tun/tap support.
+ * 2016-08-27: YACO (Yet another complete overhaul.) Added proxies, tun/tap support, and moved broker() cases into
+ *  their own handlers in the handler.c file.
  *
  *
  * The revsh binary is intended to be used both on the local control host as well as the remote target host. It is
  * designed to establish a remote shell with terminal support as well as full reverse vpn style tunneling..
- * revsh isn't intended as a replacement for netcat, but rather as a supplementary tool. 
  *
  *
  * Features:
@@ -41,6 +41,15 @@
 
 
 
+// XXX
+// Comment the code.
+// Make a man page.
+// Make static binary default.
+// Test all the switches.
+// Test on freebsd.
+// Use daily til Toorcon.
+
+
 #include "common.h"
 
 
@@ -61,17 +70,8 @@ volatile sig_atomic_t sig_found = 0;
  *
  **********************************************************************************************************************/
 
-// XXX
-// Implement all the switches listed in usage().
-// Comment the code.
-// Make a man page.
-// Make static binary default.
-// Test all the switches.
-// Test on freebsd.
-// Use daily til Toorcon.
-
-
 void usage(int ret_code){
+
 	FILE *out_stream = stdout;
 
 	if(ret_code){
@@ -105,10 +105,10 @@ void usage(int ret_code){
 	fprintf(out_stream, "\t-L [LHOST:]LPORT:RHOST:RPORT\n");
 	fprintf(out_stream, "\t\t\tLocal forward connections from the local\n\t\t\tlistener at LHOST:LPORT to RHOST:RPORT.\n"); 
 	fprintf(out_stream, "\t-D [LHOST:]LPORT\n");
-	fprintf(out_stream, "\t\t\tDynamic forward connection from the local\n\t\t\tlistener at LHOST:LPORT.\t\t\t(Socks 4, 4a, and 5. TCP connect only.)\n");
-	fprintf(out_stream, "\t-x\t\tDisable the default proxy listener.\t\t(Default listener on port %s)\n", SOCKS_LISTENER);
-	fprintf(out_stream, "\t-y\t\tDisable the default tun device.\n");
-	fprintf(out_stream, "\t-z\t\tDisable the default tap device.\n");
+	fprintf(out_stream, "\t\t\tDynamic forward connections from the local\n\t\t\tlistener at LHOST:LPORT.\t\t\t(Socks 4, 4a, and 5. TCP connect only.)\n");
+	fprintf(out_stream, "\t-x\t\tDisable the default tun device.\n");
+	fprintf(out_stream, "\t-y\t\tDisable the default tap device.\n");
+	fprintf(out_stream, "\t-z\t\tDisable the default proxy listener.\t\t(Default listener on port %s)\n", SOCKS_LISTENER);
 	fprintf(out_stream, "\t-b\t\tStart in bind shell mode.\t\t\t(Default is reverse shell mode.)\n");
 	fprintf(out_stream, "\t\t\tThe -b flag must be invoked on both ends.\n");
 	fprintf(out_stream, "\t-n\t\tNon-interactive netcat style data broker.\t(Default is interactive w/remote tty.)\n\t\t\tNo tty. Useful for copying files.\n");
@@ -119,8 +119,9 @@ void usage(int ret_code){
 	fprintf(out_stream, "\n\tADDRESS:PORT\tThe address and port of the listening socket.\t(Default is \"%s\".)\n", ADDRESS);
 
 #ifdef GENERIC_BUILD
-	fprintf(out_stream, "\n\tThis binary only allows Anonymous Diffie-Hellman. In order to enable Ephemeral Diffie-Hellman\n");
-	fprintf(out_stream, "\t(with Perfect Forward Secrecy) you will need your own copy built from source.\n");
+	fprintf(out_stream, "\n\tThis is the GENERIC_BUILD of revsh, which defaults to Anonymous Diffie-Hellman encryption.\n");
+	fprintf(out_stream, "\tIn order to enable Ephemeral Diffie-Hellman (with Perfect Forward Secrecy) you will need to\n");
+	fprintf(out_stream, "\tbuild your own copy from source and manage your own keys.\n");
 	fprintf(out_stream, "\tThe source is available at: https://github.com/emptymonkey/revsh\n");
 #endif
 
@@ -267,7 +268,7 @@ int main(int argc, char **argv){
 	}
 
 	/* Grab the configuration from the command line. */
-	while((opt = getopt(argc, argv, "hepbkalcs:d:f:L:R:D:r:F:t:nv")) != -1){
+	while((opt = getopt(argc, argv, "hepbkalcxyzs:d:f:L:R:D:r:F:t:nv")) != -1){
 		switch(opt){
 
 			case 'h':
@@ -307,6 +308,18 @@ int main(int argc, char **argv){
 			case 'l':
 			case 'c':
 				io->controller = 1;
+				break;
+
+			case 'x':
+				config->tun = 0;
+				break;
+
+			case 'y':
+				config->tap = 0;
+				break;
+
+			case 'z':
+				config->socks = NULL;
 				break;
 
 			case 's':
@@ -356,24 +369,15 @@ int main(int argc, char **argv){
 				config->interactive = 0;
 				break;
 
-//XXX
-			case 'x':
-				break;
-
-			case 'y':
-				break;
-
-			case 'z':
-				break;
-
 			case 'v':
-				verbose = 1;
+				verbose++;
 				break;
 
 			default:
 				usage(-1);
 		}
 	}
+
 
 	/* Check for bindshell mode from name. */
 	tmp_ptr = strrchr(argv[0], '/');	

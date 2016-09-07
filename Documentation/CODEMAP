@@ -1,129 +1,152 @@
 
-This document is intended as an overview of the structure of the revsh codebase.
-Minor helper functions may be omitted from this document.
+This document is intended as an overview of the structure of the revsh
+codebase. For a more complete explanation of how the code works, go read the
+code itself.
 
-A note on vocabulary:
-	I have avoided the terms "listener", "client / server", and "RHOST / LHOST", 
-	etc. The standard model of network programming does not apply here cleanly.
-	In the case of netcat, calling one end the listener is reasonable. It's such
-	a simple tool (by design, of course) that even though it can be used for a 
-	reverse shell it still fits reasonably well in the traditional client server
-	model. 
 
-	In revsh, I use the terms "control" and "target" instead. The control node is
-	generally the system the operator is sitting in front of. It is named as a 
-	reference to its role as a command and control host. (Aka "C2".) The target
-	host is, obviously, the target of the operation. It is important to remove 
-	the client / server idea because the target can be set in reverse shell or 
-	bind shell mode. Regardless of the direction of the initial tcp connection, 
-	the control node is authoritative in all decisions relating to that 
-	connection (as it should be.)
+################################################################################
+# Basic Strategy
+################################################################################
 
-	I apologize for the inconvenience of a change in terminology from other tools
-	but the change of functionality in this tool seemed to warrant it.
+The basic strategy is pretty simple. I've implemented a message bus style 
+messaging system for passing "messages" between the control node and the target
+node. These messages can be of many different types, all defined in the
+protocol.h header file. 
 
-	As a result, the normal cli flag to launch in control mode is '-c', but '-l' 
-	will still work as expected.
+The main work is done in a broker loop that does select() based non-blocking
+io. The file-descriptor (fd) for the tty has priority. Next in priority is the
+message bus fd. After that the fds for socks listeners or established
+connections (including tun/tap virtual networking interfaces) are handled in a
+loop. These connections live in a linked list with a primitive form of
+round-robin scheduling.
+
+There are abstraction layers to how the data is sent and received. These 
+layers form a hierarchy for modularity of design. These layers are:
+	- The broker layer pushes and pulls "messages" of data.
+	- The messaging layer reads and writes data through remote_read() and
+	  remote_write() functions. This layer offers the idea of a message and is
+	  aware of the different data types and their headers.
+	- The io layer reads and writes data using the underlying system read()
+	  and write() calls. This layer handles SSL (if applicable) and
+	  implements the second select() loop, ensuring that all the expected data
+	  is read or written.
+
+That's it. That's the main idea.
+
+
+Some design decisions should be explained:
+	- I decided to use select() because we are hackers and our tools need to work
+	  on the broadest range of machines.
+	- I decided on a single threaded application for the same reason.
+	- I decided on a single connection between control and target for stealth.
+	- I decided to use OpenSSL because it is available on the broadest set of 
+	  machines. However, the version differences are still a pain to deal with
+	  so we end up always statically building. I may try to switch to LibreSSL
+	  at some point. I don't rule out writing my own crypto either (though I'd
+	  prefer not to.)
+
 
 ################################################################################
 # revsh
 ################################################################################
 
-# Initialization: 
-
+# Initialization
 
 - revsh.c
 	-- main()
 		--- Perform basic initialization.
-		--- Calls the appropriate conductor, either do_control() or do_target() as appropriate.
+		--- Calls the appropriate conductor, either do_control() or do_target() as
+		    appropriate.
 
 
-
-
-
-
-
-
-
-
-
-
-# Headers:
-
-- common.h
-  -- A header file with all the common defines, includes, and protocol definitions.
-
-- config.h
-  -- A header file with all the defines that the user will probably want to tweek.
-
-- helper.h
-  -- A header file to define the "helper" objects.
-    --- These are just structs that allow for organization of the topics the help with.
-      ---- E.g. struct message_helper is an object that encases everything needed when
-           dealing with passing a message over the message bus. 
-  -- The io_helper struct is invoked once and represents the state of the I/O at any given point.
-
-
-# Code: 
+# Conductors
 
 - control.c
 	-- do_control()
 		--- Acts as the conductor for control nodes.
-		--- Calls init_io_controller() to setup the networking layer.
+		--- Calls init_io_controller() to setup the io layer.
 		--- Calls negotiate_protocol() to setup the messaging layer.
-		--- Talks with the remote partner to syncronize the revsh environment.
+		--- Talks with the remote partner to synchronize the revsh environment.
 		--- Calls broker().
-		--- Performs cleanup and exits.
+		--- After broker() completes, performs cleanup and exits.
 
 - target.c
 	-- do_target()
 		--- Acts as the conductor for target nodes.
-		--- Calls init_io_target() to setup the networking layer.
+		--- Calls init_io_target() to setup the io layer.
 		--- Calls negotiate_protocol() to set up the messaging layer.
-		--- Talks with the remote partner to syncronize the revsh environment.
-		--- Sets up a pty.
+		--- Talks with the remote partner to synchronize the revsh environment.
+		--- Sets up a pseudoterminal.
 		--- fork()s a child which exec()s a shell.
-		--- remote_printf()
-			---- Leverage a printf() version of the message bus to report system info during startup.
+		--- uses remote_printf() to send back info about the target system.
 		--- Calls broker().
-		--- Performs cleanup and exits.
+		--- After broker() completes, performs cleanup and exits.
+
+
+# Broker Loop
 
 - broker.c
 	-- Uses message_pull() and message_push() to read and write data.
-	-- Reads data from either the local or remote file descriptor, then writes it down the other.
-  -- Local data falls into three catagories:
-    --- Data to/from the local stdin connection (tty / shell).
-    --- Data from a local proxy listener. (This data is used to create a data connection.)
-    --- Data to / from an establised proxy data connection.
-  -- Remote data is only of one type:
-    --- Data to / from the message bus.
+	-- Reads data from either the local or remote file descriptor, then writes it
+	   down the other.
+	-- Local data falls into three categories:
+		--- Data to/from the local stdin connection (tty / shell).
+		--- Data from a local proxy listener. (This data is used to create a data
+		    connection.)
+		--- Data to / from an established data connection.
+	-- Remote data is only of one type:
+		--- Data to / from the message bus.
+	-- Calls the appropriate "handler" function to handle the case it's landed
+	   in.
 
 - handler.c
-  -- Contains code to "handle" all of the various cases found within the broker() loop.
-  -- Everything in handler.c was once flat inside the broker() loop. This was a giant mess.
-     It was broken out, case by case, into it's own file. Things are much cleaner now.
-  -- Naming convetion for these functions are "handle_FROM-WHERE_DO-WHAT()".
-    --- E.g. handle_message_dt_proxy_ht_create() will handle data:
-      ---- Coming from the message bus.
-      ---- Requesting the creation of a corresponding proxy node.
+	-- Contains code to "handle" all of the various cases found within the
+	   broker() loop.
+	-- Everything in handler.c was once flat inside the broker() loop. This was
+	   a giant mess. It was broken out, case by case, into it's own file. Things
+	   are much cleaner now.
+	-- Naming convention for these functions are "handle_FROM-WHERE_DO-WHAT()".
+		--- E.g. handle_message_dt_proxy_ht_create() will handle data:
+			---- Coming from the message bus.
+			---- Requesting the creation of a corresponding proxy node.
+	-- Full list of handler functions are:
+		--- handle_signal_sigwinch()
+		--- handle_local_write()
+		--- handle_local_read()
+		--- handle_message_dt_tty()
+		--- handle_message_dt_winresize()
+		--- handle_message_dt_proxy_ht_destroy()
+		--- handle_message_dt_proxy_ht_create()
+		--- handle_message_dt_proxy_ht_create_tun_tap()
+		--- handle_message_dt_proxy_ht_response()
+		--- handle_message_dt_connection()
+		--- handle_connection_activate()
+		--- handle_proxy_read()
+		--- handle_connection_write()
+		--- handle_connection_read()
+		--- handle_connection_socks_init()
+		--- handle_send_dt_proxy_ht_destroy()
+		--- handle_send_dt_proxy_ht_create()
+		--- handle_send_dt_nop()
+		--- handle_tun_tap_init()
 
-- report.c
-	-- report_error()
-		--- First, regardless of which end calls this, if we are verbose, print the error to the local fd acting as stderr.
-		--- Then, if were are control and logging, drop the error to the log file.
-    --- If we are target, send a DT_ERROR message back to the control to make the decision to log or not logging.
 
-- proxy.c
-  -- Contains helper code related to the establishing and tearing down of proxies and their data connections.
+# Messaging Layer
 
 - message.c
-  -- messages are atomic and have priority over all other socket activity.
-    --- This is achieved with a second independent select() call inside of the messaging code. Because everything
-        relies on the message bus, if messages can't be sent / recieved, then nothing else happens until they can.
+	-- messages are atomic and have priority over all other socket activity.
+		--- This is achieved with a second select() call inside of the messaging
+		    code. Because everything relies on the message bus, if messages can't be
+		    sent / received, then nothing else happens until they can.
 	-- message_pull()
-		--- Uses remote_read() to pull data from the socket, and fills out the appropriate message data structures.
+		--- Uses remote_read() to pull data from the socket, and fills out the
+			appropriate message data structures.
 	-- message_push()
-		--- Reads from the appropriate message data structures, and uses remote_write() to push data down the socket.
+		--- Reads from the appropriate message data structures, and uses
+			remote_write() to push data down the socket.
+
+
+# IO Layer
 
 - io.c
 	-- Includes either the io_ssl.c or io_nossl.c code, as appropriate.
@@ -142,14 +165,59 @@ A note on vocabulary:
 	-- init_io_target()
 		--- Setup the network layer for the target node.
 
-Note: the remote_read_*() and remote_write_*() functions are called through function pointers 
-	named remote_read() and remote_write() which are setup during initialization.
+Note: the remote_read_*() and remote_write_*() functions are called through
+      function pointers named remote_read() and remote_write() which are setup
+      during initialization.
 
-- string_to_vector.c
-  -- Contains uninteresting but useful code for parsing strings.
-  -- Takes a string and parses it based on whitespace into a null terminated array of null terminated strings.
-    --- E.g. "foo bar baz" would become an array of four elements: "foo\0", "bar\0", "baz\0", and \0.
 
+# Proxy Support
+
+- proxy.c
+	-- Contains helper code related to the establishing and tearing down of
+	   proxies and their data connections.
+
+
+# Reporting
+
+- report.c
+	-- report_error()
+		--- First, regardless of which end calls this, if we are verbose, print the
+		    error to the local fd acting as stderr.
+		--- Then, if were are control and logging, drop the error to the log file.
+		--- If we are target, send a DT_ERROR message back to the control to make
+		    the decision to log or not log.
+	-- report_log()
+		--- Called by report_error() to handle the logging component.
+		--- Called directly by the rest of the code in situations where we want to
+		    log an even that isn't really an error. (e.g. successful connections)
+
+
+# Misc. Headers
+
+- common.h
+	-- A header file with all the common defines and includes.
+
+- protocol.h
+	-- A header file that defines the underlying messaging protocol.
+
+- config.h
+	-- A header file with all the defines that the user will probably want to
+	   tweek to fit their own case.
+
+- helper.h
+	-- A header file to define the "helper" objects.
+		--- These are just structs that allow for organization of the topics they
+		    help with.
+			---- E.g. struct message_helper is an object that encases everything
+			     needed when dealing with passing a message over the message bus. 
+	-- The io_helper struct is invoked once and represents the state of the I/O
+	   at any given point. The code started out life as a simple tty broker
+	   pass through. As it grew, it became much more complex and became a giant
+	   state machine. This state is kept inside the single io_helper struct and
+	   is global. I really don't like globals, but this was a case where it made
+	   sense. As an IO application, all of the code needs to know the state of
+	   the machine at any given moment. Also, making this global greatly cleaned
+	   up the readability of the code.
 
 
 ################################################################################
@@ -157,7 +225,9 @@ Note: the remote_read_*() and remote_write_*() functions are called through func
 ################################################################################
 
 - in_the_key_of_c.c
-  -- During initial compilation, takes RSA keypair data and converts it into C source code representations.
-    --- This is useful for including the keypair data in the revsh source code, and baking the crypto
-        into the binary. (This is a bad tactic for enterprise software. This is a very useful tactic for 
-        a hostile binary.)
+	-- During initial compilation, takes RSA keypair data and converts it into C
+	   source code representations.
+		--- This is useful for including the keypair data in the revsh source code,
+		    and baking the crypto into the binary. (This is a bad tactic for
+		    enterprise software. This is a very useful tactic for a "hostile" binary.)
+
