@@ -205,6 +205,6 @@ struct io_helper {
 	struct connection_node *connection_tail;
 
 	// Used to track number of open fds. Select can't handle more than 1024.
-	int fd_count;
+	unsigned int fd_count;
 
 };

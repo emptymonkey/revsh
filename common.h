@@ -57,8 +57,9 @@
 
 #ifdef FREEBSD
 
-# include <net/tun.h>
-# include <net/tap.h>
+# include <netinet/in.h>
+//# include <net/if_tun.h>
+//# include <net/if_tap.h>
 
 #else // Linux
 

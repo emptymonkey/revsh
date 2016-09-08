@@ -361,10 +361,14 @@ int handle_message_dt_proxy_ht_create(){
  ******************************************************************************/
 int handle_message_dt_proxy_ht_create_tun_tap(){
 
+#ifdef FREEBSD
+	return(-2);
+#else
 	struct connection_node *cur_connection_node = NULL;
 
 	unsigned short origin = message->header_origin;
 	unsigned short id = message->header_id;
+
 
 	if(message->header_proxy_type == PROXY_TUN){
 		if((cur_connection_node = handle_tun_tap_init(IFF_TUN)) == NULL){
@@ -393,6 +397,7 @@ int handle_message_dt_proxy_ht_create_tun_tap(){
 	cur_connection_node->state = CON_ACTIVE;
 
 	return(0);
+#endif
 }
 
 
@@ -989,6 +994,10 @@ int handle_send_dt_nop(){
  ******************************************************************************/
 struct connection_node *handle_tun_tap_init(int ifr_flag){
 
+#ifdef FREEBSD
+	return(NULL);
+#else
+
 	int count;
 	struct ifreq ifr;
 	char *ifr_flag_name;
@@ -996,6 +1005,7 @@ struct connection_node *handle_tun_tap_init(int ifr_flag){
 	struct connection_node *cur_connection_node;
 
 	int tmp_sock = 0;
+
 
   if(ifr_flag == IFF_TUN){
 		ifr_flag_name = "TUN";
@@ -1090,5 +1100,6 @@ struct connection_node *handle_tun_tap_init(int ifr_flag){
 	cur_connection_node->state = CON_ACTIVE;
 
 	return(cur_connection_node);
+#endif
 }
 

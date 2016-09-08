@@ -85,6 +85,7 @@ int broker(struct config_helper *config){
 		}
 
 		/* Setup the TUN and TAP devices. Once setup, handle them as yet another connection in the connection_node linked list. */
+#ifndef FREEBSD
 		if(io->controller){
 			if(config->tun){
 				if((cur_connection_node = handle_tun_tap_init(IFF_TUN)) == NULL){
@@ -108,6 +109,7 @@ int broker(struct config_helper *config){
 				}
 			}
 		}
+#endif
 	}
 
 	timeout_ptr = NULL;
