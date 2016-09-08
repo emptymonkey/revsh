@@ -113,7 +113,9 @@
 	 Max size cases:
 	 Socks 4: 9 byte header. (Our implementation ignores USERID.)  =  9
 	 Socks 4a: 9 byte header + domain name (255 max) + null byte  =  265
-	 Socks 5: 2 bytes for auth header + 255 max auth types + 6 byte header + domain name size byte + domain name (255 max)  =  265
+	 Socks 5: 2 bytes for auth header + 255 max auth types + 6 byte header + domain name size byte + domain name (255 max)  =  519
+
+   In socks 5, the domain name is not null-terminated. Adding one to ensure we will always have a null terminating byte.
  */
 #define SOCKS_REQ_MAX	520
 
@@ -137,8 +139,8 @@ struct message_helper *message;
 
 /*
 	 This struct represents the overall state of the I/O. It was being passed around as a function argument, but it was getting passed everywhere... 
-	 Once I cleaned up error reporting it was obvious that all code needed access to this struct in order to do the right thing in th
-	 At that point I decided to just make it a global. It's being used globally, no need to pretend it's something other than what it is.
+	 Once I cleaned up error reporting it was obvious that all code needed access to this struct in order to do the right thing.
+	 I decided to just make it a global. It's being used globally, no need to pretend it's something other than what it is.
  */
 struct io_helper *io;
 
@@ -207,7 +209,7 @@ struct proxy_node *proxy_node_new(char *proxy_string, int proxy_type);
 int proxy_listen(struct proxy_node *cur_proxy_node);
 int proxy_connect(char *rhost_rport);
 struct connection_node *connection_node_create();
-int connection_node_delete(struct connection_node *);
+void connection_node_delete(struct connection_node *);
 struct connection_node *connection_node_find(unsigned short origin, unsigned short id);
 void connection_node_queue(struct connection_node *cur_connection_node);
 int parse_socks_request(struct connection_node *cur_connection_node);

@@ -1,16 +1,23 @@
 
-/* An object to assist in sending and recieving messages. */
+/******************************************************************************
+ * struct message_helper
+ *	Assists in sending and receiving messages. 
+ ******************************************************************************/
 struct message_helper {
 	unsigned char data_type;
 	unsigned short data_len;
 
-	// Additional header info:
-	//	* header_type: subtype defining what is going on.
-	//	* header_id: the id number of the proxy connection.
-	//	* header_errno: The errno for the remote request that has failed.
+	// Header types are defined in the protocol.h file.
 	unsigned short header_type;
+
+	// header_origin is the "io->controller" value of the connection initializer.
+	// header_id is the fd of the connection on the initializer's end.
+	// (header_origin, header_id) as a tuple forms a unique identifier for the
+	// connection recognized by both nodes.
 	unsigned short header_origin;
 	unsigned short header_id;
+
+	// Proxy types are defined in the protocol.h file.
 	unsigned short header_proxy_type;
 
 	char *data;
@@ -18,15 +25,24 @@ struct message_helper {
 	struct message_helper *next;
 };
 
-/* This struct allows for tracking of proxies being requested on the command line. They may or may not become real proxies later on. */
+
+/******************************************************************************
+ * struct proxy_request_node
+ *	Assists in tracking proxies that are requested on the command line.
+ *	These may or may not become real proxies later on.
+ ******************************************************************************/
 struct proxy_request_node {
 	char *request_string;
 	int type;
-	
+
 	struct proxy_request_node *next;
 };
 
-/* An object representing how the different configuration options were set for this run. */
+
+/******************************************************************************
+ * struct config_helper
+ *	Tracks the different configuration options that were set for this run.
+ ******************************************************************************/
 struct config_helper {
 
 	unsigned char interactive;
@@ -56,12 +72,22 @@ struct config_helper {
 	char *cipher_list;
 #endif /* OPENSSL */
 
+	// The proxy requests are setup as a linked list here. 
+	// This was the solution I came up with for an arbitrary number of proxies
+	// requested by the user on the command line, any number of which may or
+	// may not actually successfully listen down the road.
 	struct proxy_request_node *proxy_request_head;
 
 };
 
-/* A node for a linked list of proxy listeners. */
+
+/******************************************************************************
+ * struct proxy_node
+ *	Tracks the actual proxy listeners.
+ ******************************************************************************/
 struct proxy_node {
+
+	// The strings representing this proxy may be used later on for error reporting.
 	char *lhost;
 	char *lport;
 	char *rhost_rport;
@@ -72,7 +98,12 @@ struct proxy_node {
 	struct proxy_node *next;
 };
 
-/* A node for a linked list of tunneled data connections. */
+
+/******************************************************************************
+ * struct connection_node
+ *	Tracks established data connections. (Can be of any of the non-tty 
+ *	varieties.)
+ ******************************************************************************/
 struct connection_node {
 
 	unsigned short origin;
@@ -92,28 +123,22 @@ struct connection_node {
 
 	// Current state of the connecction. (E.g. CON_EINPROGRESS, CON_ACTIVE, etc.)
 	unsigned int state;
-	
-	unsigned char ver;
-	unsigned char cmd;
-	unsigned char auth_method;
-
-	/* Use these when implementing rfc1929.
-		 char ulen;
-		 char *uname;
-		 char plen;
-		 char *passwd;
-	 */
 
 	// This will allow for write queues.
 	//  Note, no write_tail element. Iterate through every time you want to add an element, thus calculating the message depth dynamically.
-  //  If MAX_MESSAGE_DEPTH is hit, do the needful.
+	//  If MAX_MESSAGE_DEPTH is hit, tell the remote node to stop listening its associated fd.
 	struct message_helper *write_head;
 
 	struct connection_node *next;
 	struct connection_node *prev;
 };
 
-/* An object for organizing I/O structures and interfaces. */
+
+/******************************************************************************
+ * struct io_helper
+ *	Tracks the state of IO in the application.
+ *	There should only ever be one of these, and it is a global.
+ ******************************************************************************/
 struct io_helper {
 
 	/* Denote whether this instance is on the control node or the target node. */
@@ -128,6 +153,10 @@ struct io_helper {
 	int local_out_fd;
 	int remote_fd;
 
+	// Stores tty state info.
+	struct winsize *tty_winsize;
+
+	// If no logging setup, this will remain NULL.
 	FILE *log_stream;
 
 	// Fixed size of all message->data buffers. 
@@ -135,15 +164,16 @@ struct io_helper {
 
 	// this message_helper node is used internally by the io_helper for the processing of the message bus.
 	struct message_helper message;
+
+	// flag for EOF condition.
 	int eof;
 
 	// Flag representing that the initialization process has completed. Used in report_error() to determine
-  // if it is ok to leverage the message bus for error reporting.
+	// if it is ok to leverage the message bus for error reporting.
 	int init_complete;
 
 	// this message_helper node is used for the write buffer queue for the tty/shell.
 	struct message_helper *tty_write_head;
-
 
 #ifdef OPENSSL
 	BIO *connect;
@@ -154,14 +184,15 @@ struct io_helper {
 	const EVP_MD *fingerprint_type;
 #endif /* OPENSSL */
 
+	// Linked list of proxy listeners.
 	struct proxy_node *proxy_head;
 	struct proxy_node *proxy_tail;
 
+	// Linked list of established connections.
 	struct connection_node *connection_head;
 	struct connection_node *connection_tail;
 
-	struct winsize *tty_winsize;
-
+	// Used to track number of open fds. Select can't handle more than 1024.
 	int fd_count;
 
 };

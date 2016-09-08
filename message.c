@@ -6,7 +6,7 @@
  *
  * message_push()
  *
- * Input: Our io helper object.
+ * Input: Nothing, but we will heavily reference the global io_helper struct.
  * Output: 0 on success, -1 on error.
  *
  * Purpose: This is our message interface for sending data.
@@ -111,7 +111,7 @@ int message_push(){
  *
  * message_pull()
  *
- * Input: Our io helper object.
+ * Input: Nothing, but we will heavily reference the global io_helper struct.
  * Output: 0 on success, -1 on error.
  *
  * Purpose: This is our message interface for receiving data.
@@ -223,10 +223,24 @@ int message_pull(){
 }
 
 
+
+/***********************************************************************************************************************
+ *
+ * message_helper_create()
+ *
+ * Input:  A pointer to the data.
+ *         The length of that data.
+ *         The max size that data is allowed to be in this run.
+ * Output: A pointer to a new message_helper node if successful, NULL if not.
+ *
+ * Purpose: Make a new message_helper node and fill it with data. Probably for the write buffering case where a write()
+ *          somewhere is failing non-fataly. 
+ *
+ **********************************************************************************************************************/
 struct message_helper *message_helper_create(char *data, unsigned short data_len, unsigned short message_data_size){
-	// just the malloc and setup of a new message_helper node.
 
 	struct message_helper *new_mh;
+
 
 	new_mh = (struct message_helper *) calloc(1, sizeof(struct message_helper));	
 	if(!new_mh){
@@ -247,6 +261,18 @@ struct message_helper *message_helper_create(char *data, unsigned short data_len
 	return(new_mh);
 }
 
+
+
+/***********************************************************************************************************************
+ *
+ * message_helper_destroy()
+ *
+ * Input:  The message_helper node that we want to destroy.
+ * Output: None.
+ *
+ * Purpose: Destroy a message_helper node.
+ *
+ **********************************************************************************************************************/
 void message_helper_destroy(struct message_helper *mh){
 	free(mh->data);
 	free(mh);

@@ -82,7 +82,21 @@ void report_error(char *fmt, ...){
 	}
 }
 
-/* variadic functions are tricky. Setting up report_log() (and report_error() above) as a wrapper that converts the variadic variables to a string before calling report_log_string. */
+
+/***********************************************************************************************************************
+ *
+ * report_log()
+ *
+ * Input: The variadic format args to be logged.
+ * Output: 0 on success. -1 on error.
+ *
+ * Purpose: Print the message to the logs. Used by report_error() to log an error. Used elsewhere when there isn't an
+ *          error to log things like successful connections.
+ *
+ * Note: Variadic functions are tricky. This version only converts the variadic args into a string then calls the
+ *       report_log_string() function below for the actual logging. 
+ *
+ **********************************************************************************************************************/
 int report_log(char *fmt, ...){
 
 	int retval;
@@ -109,6 +123,17 @@ int report_log(char *fmt, ...){
 	return(report_log_string(error_string));
 }
 
+
+/***********************************************************************************************************************
+ *
+ * report_log()
+ *
+ * Input: The string to be logged.
+ * Output: 0 on success. -1 on error.
+ *
+ * Purpose: Report the string to the logfile.
+ *
+ **********************************************************************************************************************/
 int report_log_string(char *error_string){
 
 	char *date_string;

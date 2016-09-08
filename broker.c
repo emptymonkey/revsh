@@ -11,7 +11,7 @@ extern sig_atomic_t sig_found;
  * Input: A pointer to our io_helper object and a pointer to our config_helper object.
  * Output: 0 for EOF, -1 for errors.
  *
- * Purpose: Broker data between the terminal and the network socket. 
+ * Purpose: Broker data between the terminal / connections and the network socket. 
  *
  **********************************************************************************************************************/
 int broker(struct config_helper *config){
@@ -34,10 +34,11 @@ int broker(struct config_helper *config){
 	struct proxy_request_node *cur_proxy_req_node;
 
 
+	/* Skip this stuff if we're just transfering a file... */
 	if(config->interactive){
 
-		cur_proxy_req_node = config->proxy_request_head;	
 		/* Set up the default proxy. */
+		cur_proxy_req_node = config->proxy_request_head;	
 		if(io->controller && config->socks){
 
 			if((cur_proxy_node = proxy_node_new(config->socks, PROXY_DYNAMIC)) == NULL){
@@ -82,6 +83,7 @@ int broker(struct config_helper *config){
 			return(-1);
 		}
 
+		/* Setup the TUN and TAP devices. Once setup, handle them as yet another connection in the connection_node linked list. */
 		if(io->controller){
 			if(config->tun){
 				if((cur_connection_node = handle_tun_tap_init(IFF_TUN)) == NULL){
@@ -115,10 +117,12 @@ int broker(struct config_helper *config){
 	/*  Start the broker() loop. */
 	while(1){
 
+		/* Initialize fds we will want to select() on this loop. */
 		fd_max = 0;
 		FD_ZERO(&read_fds);
 		FD_ZERO(&write_fds);
 
+		/* TTY / Shell  and message bus will always be select()ed. */
 		FD_SET(io->local_in_fd, &read_fds);
 		fd_max = io->local_in_fd > fd_max ? io->local_in_fd : fd_max;
 
@@ -127,6 +131,7 @@ int broker(struct config_helper *config){
 
 		io->fd_count = 2;
 
+		/* Add connecections that are active. */
 		cur_connection_node = io->connection_head;
 		while((io->fd_count < FD_SETSIZE) && cur_connection_node){
 
@@ -144,10 +149,7 @@ int broker(struct config_helper *config){
 			io->fd_count++;
 		}
 
-		/*
-			 Only add proxy file descriptors to select() if we have enough space for more connections.
-			 Skip the proxy listeners from the select() loop otherwise.
-		 */
+		/* Only add proxy file descriptors to select() if we have enough space for more connections.  */
 		cur_proxy_node = io->proxy_head;
 		while((io->fd_count < FD_SETSIZE) && cur_proxy_node){
 
@@ -158,6 +160,7 @@ int broker(struct config_helper *config){
 			io->fd_count++;
 		}
 
+		/* Setup keepalive nop timers. */
 		if(config->nop){
 			tmp_ulong = rand();
 			timeout.tv_sec = config->retry_start + (tmp_ulong % (config->retry_stop - config->retry_start));
@@ -168,18 +171,18 @@ int broker(struct config_helper *config){
 				&& !sig_found){
 			report_error("broker(): select(%d, %lx, %lx, NULL, %lx): %s", \
 					fd_max + 1, (unsigned long) &read_fds, (unsigned long) &write_fds, (unsigned long) timeout_ptr, strerror(errno));
-			goto CLEAN_UP;
+			goto RETURN;
 		}
 
+
+		/* Determine which case we are in and call the appropriate handler. */
 
 		if(!retval){
 			if((retval = handle_send_dt_nop()) == -1){
 				report_error("broker(): handle_send_dt_nop(): %s", strerror(errno));
-				goto CLEAN_UP;
+				goto RETURN;
 			}
 		}
-
-		/* Determine which case we are in and call the appropriate handler. */
 
 		if(sig_found){
 
@@ -195,7 +198,7 @@ int broker(struct config_helper *config){
 					case SIGWINCH:
 						if((retval = handle_signal_sigwinch()) == -1){
 							report_error("broker(): handle_signal_sigwinch(): %s", strerror(errno));
-							goto CLEAN_UP;
+							goto RETURN;
 						}
 						break;
 				}
@@ -207,7 +210,7 @@ int broker(struct config_helper *config){
 		if(FD_ISSET(io->local_in_fd, &write_fds)){
 
 			if((retval = handle_local_write()) == -1){
-				goto CLEAN_UP;
+				goto RETURN;
 			}
 
 			continue;
@@ -223,7 +226,7 @@ int broker(struct config_helper *config){
 				}else{
 					retval = 0;
 				}
-				goto CLEAN_UP;
+				goto RETURN;
 			}	
 
 			continue;
@@ -237,7 +240,7 @@ int broker(struct config_helper *config){
 				}else{
 					report_error("broker(): message_pull(): %s", strerror(errno));
 				}
-				goto CLEAN_UP;
+				goto RETURN;
 			}
 
 			switch(message->data_type){
@@ -246,7 +249,7 @@ int broker(struct config_helper *config){
 
 					if((retval = handle_message_dt_tty()) == -1){
 						report_error("broker(): handle_message_dt_tty(): %s", strerror(errno));
-						goto CLEAN_UP;
+						goto RETURN;
 					}
 
 					break;
@@ -256,7 +259,7 @@ int broker(struct config_helper *config){
 					if(!io->controller){
 						if((retval = handle_message_dt_winresize()) == -1){
 							report_error("broker(): handle_message_dt_winresize(): %s", strerror(errno));
-							goto CLEAN_UP;
+							goto RETURN;
 						}
 					}
 
@@ -268,7 +271,7 @@ int broker(struct config_helper *config){
 
 						if((retval = handle_message_dt_proxy_ht_destroy()) == -1){
 							report_error("broker(): handle_message_dt_proxy_ht_destroy(): %s", strerror(errno));
-							goto CLEAN_UP;
+							goto RETURN;
 						}
 
 					}else if(message->header_type == DT_PROXY_HT_CREATE){
@@ -277,14 +280,14 @@ int broker(struct config_helper *config){
 
 						if(retval == -1){
 							report_error("broker(): handle_message_dt_proxy_ht_create(): %s", strerror(errno));
-							goto CLEAN_UP;
+							goto RETURN;
 						}
 
 					}else{
 						// Malformed request.
 						report_error("broker(): Unknown Proxy Header Type: %d", message->header_type);
 						retval = -1;
-						goto CLEAN_UP;
+						goto RETURN;
 					}
 					break;
 
@@ -292,7 +295,7 @@ int broker(struct config_helper *config){
 
 					if((retval = handle_message_dt_connection()) == -1){
 						report_error("broker(): handle_message_dt_connection(): %s", strerror(errno));
-						goto CLEAN_UP;
+						goto RETURN;
 					}
 
 					break;
@@ -304,7 +307,7 @@ int broker(struct config_helper *config){
 				case DT_ERROR:
 					if(io->controller){
 						if((retval = report_log("Target Error: %s", message->data)) == -1){
-							goto CLEAN_UP;
+							goto RETURN;
 						}
 					}
 					break;
@@ -318,6 +321,7 @@ int broker(struct config_helper *config){
 			continue;
 		}
 
+		/* Check the proxy listeners for new connections. Handle if appropriate. */
 		found = 0;
 		cur_proxy_node = io->proxy_head;
 		while(cur_proxy_node){
@@ -325,7 +329,7 @@ int broker(struct config_helper *config){
 			if(FD_ISSET(cur_proxy_node->fd, &read_fds)){
 				if((retval = handle_proxy_read(cur_proxy_node)) == -1){
 					report_error("broker(): handle_proxy_read(%lx): %s", (unsigned long) cur_proxy_node, strerror(errno));
-					goto CLEAN_UP;
+					goto RETURN;
 				}
 
 				found = 1;
@@ -339,7 +343,7 @@ int broker(struct config_helper *config){
 			continue;
 		}
 
-
+		/* Check current connections for data / events. Handle if appropriate. */
 		cur_connection_node = io->connection_head;
 		while(cur_connection_node){
 
@@ -348,12 +352,12 @@ int broker(struct config_helper *config){
 				if(cur_connection_node->state == CON_EINPROGRESS){
 					if((retval = handle_connection_activate(cur_connection_node)) == -1){
 						report_error("broker(): handle_connection_activate(%lx): %s", (unsigned long) cur_connection_node, strerror(errno));
-						goto CLEAN_UP;
+						goto RETURN;
 					}
 				} else {
 					if((retval = handle_connection_write(cur_connection_node)) == -1){
 						report_error("broker(): handle_connection_write(%lx): %s", (unsigned long) cur_connection_node, strerror(errno));
-						goto CLEAN_UP;
+						goto RETURN;
 					}
 				}
 
@@ -364,12 +368,12 @@ int broker(struct config_helper *config){
 				if(cur_connection_node->state == CON_ACTIVE){
 					if((retval = handle_connection_read(cur_connection_node)) == -1){
 						report_error("broker(): handle_connection_read(%lx): %s", (unsigned long) cur_connection_node, strerror(errno));
-						goto CLEAN_UP;
+						goto RETURN;
 					}
 				}else if(cur_connection_node->state == CON_SOCKS_INIT || cur_connection_node->state == CON_SOCKS_V5_AUTH){
 					if((retval = handle_connection_socks_init(cur_connection_node)) == -1){
 						report_error("broker(): handle_connection_socks_init(%lx): %s", (unsigned long) cur_connection_node, strerror(errno));
-						goto CLEAN_UP;
+						goto RETURN;
 					}
 				}
 
@@ -388,10 +392,7 @@ int broker(struct config_helper *config){
 	report_error("broker(): while(1): Should not be here!");
 	retval = -1;
 
-CLEAN_UP:
-
-	// right now things are fatal at this point, so we're letting the kernel clean up our mallocs and close our sockets.
-
+RETURN:
 	return(retval);
 }
 

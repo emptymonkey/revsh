@@ -1,6 +1,18 @@
 #include "common.h"
 
 
+/******************************************************************************
+ *
+ *	proxy_node_new()
+ *
+ *	Inputs: The proxy string comming from the command line request.
+ *	        The type of proxy we are setting up.
+ *
+ *	Outputs: A pointer to a new proxy_node.
+ *
+ *	Purpose: Initialize a new proxy_node.
+ *
+ ******************************************************************************/
 struct proxy_node *proxy_node_new(char *proxy_string, int proxy_type){
 
 	struct proxy_node *new_node;
@@ -41,6 +53,7 @@ struct proxy_node *proxy_node_new(char *proxy_string, int proxy_type){
 		return(NULL);
 	}
 
+	// Proxy strings can have a lot of different formats. This block is where we figure out which format we're dealing with.
 	strcpy(first, proxy_string);
 
 	if((second = strchr(first, ':')) != NULL){
@@ -92,7 +105,19 @@ CLEANUP:
 	return(NULL);
 }
 
-/* setup a new proxy listener */
+
+
+/******************************************************************************
+ *
+ * proxy_listen()
+ *
+ *	Inputs: A pointer to a proxy_node that we want to activate.
+ *
+ *	Outputs: 0 on success, -1 otherwise.
+ *
+ *	Purpose: Setup a new proxy listener.
+ *
+ ******************************************************************************/
 int proxy_listen(struct proxy_node *cur_proxy_node){
 
 	int yes = 1;
@@ -144,6 +169,18 @@ int proxy_listen(struct proxy_node *cur_proxy_node){
 	return(0);
 }
 
+
+/******************************************************************************
+ *
+ *	proxy_connect()
+ *
+ *	Inputs: The string representing where to connect to.
+ *
+ *	Outputs: 0 for success. -1 for fatal errors. -2 for non-fatal errors.
+ *
+ *	Purpose: Complete the outbound connection of a proxy request.
+ *
+ ******************************************************************************/
 int proxy_connect(char *rhost_rport){
 
 	int count;
@@ -218,6 +255,18 @@ int proxy_connect(char *rhost_rport){
 	return(connector);
 }
 
+
+/******************************************************************************
+ *
+ *	connection_node_create()
+ *
+ *	Inputs: None, though we will heavily utilize the global io struct.
+ *
+ *	Outputs: A pointer to the new connection_node.
+ *
+ *	Purpose: Initialize a new connection node, and put it into it's place in the linked list.
+ *
+ ******************************************************************************/
 struct connection_node *connection_node_create(){
 
 	struct connection_node *cur_connection_node, *tmp_connection_node;
@@ -241,7 +290,19 @@ struct connection_node *connection_node_create(){
 	return(cur_connection_node);
 }
 
-int connection_node_delete(struct connection_node *cur_connection_node){
+
+/******************************************************************************
+ *
+ *	connection_node_delete()
+ *
+ *	Inputs: A pointer to the connection_node we wish to destroy.
+ *
+ *	Outputs: None.
+ *
+ *	Purpose: Destroy a connection node and remove it froms the linked list.
+ *
+ ******************************************************************************/
+void connection_node_delete(struct connection_node *cur_connection_node){
 
 	if(cur_connection_node == io->connection_head){
 		io->connection_head = cur_connection_node->next;
@@ -270,10 +331,20 @@ int connection_node_delete(struct connection_node *cur_connection_node){
 	}
 
 	io->fd_count--;
-	return(0);
 }
 
 
+/******************************************************************************
+ *
+ *	connection_node_find()
+ *
+ *	Inputs: The tuple of (origin, id) that represents the unique id of a connection.
+ *
+ *	Outputs: The pointer to the matching connection_node.
+ *
+ *	Purpose: Find the matching connection_node.
+ *
+ ******************************************************************************/
 struct connection_node *connection_node_find(unsigned short origin, unsigned short id){
 	struct connection_node *tmp_connection_node;
 
@@ -287,6 +358,19 @@ struct connection_node *connection_node_find(unsigned short origin, unsigned sho
 	return(NULL);
 }
 
+
+/******************************************************************************
+ *
+ *	connection_node_queue()
+ *
+ *	Inputs: The pointer to the connection node that needs to be requeued.
+ *
+ *	Outputs: None.
+ *
+ *	Purpose: Simplistic round-robin scheduling for the connections.
+ *	         Takes a node and moves it to the end of the list.
+ *
+ ******************************************************************************/
 void connection_node_queue(struct connection_node *cur_connection_node){
 
 	if(cur_connection_node == io->connection_tail){
@@ -312,6 +396,20 @@ void connection_node_queue(struct connection_node *cur_connection_node){
 
 }
 
+
+/******************************************************************************
+ *
+ *	parse_socks_request()
+ *
+ *	Inputs: The pointer to the connection node that represents a socks proxy
+ *	        connection in its opening phase.
+ *
+ *	Outputs: The current state of the socks request. -1 on error.
+ *
+ *	Purpose: Socks requests involve a handshake. This is the function that 
+ *	         parses that handshake.
+ *
+ ******************************************************************************/
 int parse_socks_request(struct connection_node *cur_connection_node){
 
 	int index, size;
@@ -335,7 +433,7 @@ int parse_socks_request(struct connection_node *cur_connection_node){
 		return(CON_SOCKS_INIT);
 	}
 
-	cur_connection_node->ver = *(head);
+	// Socks 4 or 4a.
 	if(head[index] == 4){
 
 		/*
@@ -354,7 +452,11 @@ int parse_socks_request(struct connection_node *cur_connection_node){
 
 		index += 1;
 
-		cur_connection_node->cmd = head[index];
+		// Only TCP Connect is supported.
+		if(head[index] != 1){
+			report_error("parse_socks_request(): Socks 4: Unsupported CD. Only CD \"Connect\" is supported.");
+			return(-1);
+		} 
 		index += 1;
 
 		dst_port_ptr = head + index;
@@ -365,11 +467,15 @@ int parse_socks_request(struct connection_node *cur_connection_node){
 
 		// We don't accept connections with a USERID field.
 		if(head[index]){
-			report_error("parse_socks_request(): USERID found, but not supported by this implementation.");
+			report_error("parse_socks_request(): Socks 4: USERID found, but not supported by this implementation.");
 			return(-1);
 		}
 
-		// Step through and grab the domain_name, if this is 4a.
+		// Socks 4a. Lets step through and grab the "domain".
+		// Note: In the modern era, most clients use socks 4a. Even if the request is a normal ipv4
+		// address and socks 4 would work fine... instead, they use socks 4a and send the ipv4 address
+		// represented as a string. So here the "domain" may be something we pass to dns to resolve.
+		// It *might* just be an ascii string representation of an ip address (v4 or v6).
 		index++;
 		if( \
 				!dst_addr_ptr[0] && \
@@ -413,8 +519,8 @@ int parse_socks_request(struct connection_node *cur_connection_node){
 
 		return(CON_ACTIVE);
 
-	}else if(head[index] == 5){
 		// SOCKS 5
+	}else if(head[index] == 5){
 
 		if(cur_connection_node->state == CON_SOCKS_INIT){
 			index += 1;	
@@ -442,7 +548,7 @@ int parse_socks_request(struct connection_node *cur_connection_node){
 			if(noauth_found){
 				return(CON_SOCKS_V5_AUTH);
 			}else{
-				report_error("parse_socks_request(): No supported auth type found. Only \"No Authentication Required\" is supported.");
+				report_error("parse_socks_request(): Socks 5: No supported auth type found. Only \"No Authentication Required\" is supported.");
 				return(-1);
 			}
 
@@ -456,8 +562,8 @@ int parse_socks_request(struct connection_node *cur_connection_node){
 				 +----+-----+-------+------+----------+----------+
 				 (First byte of "Variable" is the strlen of the string that follows in the DOMAINNAME case. No '\0' terminator.)
 
-				 1 + 1 + 1 + 1 + 1
-				 = 5  Minimum number of bytes before we can do anything interesting.
+				 1 + 1 + 1 + 1 + 1 + V + 2
+				 = 7 + V...  So 7 is the minimum number of bytes before we can do anything interesting.
 			 */
 
 			if(size < 7){
@@ -467,7 +573,8 @@ int parse_socks_request(struct connection_node *cur_connection_node){
 			index += 1;
 
 			if(head[index] != 1){
-				report_error("parse_socks_request(): Unsupported CMD. Only CMD \"Connect\" is supported.");
+				report_error("parse_socks_request(): Socks 5: Unsupported CMD. Only CMD \"Connect\" is supported.");
+				return(-1);
 			}
 			index += 2;
 
@@ -534,8 +641,23 @@ int parse_socks_request(struct connection_node *cur_connection_node){
 }
 
 
-// If atype is 0x03, then len is the length of the addr string.
-// If atype isn't 0x03, len is ignored.
+/******************************************************************************
+ *
+ *	addr_to_string()
+ *
+ *	Inputs: The type of the socks request.
+ *	        The address or domain name of the socks request.
+ *	        The port of the socks request.
+ *	        The length of the domain name in the above address.
+ *
+ *	Outputs: A pointer to a string representation of the address.
+ *
+ *	Purpose: Convert the address:port information into a string.
+ *	        
+ * 	Note: If atype is 0x03, then len is the length of the addr string.
+ *	      If atype isn't 0x03, len is ignored.
+ *	        
+ ******************************************************************************/
 char *addr_to_string(int atype, char *addr, char *port, int len){
 
 	char *ptr;

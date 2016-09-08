@@ -12,6 +12,22 @@
 
 #include "common.h"
 
+
+
+/******************************************************************************
+ *
+ * handle_signal_sigwinch()
+ *
+ * Inputs: None, but we will leverage the global io struct.
+ * Outputs: 0 for success. -1 on error.
+ *
+ * Purpose: Handle the broker case where select() was interrupted by a
+ *   SIGWINCH signal.
+ *
+ * Strategy: Query the OS for the new window size, then message_push() it to
+ *   the remote node.
+ *
+ ******************************************************************************/
 int handle_signal_sigwinch(){
 
 	int retval;
@@ -35,6 +51,18 @@ int handle_signal_sigwinch(){
 	return(0);
 }
 
+
+/******************************************************************************
+ *
+ * handle_local_write()
+ *
+ * Inputs: None, but we will leverage the global io struct.
+ * Outputs: 0 for success. -1 on error.
+ *
+ * Purpose: Handle the broker case where there is a message queue to write to
+ *   the tty / shell and the local fd now seems to be ready to take it.
+ *
+ ******************************************************************************/
 int handle_local_write(){
 
 	int retval;
@@ -67,11 +95,20 @@ int handle_local_write(){
 	return(0);
 }
 
-/* -2 -> EOF. Fatal non-error condition. */
+
+/******************************************************************************
+ *
+ * handle_local_read()
+ *
+ * Inputs: None, but we will leverage the global io struct.
+ * Outputs: 0 for success. -1 on fatal error. -2 on non-fatal error.
+ *
+ * Purpose: Handle the broker case where the tty / shell is ready to be read.
+ *
+ ******************************************************************************/
 int handle_local_read(){
 
 	int retval;
-
 
 	message->data_type = DT_TTY;
 
@@ -103,6 +140,17 @@ int handle_local_read(){
 }
 
 
+/******************************************************************************
+ *
+ * handle_message_dt_tty()
+ *
+ * Inputs: None, but we will leverage the global io struct.
+ * Outputs: 0 for success. -1 on fatal error.
+ *
+ * Purpose: Handle the broker case where a message has arrived from the 
+ *   remote node, and it is data for the tty / shell.
+ *
+ ******************************************************************************/
 int handle_message_dt_tty(){
 
 	int retval;
@@ -145,10 +193,22 @@ int handle_message_dt_tty(){
 	return(0);
 }
 
+
+/******************************************************************************
+ *
+ * handle_message_dt_winresize()
+ *
+ * Inputs: None, but we will leverage the global io struct.
+ * Outputs: 0 for success. -1 on fatal error.
+ *
+ * Purpose: Handle the broker case where a message has arrived from the 
+ *   remote node, and it is data relating to the window resize signal caught
+ *   on the remote node.
+ *
+ ******************************************************************************/
 int handle_message_dt_winresize(){
 
 	int retval;
-
 
 	if(message->data_len != sizeof(io->tty_winsize->ws_row) + sizeof(io->tty_winsize->ws_col)){
 		report_error("handle_message_dt_winresize(): DT_WINRESIZE termios: not enough data!");
@@ -168,11 +228,21 @@ int handle_message_dt_winresize(){
 		return(-1);
 	}
 
-
 	return(0);
 }
 
 
+/******************************************************************************
+ *
+ * handle_message_dt_proxy_ht_destroy()
+ *
+ * Inputs: None, but we will leverage the global io struct.
+ * Outputs: 0 for success. -1 on fatal error.
+ *
+ * Purpose: Handle the broker case where a message has arrived from the 
+ *   remote node, and it is a request to destroy an existing connection.
+ *
+ ******************************************************************************/
 int handle_message_dt_proxy_ht_destroy(){
 
 	struct connection_node *cur_connection_node;
@@ -193,12 +263,21 @@ int handle_message_dt_proxy_ht_destroy(){
 }
 
 
+/******************************************************************************
+ *
+ * handle_message_dt_proxy_ht_create()
+ *
+ * Inputs: None, but we will leverage the global io struct.
+ * Outputs: 0 for success. -1 on fatal error. -2 on non-fatal error.
+ *
+ * Purpose: Handle the broker case where a message has arrived from the 
+ *   remote node, and it is a request to create a new connection.
+ *
+ ******************************************************************************/
 int handle_message_dt_proxy_ht_create(){
 
 	int retval;
-
 	struct connection_node *cur_connection_node;
-
 
 	if((cur_connection_node = connection_node_find(message->header_origin, message->header_id))){
 		connection_node_delete(cur_connection_node);
@@ -268,6 +347,17 @@ int handle_message_dt_proxy_ht_create(){
 }
 
 
+/******************************************************************************
+ *
+ * handle_message_dt_proxy_ht_create_tun_tap()
+ *
+ * Inputs: None, but we will leverage the global io struct.
+ * Outputs: 0 for success. -1 on fatal error. -2 on non-fatal error.
+ *
+ * Purpose: Handle the broker case where a message has arrived from the 
+ *   remote node, and it is a request to create a new tun/tap connection.
+ *
+ ******************************************************************************/
 int handle_message_dt_proxy_ht_create_tun_tap(){
 
 	struct connection_node *cur_connection_node = NULL;
@@ -305,6 +395,18 @@ int handle_message_dt_proxy_ht_create_tun_tap(){
 }
 
 
+/******************************************************************************
+ *
+ * handle_connection_activate()
+ *
+ * Inputs: A pointer to an active connection node.
+ *    We will also leverage the global io struct.
+ * Outputs: 0 for success. -1 on fatal error.
+ *
+ * Purpose: Handle the broker case where a local connection is ready to be
+ *   set into an active state.
+ *
+ ******************************************************************************/
 int handle_connection_activate(struct connection_node *cur_connection_node){
 
 	int optval;
@@ -343,15 +445,23 @@ int handle_connection_activate(struct connection_node *cur_connection_node){
 }
 
 
+/******************************************************************************
+ *
+ * handle_message_dt_connection()
+ *
+ * Inputs: None, but we will leverage the global io struct.
+ * Outputs: 0 for success. -1 on fatal error. -2 on non-fatal error.
+ *
+ * Purpose: Handle the broker case where a message has arrived from the 
+ *   remote node, and it is a request to handle an existing connection.
+ *
+ ******************************************************************************/
 int handle_message_dt_connection(){
-
 
 	int retval;
 	struct message_helper *new_message, *tmp_message;
-
 	struct connection_node *cur_connection_node;
 	int count, errno;
-
 
 	if((cur_connection_node = connection_node_find(message->header_origin, message->header_id)) == NULL){
 
@@ -435,6 +545,18 @@ int handle_message_dt_connection(){
 }
 
 
+/******************************************************************************
+ *
+ * handle_proxy_read()
+ *
+ * Inputs: A pointer to a proxy listener.
+ *    We will also leverage the global io struct.
+ * Outputs: 0 for success. -1 on fatal error.
+ *
+ * Purpose: Handle the broker case where a local proxy listener is ready to 
+ *   be read. This will likely result in the creation of a new connection.
+ *
+ ******************************************************************************/
 int handle_proxy_read(struct proxy_node *cur_proxy_node){
 
 	int count;
@@ -492,11 +614,22 @@ int handle_proxy_read(struct proxy_node *cur_proxy_node){
 }
 
 
+/******************************************************************************
+ *
+ * handle_connection_write()
+ *
+ * Inputs: A pointer to an active connection node. 
+ *    We will also leverage the global io struct.
+ * Outputs: 0 for success. -1 on fatal error. -2 on non-fatal error.
+ *
+ * Purpose: Handle the broker case where a local connection has a write queue
+ *   backed up and the related fd is ready for writting. 
+ *
+ ******************************************************************************/
 int handle_connection_write(struct connection_node *cur_connection_node){
 
 	int retval;
 	struct message_helper *tmp_message;
-
 
 	while(cur_connection_node->write_head){
 
@@ -546,10 +679,20 @@ int handle_connection_write(struct connection_node *cur_connection_node){
 }
 
 
+/******************************************************************************
+ *
+ * handle_connection_read()
+ *
+ * Inputs: A pointer to an active connection node. 
+ *    We will also leverage the global io struct.
+ * Outputs: 0 for success. -1 on fatal error. -2 on non-fatal error.
+ *
+ * Purpose: Handle the broker case where a local connection is read to be read.
+ *
+ ******************************************************************************/
 int handle_connection_read(struct connection_node *cur_connection_node){
 
 	int retval;
-
 
 	message->data_type = DT_CONNECTION;
 	message->header_type = DT_CONNECTION_HT_DATA;
@@ -579,18 +722,32 @@ int handle_connection_read(struct connection_node *cur_connection_node){
 	}
 
 	return(0);
-
 }
 
 
-// Long story short, I hate Socks 5.
+/******************************************************************************
+ *
+ * handle_connection_socks_init()
+ *
+ * Inputs: A pointer to an active connection node. 
+ *    We will also leverage the global io struct.
+ * Outputs: 0 for success. -1 on fatal error. -2 on non-fatal error.
+ *
+ * Purpose: Handle the broker case where a local connection is read to be
+ *   to be read, and it's a proxy connection that needs to handle its
+ *   handshake.
+ *
+ * Note: Long story short, I hate Socks 5.
+ *
+ ******************************************************************************/
 int handle_connection_socks_init(struct connection_node *cur_connection_node){
+
 	int retval;
 	char *reply_buff = NULL;
 	int reply_buff_len = 0;
 	int new_state;
 
-	if((retval = read(cur_connection_node->fd, cur_connection_node->buffer_tail, cur_connection_node->buffer_size - (cur_connection_node->buffer_tail - cur_connection_node->buffer_head))) < 1){
+	if((retval = read(cur_connection_node->fd, cur_connection_node->buffer_tail, cur_connection_node->buffer_size - (cur_connection_node->buffer_tail - cur_connection_node->buffer_head) - 1)) < 1){
 
 		// Sorry if this syntax feels awkward. The case defined below is the re-call of the handle_connection_socks_init() by the handle_connection_socks_init() 
 		// when CON_SOCKS_V5_AUTH has occured and the buffer may already be ready for processing. It will generally fail the read and want to drop
@@ -630,7 +787,7 @@ int handle_connection_socks_init(struct connection_node *cur_connection_node){
 	if(new_state == CON_SOCKS_INIT){
 
 		// Buffer is full, but still no complete socks request?!
-		if(!(cur_connection_node->buffer_size - (cur_connection_node->buffer_tail - cur_connection_node->buffer_head))){
+		if(!(cur_connection_node->buffer_size - (cur_connection_node->buffer_tail - cur_connection_node->buffer_head) - 1)){
 			report_error("handle_connection_socks_init(): parse_sock_request(%lx): Malformed SOCKS request.", (unsigned long) cur_connection_node);
 			if(handle_send_dt_proxy_ht_destroy(cur_connection_node->origin, cur_connection_node->id, 0) == -1){
 				report_error("handle_connection_socks_init(): handle_send_dt_proxy_ht_destroy(%d, %d, 0): %s", cur_connection_node->origin, cur_connection_node->id, strerror(errno));
@@ -711,10 +868,22 @@ int handle_connection_socks_init(struct connection_node *cur_connection_node){
 }
 
 
+/******************************************************************************
+ *
+ * handle_send_dt_proxy_ht_destroy()
+ *
+ * Inputs: The origin and id tuple that identify the related connection.
+ *   The errno related to the need for destruction.
+ *   We will also leverage the global io struct.
+ * Outputs: 0 for success. -1 on fatal error.
+ *
+ * Purpose: Handle the broker case where we need to notify the remote node 
+ *   that a connection is no longer valid and needs to be destroyed.
+ *
+ ******************************************************************************/
 int handle_send_dt_proxy_ht_destroy(unsigned short origin, unsigned short id, unsigned short header_errno){
 
 	int retval;
-
 
 	message->data_type = DT_PROXY;
 	message->header_type = DT_PROXY_HT_DESTROY;
@@ -738,10 +907,21 @@ int handle_send_dt_proxy_ht_destroy(unsigned short origin, unsigned short id, un
 }
 
 
+/******************************************************************************
+ *
+ * handle_send_dt_proxy_ht_create()
+ *
+ * Inputs: A pointer to an active connection node. 
+ *   We will also leverage the global io struct.
+ * Outputs: 0 for success. -1 on fatal error.
+ *
+ * Purpose: Handle the broker case where we need to notify the remote node 
+ *   that a connection needs to be created.
+ *
+ ******************************************************************************/
 int handle_send_dt_proxy_ht_create(struct connection_node *cur_connection_node){
 
 	int count, retval;
-
 
 	message->data_type = DT_PROXY;
 	message->header_type = DT_PROXY_HT_CREATE;
@@ -763,6 +943,23 @@ int handle_send_dt_proxy_ht_create(struct connection_node *cur_connection_node){
 	return(0);
 }
 
+
+/******************************************************************************
+ *
+ * handle_send_dt_nop()
+ *
+ * Inputs: None, but we will leverage the global io struct.
+ * Outputs: 0 for success. -1 on fatal error.
+ *
+ * Purpose: Handle the broker case where we need to notify the remote node 
+ *   that...  well...  nothing.
+ *
+ * This reminds me of the BSD man page for /bin/true, which read:
+ *   "Do nothing, successfully."
+ * As opposed to the BSD man page for /bin/false, which read:
+ *   "Do nothing, unsuccessfully."
+ *
+ ******************************************************************************/
 int handle_send_dt_nop(){
 
 	message->data_type = DT_NOP;
@@ -775,6 +972,18 @@ int handle_send_dt_nop(){
 	return(0);
 }
 
+
+/******************************************************************************
+ *
+ * handle_tun_tap_init()
+ *
+ * Inputs: The flag defining if this is a TUN request or a TAP request.
+ *   We will also leverage the global io struct.
+ * Outputs: A pointer to a new connection node representing the TUN/TAP device.
+ *
+ * Purpose: Handle the broker case where we want to setup tun/tap support.
+ *
+ ******************************************************************************/
 struct connection_node *handle_tun_tap_init(int ifr_flag){
 
 	int count;
@@ -856,7 +1065,7 @@ struct connection_node *handle_tun_tap_init(int ifr_flag){
 	}
 
 	/*
-		 If the the mtu on the tun / tap device is larger than the message data buffer, reduce it.
+		 If the mtu on the tun / tap device is larger than the message data buffer, reduce it.
 		 This ensures the we can always fit a full frame / packet inside one message.
 		 Given that the default is that the message data buffer is probably a page of memory, and that is probably 4k in size, this will 
 		 probably never be needed.

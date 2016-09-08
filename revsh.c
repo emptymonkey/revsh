@@ -4,49 +4,50 @@
  * revsh
  *
  * emptymonkey's reverse shell tool with terminal support!
- *	Now with more Perfect Forward Secrecy!!!
+ *	Now more than just a reverse terminal! Now were a reverse VPN!!!
  *
  *
  * 2013-07-17: Original release.
  * 2014-08-22: Complete overhaul w/SSL support.
  * 2015-01-16: YACO (Yet another complete overhaul.) Added the internal messaging interface.
- * 2016-08-27: YACO (Yet another complete overhaul.) Added proxies, tun/tap support, and moved broker() cases into
- *  their own handlers in the handler.c file.
+ * 2016-08-27: YACO (Yet another complete overhaul.) Added proxies, tun/tap support, and cleaned up the broker() loop.
  *
  *
  * The revsh binary is intended to be used both on the local control host as well as the remote target host. It is
- * designed to establish a remote shell with terminal support as well as full reverse vpn style tunneling..
+ * designed to establish a remote shell with terminal support as well as a reverse vpn for tunneling.
  *
  *
  * Features:
  *		* Reverse Shell.
  *		* Bind Shell.
  *		* Terminal support.
- *		* UTF-8 support.
+ *		* Unicode support.
  *		* Handle window resize events.
  *		* Circumvent utmp / wtmp. (No login recorded.)
  *		* Process rc file commands upon login.
  *		* OpenSSL encryption with key based authentication baked into the binary.
- *		* Anonymous Diffie-Hellman encryption as default
- *		* Ephemeral Diffie-Hellman encryption on request.
+ *		* Anonymous Diffie-Hellman encryption for use without key management.
+ *		* Ephemeral Diffie-Hellman encryption for use with key managment. (Now with more Perfect Forward Secrecy!)
  *		* Cert pinning for protection against sinkholes and mitm counter-intrusion.
  *		* Connection timeout for remote process self-termination.
  *		* Randomized retry timers for non-predictable auto-reconnection.
  *		* Non-interactive mode for transfering files.
  *		* Proxy support: point-to-point, socks4, socks4a, socks5
  *			(Note: Only the "TCP Connect" subset of the socks protocol is supported.)
- *		* TUN / TAP support
+ *		* TUN / TAP support for forwarding raw IP packets / Ethernet frames.
  *
  **********************************************************************************************************************/
 
 
 
 // XXX
-// Comment the code.
+// Finish documenting the protocol initialization.
+// Add cleanup code to reset the io struct in the keepalive case.
 // Make a man page.
 // Make static binary default.
 // Test all the switches.
 // Test on freebsd.
+// Test nossl legacy build.
 // Use daily til Toorcon.
 
 
@@ -63,13 +64,12 @@ volatile sig_atomic_t sig_found = 0;
  *
  * usage()
  *
- * Input: None.
- * Output: None.
+ * Input: The return code.
+ * Output: None. (We will exit directly from this function.)
  *
  * Purpose: Educate the user as to the error of their ways.
  *
  **********************************************************************************************************************/
-
 void usage(int ret_code){
 
 	FILE *out_stream = stdout;
@@ -130,6 +130,17 @@ void usage(int ret_code){
 	exit(ret_code);
 }
 
+
+/***********************************************************************************************************************
+ *
+ * examples()
+ *
+ * Input: The return code.
+ * Output: None. (We will exit directly from this function.)
+ *
+ * Purpose: Give the user some examples upon request.
+ *
+ **********************************************************************************************************************/
 void examples(int ret_code){
 
 	FILE *out_stream = stdout;
@@ -229,7 +240,6 @@ int main(int argc, char **argv){
 	config->keepalive = 0;
 	config->nop = 0;
 
-	// XXX Add opts for these when redoing the opts.
 	config->tun = 1;
 	config->tap = 1;
 	config->socks = SOCKS_LISTENER;
@@ -243,21 +253,17 @@ int main(int argc, char **argv){
 	config->log_file = LOG_FILE;
 #endif
 
-	verbose = 0;
-
 #ifdef OPENSSL
-
 	io->fingerprint_type = NULL;
 	config->cipher_list = NULL;
-
 #	ifdef GENERIC_BUILD
 	config->encryption = ADH;
 #	else
 	config->encryption = EDH;
 #	endif
-
 #endif /* OPENSSL */
 
+	verbose = 0;
 
 	/*  Normally I would use the Gnu version. However, this tool needs to be more portable. */
 	/*  Keeping the naming scheme, but setting it up myself. */
@@ -279,7 +285,7 @@ int main(int argc, char **argv){
 				examples(0);
 				break;
 
-			/*  The plaintext case is an undocumented "feature" which should be difficult to use. */
+			/*  The plaintext case is a debugging feature which should be difficult to use. */
 			/*  You will need to pass the -p switch from both ends in order for it to work. */
 			/*  This is provided for debugging purposes only. */
 #ifdef OPENSSL
@@ -391,7 +397,6 @@ int main(int argc, char **argv){
 		config->bindshell = 1;
 	}
 
-
 	if(config->keepalive){
 		config->timeout = 0;
 	}
@@ -439,7 +444,6 @@ int main(int argc, char **argv){
 	close(tmp_fd);
 
 	srand(seed);
-
 
 	/*  The joy of a struct with pointers to functions. We only call "io->remote_read()" and the */
 	/*  appropriate crypto / no crypto version is called on the backend. */
@@ -493,10 +497,18 @@ int main(int argc, char **argv){
 	if(io->controller){
 		do{
 			retval = do_control(config);
+
+			// If we are in keepalive mode... keep going.
+			// XXX Add further cleanup of the IO structs (linked lists, etc.)
+			config->interactive = 0;
 		} while(retval != -1 && config->keepalive);
 	}else{
 		do{
 			retval = do_target(config);
+
+			// If we are in keepalive mode... keep going.
+			// XXX Add further cleanup of the IO structs (linked lists, etc.)
+			config->interactive = 0;
 		} while(retval != -1 && config->keepalive);
 	}
 

@@ -1,4 +1,6 @@
 
+// XXX Add information about the bootstrap phase.
+
 /**********************************************************************************************************************
  *
  * Message Bus Protocol Specification:
@@ -14,6 +16,8 @@
  *		- header_origin			: unsigned long (network order)	:	Lists if controller or target is the owner.
  *		- header_id					: unsigned long (network order)	:	FD of the connection at it's origin.
  *		- header_proxy_type	: unsigned long (network order)	: Used during DT_PROXY_HT_CREATE to relay proxy type.
+ * 
+ *		Note: (header_origin, header_id) as a tuple forms a unique identifier for the connection recognized by both nodes.
  *
  *	Body:
  *		- data					:	void *
@@ -41,15 +45,11 @@
 
 /* DT_PROXY: Proxy meta-data. (e.g. setup, teardown, etc.) */
 #define DT_PROXY			4
-/*
-	 In a DT_PROXY_HT_CREATE request, the first char will be ver, the second char will be cmd.
-	 Null terminated rhost_rport string follows.
- */
 #define DT_PROXY_HT_CREATE				1
 #define DT_PROXY_HT_DESTROY				2
 #define DT_PROXY_HT_RESPONSE			3
 
-/* DT_CONNECTION: Information related to established proxy connections. */
+/* DT_CONNECTION: Information related to established connections. */
 #define DT_CONNECTION	5
 /* Normal data to be brokered back and forth. */
 #define DT_CONNECTION_HT_DATA			0
@@ -76,8 +76,8 @@
 */
 
 /* Proxy types. Set in message->header_proxy_type for DT_PROXY_HT_CREATE messages. */
-#define PROXY_STATIC   0
-#define PROXY_DYNAMIC 1
-#define PROXY_TUN     2
-#define PROXY_TAP     3
+#define PROXY_STATIC	0
+#define PROXY_DYNAMIC	1
+#define PROXY_TUN			2
+#define PROXY_TAP			3
 
