@@ -75,7 +75,7 @@ int negotiate_protocol(){
 
 	/* Set the message size to the smaller of the two, and malloc the space. */
 	io->message_data_size = io->message_data_size < remote_data_size ? io->message_data_size : remote_data_size;
-
+	// free() called in io_clean().
 	if((message->data = (char *) malloc(io->message_data_size)) == NULL){
 		report_error("negotiate_protocol(): malloc(%d): %s", io->message_data_size, strerror(errno));
 		return(-1);

@@ -35,7 +35,7 @@ int broker(struct config_helper *config){
 
 
 	/* Skip this stuff if we're just transfering a file... */
-	if(config->interactive){
+	if(io->interactive){
 
 		/* Set up the default proxy. */
 		cur_proxy_req_node = config->proxy_request_head;	
@@ -78,6 +78,7 @@ int broker(struct config_helper *config){
 			return(-1);
 		}
 
+		// free() called in clean_io().
 		if((io->tty_winsize = (struct winsize *) calloc(1, sizeof(struct winsize))) == NULL){
 			report_error("broker(): calloc(1, %d): %s", (int) sizeof(struct winsize), strerror(errno));
 			return(-1);
@@ -189,7 +190,7 @@ int broker(struct config_helper *config){
 			current_sig = sig_found;
 			sig_found = 0;
 
-			if(config->interactive && io->controller){
+			if(io->interactive && io->controller){
 
 				/* I set this up as a switch statement because I think we will want to handle other signals down the road. */
 				switch(current_sig){

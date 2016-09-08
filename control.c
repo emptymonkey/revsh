@@ -20,7 +20,7 @@ int do_control(struct config_helper *config){
 
 	struct termios saved_termios_attrs, new_termios_attrs;
 	char **exec_envp;
-	struct winsize *tty_winsize;
+	struct winsize tty_winsize;
 
 	int rc_fd;
 	wordexp_t rc_file_exp;
@@ -28,22 +28,6 @@ int do_control(struct config_helper *config){
 	char *tmp_ptr;
 	int io_bytes;
 
-
-	/* Initialize the structures we will leverage. */
-	if((tty_winsize = (struct winsize *) calloc(1, sizeof(struct winsize))) == NULL){
-		report_error("do_control(): calloc(1, %d): %s", (int) sizeof(struct winsize), strerror(errno));
-		return(-1);
-	}
-
-	if(wordexp(config->rc_file, &rc_file_exp, 0)){
-		report_error("do_control(): wordexp(%s, %lx, 0): %s", config->rc_file, (unsigned long)  &rc_file_exp, strerror(errno));
-		return(-1);
-	}
-
-	if(rc_file_exp.we_wordc != 1){
-		report_error("do_control(): Invalid path: %s", config->rc_file);
-		return(-1);
-	}
 
 	/* Set up the network connection. */
 	if(init_io_controller(config) == -1){
@@ -58,9 +42,6 @@ int do_control(struct config_helper *config){
 	}
 
 	/* Start conversing with the remote partner to agree on the shape of this session. */
-	if(verbose){
-		printf("Initializing...");
-	}
 	report_log("Controller: Initializing.");
 
 	/*  - Agree on interactive / non-interactive mode. */
@@ -84,22 +65,26 @@ int do_control(struct config_helper *config){
 	}
 
 	/* Both sides must agree on interaction. If either one opts out, fall back to non-interactive data transfer. */	
-	if(!message->data[0]){
-		config->interactive = 0;
+	io->interactive = 1;
+	if(!(config->interactive && message->data[0])){
+		io->interactive = 0;
 	}
-
-	if(!config->interactive){
+	
+	if(!io->interactive){
 		retval = broker(config);
 
-#ifdef OPENSSL
-		if(config->encryption){
-			SSL_shutdown(io->ssl);
-			SSL_free(io->ssl);
-			SSL_CTX_free(io->ctx);
-		}
-#endif /* OPENSSL */
-
 		return(retval);
+	}
+
+	/* Initialize the structures we will leverage. */
+	if(wordexp(config->rc_file, &rc_file_exp, 0)){
+		report_error("do_control(): wordexp(%s, %lx, 0): %s", config->rc_file, (unsigned long)  &rc_file_exp, strerror(errno));
+		return(-1);
+	}
+
+	if(rc_file_exp.we_wordc != 1){
+		report_error("do_control(): Invalid path: %s", config->rc_file);
+		return(-1);
 	}
 
 	/*  - Send initial shell data. */
@@ -173,16 +158,16 @@ int do_control(struct config_helper *config){
 	}
 
 	/*  - Send initial termios data. */
-	if(ioctl(STDIN_FILENO, TIOCGWINSZ, tty_winsize) == -1){
-		report_error("do_control(): ioctl(STDIN_FILENO, TIOCGWINSZ, %lx): %s", (unsigned long) tty_winsize, strerror(errno));
+	if(ioctl(STDIN_FILENO, TIOCGWINSZ, &tty_winsize) == -1){
+		report_error("do_control(): ioctl(STDIN_FILENO, TIOCGWINSZ, %lx): %s", (unsigned long) &tty_winsize, strerror(errno));
 		return(-1);
 	}
 
 	message->data_type = DT_INIT;
-	*((unsigned short *) message->data) = htons(tty_winsize->ws_row);
-	message->data_len = sizeof(tty_winsize->ws_row);
-	*((unsigned short *) (message->data + message->data_len)) = htons(tty_winsize->ws_col);
-	message->data_len += sizeof(tty_winsize->ws_col);
+	*((unsigned short *) message->data) = htons(tty_winsize.ws_row);
+	message->data_len = sizeof(tty_winsize.ws_row);
+	*((unsigned short *) (message->data + message->data_len)) = htons(tty_winsize.ws_col);
+	message->data_len += sizeof(tty_winsize.ws_col);
 
 	if(message_push() == -1){
 		report_error("do_control(): message_push(): %s", strerror(errno));
@@ -214,9 +199,6 @@ int do_control(struct config_helper *config){
 		return(-1);
 	}	
 
-	if(verbose){
-		printf("\tDone!\r\n\n");
-	}
 	report_log("Controller: Initializtion complete.");
 
 	/*  - Send the commands in the rc file. */
@@ -273,16 +255,6 @@ int do_control(struct config_helper *config){
 			}
 		}
 	}
-
-#ifdef OPENSSL
-	if(config->encryption){
-		SSL_shutdown(io->ssl);
-		SSL_free(io->ssl);
-		SSL_CTX_free(io->ctx);
-	}else{
-		BIO_free(io->connect);
-	}
-#endif /* OPENSSL */
 
 	return(0);
 }

@@ -221,6 +221,10 @@ int report_log(char *fmt, ...);
 int report_log_string(char *error_string);
 
 /* revsh.c */
+// void usage(int ret_code);
+// void examples(int ret_code);
+// int main(int argc, char **argv);
+void clean_io(struct config_helper *config);
 #ifndef FREEBSD
 int posix_openpt(int flags);
 #endif 

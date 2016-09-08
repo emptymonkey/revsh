@@ -157,7 +157,7 @@ int init_io_controller(struct config_helper *config){
 	char *ip_port;
 	int ip_address_len;
 
-	struct sigaction *act = NULL;
+	struct sigaction act;
 
 	socklen_t len;
 	struct sockaddr_storage addr;
@@ -174,13 +174,9 @@ int init_io_controller(struct config_helper *config){
 	}
 
 	/* Initialize the structures we will be using. */
-	if((act = (struct sigaction *) calloc(1, sizeof(struct sigaction))) == NULL){
-		report_error("init_io_controller(): calloc(1, %d): %s", \
-				(int) sizeof(struct sigaction), strerror(errno));
-		return(-1);
-	}
 
 	/* Set up our socket. */
+	// free() called in this function.
 	ip_address_len = strlen(config->ip_addr);
 	if((ip_address = calloc(ip_address_len + 1, sizeof(char))) == NULL){
 		report_error("init_io_controller(): calloc(%d, %d): %s", ip_address_len, (int) sizeof(char), strerror(errno));
@@ -201,6 +197,8 @@ int init_io_controller(struct config_helper *config){
 		return(-1);
 	}
 
+	free(ip_address);
+
 	memset(&name, 0, sizeof(name));
 	name.sin_family = AF_INET;
 	name.sin_port = htons(strtol(ip_port, NULL, 10));
@@ -217,10 +215,10 @@ int init_io_controller(struct config_helper *config){
 	}
 
 	/* Seppuku if left alone too long. */
-	act->sa_handler = seppuku;
+	act.sa_handler = seppuku;
 
-	if(sigaction(SIGALRM, act, NULL) == -1){
-		report_error("init_io_controller(): sigaction(%d, %lx, %p): %s", SIGALRM, (unsigned long) act, NULL, strerror(errno));
+	if(sigaction(SIGALRM, &act, NULL) == -1){
+		report_error("init_io_controller(): sigaction(%d, %lx, %p): %s", SIGALRM, (unsigned long) &act, NULL, strerror(errno));
 		return(-1);
 	}
 
@@ -253,10 +251,10 @@ int init_io_controller(struct config_helper *config){
 		return(-1);
 	}
 
-	act->sa_handler = SIG_DFL;
+	act.sa_handler = SIG_DFL;
 
-	if(sigaction(SIGALRM, act, NULL) == -1){
-		report_error("init_io_controller(): sigaction(%d, %lx, %p): %s", SIGALRM, (unsigned long) act, NULL, strerror(errno));
+	if(sigaction(SIGALRM, &act, NULL) == -1){
+		report_error("init_io_controller(): sigaction(%d, %lx, %p): %s", SIGALRM, (unsigned long) &act, NULL, strerror(errno));
 		return(-1);
 	}
 
@@ -281,8 +279,6 @@ int init_io_controller(struct config_helper *config){
 		printf("\tConnected from %s:%d\n", ipstr, port);
 	}
 	report_log("Controller: Connected from %s:%d.", ipstr, port);
-
-	free(ip_address);
 
 	return(io->remote_fd);
 }
@@ -312,7 +308,7 @@ int init_io_target(struct config_helper *config){
 
 	int tmp_sock;
 
-	struct sigaction *act = NULL;
+	struct sigaction act;
 
 	unsigned long tmp_ulong;
 	unsigned int retry;
@@ -326,12 +322,9 @@ int init_io_target(struct config_helper *config){
 	}
 
 	/* Initialize the structures we will need. */
-	if((act = (struct sigaction *) calloc(1, sizeof(struct sigaction))) == NULL){
-		report_error("init_io_target(): calloc(1, %d): %s", (int) sizeof(struct sigaction), strerror(errno));
-		return(-1);
-	}
 
 	/* Open our socket. */
+	// free() called in this function.
 	ip_address_len = strlen(config->ip_addr);
 	if((ip_address = calloc(ip_address_len + 1, sizeof(char))) == NULL){
 		report_error("init_io_target(): calloc(%d, %d): %s", ip_address_len, (int) sizeof(char), strerror(errno));
@@ -353,6 +346,8 @@ int init_io_target(struct config_helper *config){
 		return(-1);
 	}
 
+	free(ip_address);
+
 	memset(&name, 0, sizeof(name));
 	name.sin_family = AF_INET;
 	name.sin_port = htons(strtol(ip_port, NULL, 10));
@@ -363,10 +358,10 @@ int init_io_target(struct config_helper *config){
 	}
 
 	/* Sepuku if left alone too long. */
-	act->sa_handler = seppuku;
+	act.sa_handler = seppuku;
 
-	if(sigaction(SIGALRM, act, NULL) == -1){
-		report_error("init_io_target(): sigaction(%d, %lx, %p): %s", SIGALRM, (unsigned long) act, NULL, strerror(errno));
+	if(sigaction(SIGALRM, &act, NULL) == -1){
+		report_error("init_io_target(): sigaction(%d, %lx, %p): %s", SIGALRM, (unsigned long) &act, NULL, strerror(errno));
 		return(-1);
 	}
 
@@ -408,10 +403,10 @@ int init_io_target(struct config_helper *config){
 
 	io->remote_fd = tmp_sock;
 
-	act->sa_handler = SIG_DFL;
+	act.sa_handler = SIG_DFL;
 
-	if(sigaction(SIGALRM, act, NULL) == -1){
-		report_error("init_io_target(): sigaction(%d, %lx, %p): %s", SIGALRM, (unsigned long) act, NULL, strerror(errno));
+	if(sigaction(SIGALRM, &act, NULL) == -1){
+		report_error("init_io_target(): sigaction(%d, %lx, %p): %s", SIGALRM, (unsigned long) &act, NULL, strerror(errno));
 		return(-1);
 	}
 
@@ -420,8 +415,6 @@ int init_io_target(struct config_helper *config){
 	if(verbose){
 		printf("\tConnected!\n");
 	}
-
-	free(ip_address);
 
 	return(io->remote_fd);
 }

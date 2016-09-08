@@ -4,7 +4,7 @@
  * revsh
  *
  * emptymonkey's reverse shell tool with terminal support!
- *	Now more than just a reverse terminal! Now were a reverse VPN!!!
+ *	More than just a reverse shell, now we're a reverse VPN!!!
  *
  *
  * 2013-07-17: Original release.
@@ -42,7 +42,6 @@
 
 // XXX
 // Finish documenting the protocol initialization.
-// Add cleanup code to reset the io struct in the keepalive case.
 // Make a man page.
 // Make static binary default.
 // Test all the switches.
@@ -493,28 +492,120 @@ int main(int argc, char **argv){
 		return(-1);
 	}
 
+	
 	/* Call the appropriate conductor. */
 	if(io->controller){
 		do{
+			// If this is set, we've run once already. Let's clean up the io struct.
+			if(io->init_complete){
+				clean_io(config);
+			}
 			retval = do_control(config);
-
-			// If we are in keepalive mode... keep going.
-			// XXX Add further cleanup of the IO structs (linked lists, etc.)
-			config->interactive = 0;
+			SSL_shutdown(io->ssl);
 		} while(retval != -1 && config->keepalive);
 	}else{
 		do{
+			if(io->init_complete){
+				clean_io(config);
+			}
 			retval = do_target(config);
-
-			// If we are in keepalive mode... keep going.
-			// XXX Add further cleanup of the IO structs (linked lists, etc.)
-			config->interactive = 0;
+			SSL_shutdown(io->ssl);
 		} while(retval != -1 && config->keepalive);
 	}
 
 	return(retval);
 }
 
+
+
+/***********************************************************************************************************************
+ *
+ * clean_io()
+ *
+ * Input: None.
+ * Output: None. 
+ *
+ * Purpose: In keepalive mode, we can't rely on the exit to handle cleanup. Since we may loop forever, let's clean up
+ *   the io struct before reentering the appropriate conductor.
+ *
+ **********************************************************************************************************************/
+void clean_io(struct config_helper *config){
+
+  struct proxy_node *proxy_ptr;
+  struct message_helper *message_ptr;
+
+	io->child_sid = 0;
+
+	if(!io->controller){
+		close(io->local_in_fd);
+		io->local_in_fd = 0;
+		io->local_out_fd = 0;
+	}
+	close(io->remote_fd);
+
+	io->interactive = 0;
+
+	if(io->tty_winsize){
+		free(io->tty_winsize);
+		io->tty_winsize = NULL;
+	}
+
+	io->message_data_size = 0;
+
+	if(io->message.data){
+		free(io->message.data);
+	}
+	memset(&(io->message), 0, sizeof(struct message_helper));
+
+	io->eof = 0;
+
+	io->init_complete = 0;
+
+	while(io->tty_write_head){
+		message_ptr = io->tty_write_head;
+		io->tty_write_head = message_ptr->next;
+
+		message_helper_destroy(message_ptr);
+	}
+
+#ifdef OPENSSL
+	if(config->encryption){
+
+		if(io->ssl){
+			SSL_free(io->ssl);
+			io->ssl = NULL;
+		}
+
+		if(io->dh){
+			DH_free(io->dh);
+			io->dh = NULL;
+		}
+
+		if(io->ctx){
+			SSL_CTX_free(io->ctx);
+			io->ctx = NULL;
+		}
+	}
+#endif 
+
+	while(io->proxy_head){
+		proxy_ptr = io->proxy_head;
+		io->proxy_head = proxy_ptr->next;
+
+		close(proxy_ptr->fd);
+		if(proxy_ptr->mem_ptr){
+			free(proxy_ptr->mem_ptr);
+		}
+		free(proxy_ptr);
+	}
+	io->proxy_tail = NULL;
+
+	while(io->connection_head){
+		connection_node_delete(io->connection_head);
+	}
+
+	io->fd_count = 0;
+}
 
 
 /* 

@@ -304,6 +304,7 @@ int handle_message_dt_proxy_ht_create(){
 	cur_connection_node->id = message->header_id;
 	cur_connection_node->proxy_type = message->header_proxy_type;
 
+	// free() called in connection_node_delete().
 	if((cur_connection_node->rhost_rport = (char *) calloc(message->data_len + 1, sizeof(char))) == NULL){
 		report_error("handle_message_dt_proxy_ht_create(): calloc(%d, %d): %s", message->data_len + 1, (int) sizeof(char), strerror(errno));
 		return(-1);
@@ -581,6 +582,7 @@ int handle_proxy_read(struct proxy_node *cur_proxy_node){
 	if(cur_proxy_node->type == PROXY_DYNAMIC){
 		// PROXY_DYNAMIC case goes here.
 
+		// free() called in connection_node_delete().
 		if((cur_connection_node->buffer_head = (char *) calloc(SOCKS_REQ_MAX, sizeof(char))) == NULL){
 			report_error("handle_proxy_read(): calloc(%d, %d): %s\r", SOCKS_REQ_MAX, (int) sizeof(char), strerror(errno));
 			return(-1);
@@ -596,6 +598,7 @@ int handle_proxy_read(struct proxy_node *cur_proxy_node){
 	}else if(cur_proxy_node->type == PROXY_STATIC){
 
 		count = strlen(cur_proxy_node->rhost_rport);
+		// free() called in connection_node_delete().
 		if((cur_connection_node->rhost_rport = (char *) calloc(count + 1, sizeof(char))) == NULL){
 			report_error("handle_proxy_read(): calloc(%d, %d): %s", count + 1, (int) sizeof(char), strerror(errno));
 			return(-1);
@@ -1032,6 +1035,7 @@ struct connection_node *handle_tun_tap_init(int ifr_flag){
 	}
 
 	count = strlen(ifr.ifr_name);
+	// free() called in connection_node_delete().
 	if((cur_connection_node->rhost_rport = (char *) calloc(count + 1, sizeof(char))) == NULL){
 		report_error("handle_tun_tap_init(): calloc(%d, %d): %s", count + 1, (int) sizeof(char), strerror(errno));
 		connection_node_delete(cur_connection_node);

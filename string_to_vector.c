@@ -54,6 +54,7 @@ char **string_to_vector(char *command_string){
 	}
 
 	/*  Now, (count / 2) will be the number of tokens. Since we know the number of tokens, lets setup argv. */
+	// free() called in free_vector().
 	if((argv = (char **) malloc((sizeof(char *) * ((count / 2) + 1)))) == NULL){
 		report_error("string_to_vector(): malloc(%d): %s", (int) ((sizeof(char *) * ((count / 2) + 1))), strerror(errno));
 		return(NULL);
@@ -70,6 +71,7 @@ char **string_to_vector(char *command_string){
 		if(isspace(*index)){
 			if(!was_space){
 				/*  end of a token. */
+				// free() called in free_vector().
 				if((argv[i] = (char *) malloc(sizeof(char) * (len + 1))) == NULL){
 					report_error("string_to_vector(): malloc(%d): %s", (int) (sizeof(char) * (len + 1)), strerror(errno));
 					goto CLEAN_UP;
@@ -95,6 +97,7 @@ char **string_to_vector(char *command_string){
 
 	/*  Same final token termination case. */
 	if(count % 2){
+		// free() called in free_vector().
 		if((argv[i] = malloc(sizeof(char) * (len + 1))) == NULL){
 			report_error("string_to_vector(): malloc(%d): %s", (int) (sizeof(char) * (len + 1)), strerror(errno));
 			goto CLEAN_UP;

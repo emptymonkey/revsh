@@ -41,17 +41,20 @@ struct proxy_node *proxy_node_new(char *proxy_string, int proxy_type){
 	} 
 
 	// Now let's start setting up the nodes.
+	// free() called in io_clean().
 	if((new_node = (struct proxy_node *) calloc(1, sizeof(struct proxy_node))) == NULL){
 		report_error("proxy_node_new(): calloc(1, sizeof(struct proxy_node)): %s", strerror(errno));
 		return(NULL);
 	}
 	new_node->type = proxy_type;	
 
-	if((first = (char *) calloc(strlen(proxy_string) + 1, sizeof(char))) == NULL){
+	// free() called in io_clean().
+	if((new_node->mem_ptr = (char *) calloc(strlen(proxy_string) + 1, sizeof(char))) == NULL){
 			report_error("proxy_node_new(): calloc(%d, sizeof(char)): %s", (int) strlen(proxy_string), strerror(errno));
 		free(new_node);
 		return(NULL);
 	}
+	first = new_node->mem_ptr;
 
 	// Proxy strings can have a lot of different formats. This block is where we figure out which format we're dealing with.
 	strcpy(first, proxy_string);
@@ -196,6 +199,7 @@ int proxy_connect(char *rhost_rport){
 
 	count = strlen(tmp_ptr);
 
+	// free() called in this function.
 	if((rhost = (char *) calloc(count + 1, sizeof(char))) == NULL){
 		report_error("proxy_connect(): calloc(%d, %d): %s", count + 1, (int) sizeof(char), strerror(errno));
 		return(-1);
@@ -271,6 +275,7 @@ struct connection_node *connection_node_create(){
 
 	struct connection_node *cur_connection_node, *tmp_connection_node;
 
+	// free() called in connection_node_delete().
 	if((cur_connection_node = (struct connection_node *) calloc(1, sizeof(struct connection_node))) == NULL){
 		report_error("connection_node_create(): calloc(1, %d): %s", (int) sizeof(struct connection_node), strerror(errno));
 		return(NULL);
@@ -676,6 +681,7 @@ char *addr_to_string(int atype, char *addr, char *port, int len){
 		string_len = 47;
 	}
 
+	// free() called in connection_node_delete().
 	if((ptr = (char *) calloc(string_len + 1, sizeof(char))) == NULL){
 		report_error("addr_to_string(): calloc(%d, %d): %s", string_len + 1, (int) sizeof(char), strerror(errno));
 		return(NULL);

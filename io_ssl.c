@@ -236,8 +236,14 @@ int remote_read_encrypted(void *buff, size_t count){
 				break;
 
 			default:
-				report_error("remote_read_encrypted(): SSL_read(%lx, %lx, %d): %s", \
-						(unsigned long) io->ssl, (unsigned long) buff, (int) count, strerror(errno));
+				// If the remote client shuts down without cleanly closing the connection while we are in keepalive mode,
+				// it will show up here as ssl_errno = 5 (SSL_ERROR_SYSCALL) and errno = 0. Treat this as an eof condition.
+				if(!errno){
+					io->eof = 1;
+					return(-1);
+				}
+				report_error("remote_read_encrypted(): SSL_read(%lx, %lx, %d): errno -> \"%d\", ssl_errno -> \"%d\". Check <openssl/ssl.h> for detail.", \
+						(unsigned long) io->ssl, (unsigned long) buff, (int) count, errno, ssl_errno);
 				return(-1);
 		}
 	} while(ssl_error);
@@ -312,7 +318,8 @@ int remote_write_encrypted(void *buff, size_t count){
 
 		retval = SSL_write(io->ssl, buff, count);
 
-		switch(SSL_get_error(io->ssl, retval)){
+		int ssl_errno;
+		switch((ssl_errno = SSL_get_error(io->ssl, retval))){
 
 			case SSL_ERROR_ZERO_RETURN:
 				io->eof = 1;
@@ -331,8 +338,14 @@ int remote_write_encrypted(void *buff, size_t count){
 				break;
 
 			default:
-				report_error("remote_write_encrypted(): SSL_write(%lx, %lx, %d): %s", \
-						(unsigned long) io->ssl, (unsigned long) buff, (int) count, strerror(errno));
+				// If the remote client shuts down without cleanly closing the connection while we are in keepalive mode,
+				// it will show up here as ssl_errno = 5 (SSL_ERROR_SYSCALL) and errno = 0. Treat this as an eof condition.
+				if(!errno){
+					io->eof = 1;
+					return(-1);
+				}
+				report_error("remote_write_encrypted(): SSL_write(%lx, %lx, %d): errno -> \"%d\", ssl_errno: \"%d\". Check <openssl/ssl.h> for detail.", \
+						(unsigned long) io->ssl, (unsigned long) buff, (int) count, errno, ssl_errno);
 				return(-1);
 		}
 	} while(ssl_error);
@@ -361,7 +374,7 @@ int init_io_controller(struct config_helper *config){
 
 	wordexp_t keys_dir_exp;
 
-	struct sigaction *act = NULL;
+	struct sigaction act;
 
 	unsigned long tmp_ulong;
 	unsigned int retry;
@@ -404,11 +417,6 @@ int init_io_controller(struct config_helper *config){
 		return(-1);
 	}
 
-	if((act = (struct sigaction *) calloc(1, sizeof(struct sigaction))) == NULL){
-		report_error("init_io_controller(): calloc(1, %d): %s", (int) sizeof(struct sigaction), strerror(errno));
-		return(-1);
-	}
-
 	memset(allowed_fingerprint, 0, EVP_MAX_MD_SIZE);
 	allowed_fingerprint_len = 0;
 
@@ -417,37 +425,6 @@ int init_io_controller(struct config_helper *config){
 
 
 	/*  - Open a socket / setup SSL. */
-	if(config->encryption == EDH){
-		if((controller_cert_path_head = (char *) calloc(PATH_MAX, sizeof(char))) == NULL){
-			report_error("init_io_controller(): calloc(%d, %d): %s", PATH_MAX, (int) sizeof(char), strerror(errno));
-			return(-1);
-		}
-
-		memcpy(controller_cert_path_head, keys_dir_exp.we_wordv[0], strlen(keys_dir_exp.we_wordv[0]));
-		controller_cert_path_tail = index(controller_cert_path_head, '\0');
-		*(controller_cert_path_tail++) = '/';
-		sprintf(controller_cert_path_tail, CONTROLLER_CERT_FILE);
-
-		if((controller_cert_path_head - controller_cert_path_tail) > PATH_MAX){
-			report_error("init_io_controller(): controller cert file: path too long!");
-			return(-1);
-		}
-
-		if((controller_key_path_head = (char *) calloc(PATH_MAX, sizeof(char))) == NULL){
-			report_error("init_io_controller(): calloc(%d, %d): %s", PATH_MAX, (int) sizeof(char), strerror(errno));
-			return(-1);
-		}
-
-		memcpy(controller_key_path_head, keys_dir_exp.we_wordv[0], strlen(keys_dir_exp.we_wordv[0]));
-		controller_key_path_tail = index(controller_key_path_head, '\0');
-		*(controller_key_path_tail++) = '/';
-		sprintf(controller_key_path_tail, CONTROLLER_KEY_FILE);
-
-		if((controller_key_path_head - controller_key_path_tail) > PATH_MAX){
-			report_error("init_io_controller(): controller key file: path too long!");
-			return(-1);
-		}
-	}
 
 	if(config->encryption){
 
@@ -485,6 +462,39 @@ int init_io_controller(struct config_helper *config){
 		}
 
 		if(config->encryption == EDH){
+
+			// free() called in this function.
+			if((controller_cert_path_head = (char *) calloc(PATH_MAX, sizeof(char))) == NULL){
+				report_error("init_io_controller(): calloc(%d, %d): %s", PATH_MAX, (int) sizeof(char), strerror(errno));
+				return(-1);
+			}
+
+			memcpy(controller_cert_path_head, keys_dir_exp.we_wordv[0], strlen(keys_dir_exp.we_wordv[0]));
+			controller_cert_path_tail = index(controller_cert_path_head, '\0');
+			*(controller_cert_path_tail++) = '/';
+			sprintf(controller_cert_path_tail, CONTROLLER_CERT_FILE);
+
+			if((controller_cert_path_head - controller_cert_path_tail) > PATH_MAX){
+				report_error("init_io_controller(): controller cert file: path too long!");
+				return(-1);
+			}
+
+			// free() called in this function.
+			if((controller_key_path_head = (char *) calloc(PATH_MAX, sizeof(char))) == NULL){
+				report_error("init_io_controller(): calloc(%d, %d): %s", PATH_MAX, (int) sizeof(char), strerror(errno));
+				return(-1);
+			}
+
+			memcpy(controller_key_path_head, keys_dir_exp.we_wordv[0], strlen(keys_dir_exp.we_wordv[0]));
+			controller_key_path_tail = index(controller_key_path_head, '\0');
+			*(controller_key_path_tail++) = '/';
+			sprintf(controller_key_path_tail, CONTROLLER_KEY_FILE);
+
+			if((controller_key_path_head - controller_key_path_tail) > PATH_MAX){
+				report_error("init_io_controller(): controller key file: path too long!");
+				return(-1);
+			}
+
 			SSL_CTX_set_verify(io->ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, dummy_verify_callback);
 
 			if(SSL_CTX_use_certificate_file(io->ctx, controller_cert_path_head, SSL_FILETYPE_PEM) != 1){
@@ -521,10 +531,10 @@ int init_io_controller(struct config_helper *config){
 	}
 
 	/* Seppuku if left alone too long. */
-	act->sa_handler = seppuku;
+	act.sa_handler = seppuku;
 
-	if(sigaction(SIGALRM, act, NULL) == -1){
-		report_error("init_io_controller(): sigaction(%d, %lx, %p): %s", SIGALRM, (unsigned long) act, NULL, strerror(errno));
+	if(sigaction(SIGALRM, &act, NULL) == -1){
+		report_error("init_io_controller(): sigaction(%d, %lx, %p): %s", SIGALRM, (unsigned long) &act, NULL, strerror(errno));
 		return(-1);
 	}
 
@@ -633,10 +643,10 @@ int init_io_controller(struct config_helper *config){
 		BIO_free(accept);
 	}
 
-	act->sa_handler = SIG_DFL;
+	act.sa_handler = SIG_DFL;
 
-	if(sigaction(SIGALRM, act, NULL) == -1){
-		report_error("%s: %d: sigaction(%d, %lx, %p): %s", SIGALRM, (unsigned long) act, NULL, strerror(errno));
+	if(sigaction(SIGALRM, &act, NULL) == -1){
+		report_error("%s: %d: sigaction(%d, %lx, %p): %s", SIGALRM, (unsigned long) &act, NULL, strerror(errno));
 		return(-1);
 	}
 
@@ -691,6 +701,7 @@ int init_io_controller(struct config_helper *config){
 
 		/* Check the certs. */
 		if(config->encryption == EDH){
+			// free() called in this function.
 			if((allowed_cert_path_head = (char *) calloc(PATH_MAX, sizeof(char))) == NULL){
 				report_error("init_io_controller(): calloc(%d, %d): %s", PATH_MAX, (int) sizeof(char), strerror(errno));
 				return(-1);
@@ -804,7 +815,7 @@ int init_io_target(struct config_helper *config){
 	int i;
 	int retval;
 
-	struct sigaction *act = NULL;
+	struct sigaction act;
 
 	unsigned int tmp_ulong;
 	unsigned int retry;
@@ -830,10 +841,6 @@ int init_io_target(struct config_helper *config){
 
 
 	/* Initialize the structures we will be using. */
-	if((act = (struct sigaction *) calloc(1, sizeof(struct sigaction))) == NULL){
-		report_error("init_io_target(): calloc(1, %d): %s", (int) sizeof(struct sigaction), strerror(errno));
-		return(-1);
-	}
 
 	memset(remote_fingerprint, 0, EVP_MAX_MD_SIZE);
 	remote_fingerprint_len = 0;
@@ -897,10 +904,10 @@ int init_io_target(struct config_helper *config){
 		}
 	}
 
-	act->sa_handler = seppuku;
+	act.sa_handler = seppuku;
 
-	if(sigaction(SIGALRM, act, NULL) == -1){
-		report_error("init_io_target(): sigaction(%d, %lx, %p): %s", SIGALRM, (unsigned long) act, NULL, strerror(errno));
+	if(sigaction(SIGALRM, &act, NULL) == -1){
+		report_error("init_io_target(): sigaction(%d, %lx, %p): %s", SIGALRM, (unsigned long) &act, NULL, strerror(errno));
 		return(-1);
 	}
 
@@ -1042,10 +1049,10 @@ int init_io_target(struct config_helper *config){
 	}
 
 	/* Sepuku when left alone too long. */
-	act->sa_handler = SIG_DFL;
+	act.sa_handler = SIG_DFL;
 
-	if(sigaction(SIGALRM, act, NULL) == -1){
-		report_error("init_io_target(): sigaction(%d, %lx, %p): %s", SIGALRM, (unsigned long) act, NULL, strerror(errno));
+	if(sigaction(SIGALRM, &act, NULL) == -1){
+		report_error("init_io_target(): sigaction(%d, %lx, %p): %s", SIGALRM, (unsigned long) &act, NULL, strerror(errno));
 		return(-1);
 	}
 
@@ -1112,6 +1119,7 @@ int init_io_target(struct config_helper *config){
 				return(-1);
 			}
 
+			// free() called in this function.
 			if((remote_fingerprint_str = (char *) calloc(strlen(controller_cert_fingerprint) + 1, sizeof(char))) == NULL){
 				report_error("init_io_target(): calloc(%d, %d): %s", (int) strlen(controller_cert_fingerprint) + 1, (int) sizeof(char), strerror(errno));
 				return(-1);

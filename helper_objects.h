@@ -87,6 +87,11 @@ struct config_helper {
  ******************************************************************************/
 struct proxy_node {
 
+	// Remembers the original malloc() address. Depending on the case, this 
+  // value will end up in one of the strings below. Adding this pointer will 
+	// simplify the free() call.
+	char *mem_ptr;
+
 	// The strings representing this proxy may be used later on for error reporting.
 	char *lhost;
 	char *lport;
@@ -149,9 +154,16 @@ struct io_helper {
 	int (*remote_read)(void *buf, size_t count);
 	int (*remote_write)(void *buf, size_t count);
 
+	// In the keep alive model, we will want to skip the part where we close original fd that were closed last run.
+	int orig_fds_closed;
+
 	int local_in_fd;
 	int local_out_fd;
 	int remote_fd;
+
+	// This is the match for the config->interactive, but represents the actual state of interaction for this run. 
+	// Useful in the keepalive case.
+	int interactive;
 
 	// Stores tty state info.
 	struct winsize *tty_winsize;

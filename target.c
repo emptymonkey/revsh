@@ -26,7 +26,7 @@ int do_target(struct config_helper *config){
 
 	char *buff_head = NULL;
 
-	struct winsize *tty_winsize;
+	struct winsize tty_winsize;
 
 	struct passwd *passwd_entry;
 
@@ -34,13 +34,10 @@ int do_target(struct config_helper *config){
 	socklen_t addrlen = (socklen_t) sizeof(addr);
 
   struct utsname uname_info;
+	char *shell = NULL;
 
 
 	/* Initialize the structures we will be using. */
-	if((tty_winsize = (struct winsize *) calloc(1, sizeof(struct winsize))) == NULL){
-		report_error("do_target(): calloc(1, %d): %s", (int) sizeof(struct winsize), strerror(errno));
-		return(-1);
-	}
 
 	/* Set up the network layer. */
 	if(init_io_target(config) == -1){
@@ -74,20 +71,13 @@ int do_target(struct config_helper *config){
 		return(-1);
 	}
 
-	if(!message->data[0]){
-		config->interactive = 0;
+	io->interactive = 1;
+	if(!(config->interactive && message->data[0])){
+		io->interactive = 0;
 	}
 
-	if(!config->interactive){
+	if(!io->interactive){
 		retval = broker(config);
-
-#ifdef OPENSSL
-		if(config->encryption){
-			SSL_shutdown(io->ssl);
-			SSL_free(io->ssl);
-			SSL_CTX_free(io->ctx);
-		}
-#endif /* OPENSSL */
 
 		return(retval);
 	}
@@ -125,19 +115,13 @@ int do_target(struct config_helper *config){
 	}
 
 
-	if(!message->data_len){
-
-		if(!config->shell){
-			config->shell = DEFAULT_SHELL;
-		}
-
-	}else{
-
-		if((config->shell = (char *) calloc(message->data_len + 1, sizeof(char))) == NULL){
+	if(message->data_len){
+		// free() called in this function.
+		if((shell = (char *) calloc(message->data_len + 1, sizeof(char))) == NULL){
 			report_error("do_target(): calloc(%d, %d): %s", message->data_len + 1, (int) sizeof(char), strerror(errno));
 			return(-1);
 		}
-		memcpy(config->shell, message->data, message->data_len);
+		memcpy(shell, message->data, message->data_len);
 	}
 
 	/*  - Receive and set the initial environment. */
@@ -170,13 +154,13 @@ int do_target(struct config_helper *config){
 		return(-1);
 	}
 
-	if(message->data_len != sizeof(tty_winsize->ws_row) + sizeof(tty_winsize->ws_col)){
+	if(message->data_len != sizeof(tty_winsize.ws_row) + sizeof(tty_winsize.ws_col)){
 		report_error("do_target(): DT_INIT termios: not enough data!");
 		return(-1);
 	}
 
-	tty_winsize->ws_row = ntohs(*((unsigned short *) message->data));
-	tty_winsize->ws_col = ntohs(*((unsigned short *) (message->data + sizeof(unsigned short))));
+	tty_winsize.ws_row = ntohs(*((unsigned short *) message->data));
+	tty_winsize.ws_col = ntohs(*((unsigned short *) (message->data + sizeof(unsigned short))));
 
 	// The initialization protocol is now finished. Rest of initialization is local.
 	io->init_complete = 1;
@@ -197,8 +181,8 @@ int do_target(struct config_helper *config){
 		return(-1);
 	}
 
-	if(ioctl(pty_master, TIOCSWINSZ, tty_winsize) == -1){
-		report_error("do_target(): ioctl(%d, %d, %lx): %s", pty_master, TIOCGWINSZ, (unsigned long) tty_winsize, strerror(errno));
+	if(ioctl(pty_master, TIOCSWINSZ, &tty_winsize) == -1){
+		report_error("do_target(): ioctl(%d, %d, %lx): %s", pty_master, TIOCGWINSZ, (unsigned long) &tty_winsize, strerror(errno));
 		return(-1);
 	}
 
@@ -213,6 +197,7 @@ int do_target(struct config_helper *config){
 	}
 
 	/*  - Send basic information back to the controller about the connecting host. */
+	// free() called in this function.
 	if((buff_head = (char *) calloc(LOCAL_BUFF_SIZE, sizeof(char))) == NULL){
 		report_error("do_target(): calloc(%d, %d): %s", LOCAL_BUFF_SIZE, (int) sizeof(char), strerror(errno));
 		return(-1);
@@ -233,7 +218,6 @@ int do_target(struct config_helper *config){
 
 	remote_printf("# IP Address:\t\t");
 	if(getsockname(io->remote_fd, &addr, &addrlen) != -1){
-		memset(buff_head, 0, LOCAL_BUFF_SIZE);
 		if(inet_ntop(addr.sa_family, addr.sa_data + 2, buff_head, LOCAL_BUFF_SIZE - 1)){
 			remote_printf("%s", buff_head);
 		}
@@ -243,6 +227,7 @@ int do_target(struct config_helper *config){
 		remote_printf("I have no address!");
 	}
 	remote_printf("\r\n");
+	free(buff_head);
 
 	/*  if the uid doesn't match an entry in /etc/passwd, we don't want to crash. */
 	/*  Borrowed the "I have no name!" convention from bash. */
@@ -266,23 +251,25 @@ int do_target(struct config_helper *config){
 
 	remote_printf("################################################################################\r\n");
 
-	free(buff_head);
 
-	if(close(STDIN_FILENO) == -1){
-		report_error("do_target(): close(STDIN_FILENO): %s", strerror(errno));
-		return(-1);
-	}
-
-	if(close(STDOUT_FILENO) == -1){
-		report_error("do_target(): close(STDOUT_FILENO): %s", strerror(errno));
-		return(-1);
-	}
-
-	if(!verbose){
-		if(close(STDERR_FILENO) == -1){
-			report_error("do_target(): close(STDERR_FILENO): %s", strerror(errno));
+	if(!io->orig_fds_closed){
+		if(close(STDIN_FILENO) == -1){
+			report_error("do_target(): close(STDIN_FILENO): %s", strerror(errno));
 			return(-1);
 		}
+
+		if(close(STDOUT_FILENO) == -1){
+			report_error("do_target(): close(STDOUT_FILENO): %s", strerror(errno));
+			return(-1);
+		}
+
+		if(!verbose){
+			if(close(STDERR_FILENO) == -1){
+				report_error("do_target(): close(STDERR_FILENO): %s", strerror(errno));
+				return(-1);
+			}
+		}
+		io->orig_fds_closed = 1;
 	}
 
 	/*  - Fork a child to run the shell. */
@@ -296,6 +283,10 @@ int do_target(struct config_helper *config){
 	if(retval){
 
 		io->child_sid = retval;
+		if(shell){
+			free(shell);
+		}
+		free_vector(exec_envp);
 
 		/*  - Parent: Enter broker() and broker tty. */
 		if(close(pty_slave) == -1){
@@ -312,14 +303,6 @@ int do_target(struct config_helper *config){
 			report_error("do_target(): broker(%lx): %s", (unsigned long) config, strerror(errno));
 			return(-1);
 		}
-
-#ifdef OPENSSL
-		if(config->encryption){
-			SSL_shutdown(io->ssl);
-			SSL_free(io->ssl);
-			SSL_CTX_free(io->ctx);
-		}
-#endif /* OPENSSL */
 
 		return(0);
 	}
@@ -365,10 +348,18 @@ int do_target(struct config_helper *config){
 		return(-1);
 	}
 
+	if(!shell){
+		if(config->shell){
+			shell = config->shell;
+		}else{
+			shell = DEFAULT_SHELL;
+		}
+	}
+
 	/*  - Child: Call execve() to invoke a shell. */
 	errno = 0;
-	if((exec_argv = string_to_vector(config->shell)) == NULL){
-		report_error("do_target(): string_to_vector(%s): %s", config->shell, strerror(errno));
+	if((exec_argv = string_to_vector(shell)) == NULL){
+		report_error("do_target(): string_to_vector(%s): %s", shell, strerror(errno));
 		return(-1);
 	}
 
