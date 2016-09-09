@@ -295,8 +295,8 @@ int handle_message_dt_proxy_ht_create(){
 			if(verbose > 2){
 				fprintf(stderr, "\rhandle_message_dt_proxy_ht_create(): Unable to create tun/tap interface.\n");
 			}
-			if(handle_send_dt_proxy_ht_destroy(cur_connection_node->origin, cur_connection_node->id, ENODEV) == -1){
-				report_error("handle_message_dt_proxy_ht_create(): handle_send_dt_proxy_ht_destroy(%d, %d, ENODEV): %s", cur_connection_node->origin, cur_connection_node->id, strerror(errno));
+			if(handle_send_dt_proxy_ht_destroy(message->header_origin, message->header_id, ENODEV) == -1){
+				report_error("handle_message_dt_proxy_ht_create(): handle_send_dt_proxy_ht_destroy(%d, %d, ENODEV): %s", message->header_origin, message->header_id, strerror(errno));
 				return(-1);
 			}
 

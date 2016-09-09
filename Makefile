@@ -16,18 +16,18 @@ STRIP = /usr/bin/strip
 ########################################################################################################################
 
 ## Linux
-CFLAGS = -Wall -Wextra -std=c99 -pedantic -Os -DOPENSSL
-LIBS = -lssl -lcrypto
-KEYS_DIR = keys
-KEY_OF_C = in_the_key_of_c
-IO_DEP = io_ssl.c
-
-## FreeBSD
-#CFLAGS = -Wall -Wextra -std=c99 -pedantic -Os -DFREEBSD -DOPENSSL
+#CFLAGS = -Wall -Wextra -std=c99 -pedantic -Os -DOPENSSL
 #LIBS = -lssl -lcrypto
 #KEYS_DIR = keys
 #KEY_OF_C = in_the_key_of_c
 #IO_DEP = io_ssl.c
+
+## FreeBSD
+CFLAGS = -Wall -Wextra -std=c99 -pedantic -Os -DFREEBSD -DOPENSSL
+LIBS = -lssl -lcrypto
+KEYS_DIR = keys
+KEY_OF_C = in_the_key_of_c
+IO_DEP = io_ssl.c
 
 ## Linux w/static libraries.
 #CFLAGS = -static -Wall -Wextra -std=c99 -pedantic -Os -DOPENSSL
