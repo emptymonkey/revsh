@@ -40,15 +40,17 @@
 
 
 
-// XXX
-// Finish documenting the protocol initialization.
-// Make a man page.
-// Make static binary default.
-// Test all the switches.
-// Test on freebsd.
-// Test nossl legacy build.
-// Use daily til Toorcon.
+/* XXX
 
+- Test all the switches.
+- Test on freebsd.
+- Test nossl legacy build.
+
+- Make static binary default.
+- Make a man page.
+- Use daily til Toorcon.
+
+XXX */
 
 #include "common.h"
 

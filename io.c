@@ -29,6 +29,8 @@ int negotiate_protocol(){
 
 	int fcntl_flags;
 
+	unsigned short tmp_ushort;
+
 
 	io->message_data_size = 0;
 	io->message_data_size--;
@@ -54,18 +56,20 @@ int negotiate_protocol(){
 	}
 
 	/* Send our desired message size. */
-	if(io->remote_write(&io->message_data_size, sizeof(io->message_data_size)) == -1){
+	tmp_ushort = htons(io->message_data_size);
+	if(io->remote_write(&tmp_ushort, sizeof(tmp_ushort)) == -1){
 		report_error("negotiate_protocol(): io->remote_write(%lx, %d): %s", \
-				(unsigned long) &io->message_data_size, (int) sizeof(io->message_data_size), strerror(errno));
+				(unsigned long) &tmp_ushort, (int) sizeof(tmp_ushort), strerror(errno));
 		return(-1);
 	}
 
 	/* Recieve their desired message size. */
-	if(io->remote_read(&remote_data_size, sizeof(io->message_data_size)) == -1){
+	if(io->remote_read(&tmp_ushort, sizeof(tmp_ushort)) == -1){
 		report_error("negotiate_protocol(): io->remote_read(%lx, %d): %s", \
-				(unsigned long) &remote_data_size, (int) sizeof(io->message_data_size), strerror(errno));
+				(unsigned long) &tmp_ushort, (int) sizeof(tmp_ushort), strerror(errno));
 		return(-1);
 	}
+	remote_data_size = ntohs(tmp_ushort);
 
 	/* Make sure it isn't smaller than our totally reasonable minimum. */
 	if(remote_data_size < MINIMUM_MESSAGE_SIZE){
