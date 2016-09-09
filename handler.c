@@ -290,6 +290,17 @@ int handle_message_dt_proxy_ht_create(){
 		if((retval = handle_message_dt_proxy_ht_create_tun_tap()) == -1){
 			report_error("handle_message_dt_proxy_ht_create(): handle_message_dt_proxy_ht_create_tun_tap(): %s", strerror(errno));
 		}
+
+		if(retval == -2){
+			if(verbose > 2){
+				fprintf(stderr, "\rhandle_message_dt_proxy_ht_create(): Unable to create tun/tap interface.\n");
+			}
+			if(handle_send_dt_proxy_ht_destroy(cur_connection_node->origin, cur_connection_node->id, ENODEV) == -1){
+				report_error("handle_message_dt_proxy_ht_create(): handle_send_dt_proxy_ht_destroy(%d, %d, ENODEV): %s", cur_connection_node->origin, cur_connection_node->id, strerror(errno));
+				return(-1);
+			}
+
+		}
 		return(retval);
 	}
 
@@ -1007,7 +1018,7 @@ struct connection_node *handle_tun_tap_init(int ifr_flag){
 	int tmp_sock = 0;
 
 
-  if(ifr_flag == IFF_TUN){
+	if(ifr_flag == IFF_TUN){
 		ifr_flag_name = "TUN";
 	}else if(ifr_flag == IFF_TAP){
 		ifr_flag_name = "TAP";
