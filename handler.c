@@ -1,5 +1,5 @@
 /*
- *	In the beginning there was input and output, and it was good.
+ *  In the beginning there was input and output, and it was good.
  *  Then the BOFH added signal handling.
  *  The broker loop was more complicated, but still within the understanding of man.
  *  The kiddies then cried out "Where be our tunnels?! How canz we be 1337 w/out crypto tunnels?!! CAN HAS SOCKS?!"
