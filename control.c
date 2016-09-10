@@ -30,8 +30,8 @@ int do_control(struct config_helper *config){
 
 
 	/* Set up the network connection. */
-	if(init_io_controller(config) == -1){
-		report_error("do_control(): init_io_controller(%lx): %s", (unsigned long) config, strerror(errno));
+	if(init_io_control(config) == -1){
+		report_error("do_control(): init_io_control(%lx): %s", (unsigned long) config, strerror(errno));
 		return(-1);
 	}
 

@@ -39,7 +39,7 @@ int broker(struct config_helper *config){
 
 		/* Set up the default proxy. */
 		cur_proxy_req_node = config->proxy_request_head;	
-		if(io->controller && config->socks){
+		if(!io->target && config->socks){
 
 			if((cur_proxy_node = proxy_node_new(config->socks, PROXY_DYNAMIC)) == NULL){
 				report_error("do_control(): proxy_node_new(%s, %d): %s", config->socks, PROXY_DYNAMIC, strerror(errno));
@@ -86,7 +86,7 @@ int broker(struct config_helper *config){
 
 		/* Setup the TUN and TAP devices. Once setup, handle them as yet another connection in the connection_node linked list. */
 #ifndef FREEBSD
-		if(io->controller){
+		if(!io->target){
 			if(config->tun){
 				if((cur_connection_node = handle_tun_tap_init(IFF_TUN)) == NULL){
 					report_error("broker(): handle_tun_tap_init(IFF_TUN): %s", strerror(errno));
@@ -192,7 +192,7 @@ int broker(struct config_helper *config){
 			current_sig = sig_found;
 			sig_found = 0;
 
-			if(io->interactive && io->controller){
+			if(io->interactive && !io->target){
 
 				/* I set this up as a switch statement because I think we will want to handle other signals down the road. */
 				switch(current_sig){
@@ -259,7 +259,7 @@ int broker(struct config_helper *config){
 
 				case DT_WINRESIZE:
 
-					if(!io->controller){
+					if(io->target){
 						if((retval = handle_message_dt_winresize()) == -1){
 							report_error("broker(): handle_message_dt_winresize(): %s", strerror(errno));
 							goto RETURN;
@@ -308,7 +308,7 @@ int broker(struct config_helper *config){
 					break;
 
 				case DT_ERROR:
-					if(io->controller){
+					if(!io->target){
 						if((retval = report_log("Target Error: %s", message->data)) == -1){
 							goto RETURN;
 						}

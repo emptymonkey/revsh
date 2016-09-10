@@ -10,7 +10,7 @@ struct message_helper {
 	// Header types are defined in the protocol.h file.
 	unsigned short header_type;
 
-	// header_origin is the "io->controller" value of the connection initializer.
+	// header_origin is the "io->target" value of the connection initializer.
 	// header_id is the fd of the connection on the initializer's end.
 	// (header_origin, header_id) as a tuple forms a unique identifier for the
 	// connection recognized by both nodes.
@@ -146,8 +146,10 @@ struct connection_node {
  ******************************************************************************/
 struct io_helper {
 
-	/* Denote whether this instance is on the control node or the target node. */
-	int controller;
+	/* Denote whether this node is a target node or the control node. */
+	// Done as a "target" flag, so control is always 0. If we expand to allow node chaining in the future,
+	// then each target node will have a non-zero target number. This is for future expansion.
+	int target;
 	int child_sid;
 
 	/* We use pointers to functions here so we can invoke the appropriate function on the backend (crypto / no crypto). */

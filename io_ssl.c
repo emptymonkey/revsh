@@ -359,15 +359,15 @@ int remote_write_encrypted(void *buff, size_t count){
 
 /***********************************************************************************************************************
  *
- * init_io_controller()
+ * init_io_control()
  *
  * Input:  A pointer to our io_helper object and a pointer to our configuration_helper object.
  * Output: An int showing success (by returning the remote_fd) or failure (by returning -1).
  *
- * Purpose: To initialize the controller's network io interface.
+ * Purpose: To initialize the control's network io interface.
  *
  **********************************************************************************************************************/
-int init_io_controller(struct config_helper *config){
+int init_io_control(struct config_helper *config){
 
 	int i;
 	int retval;
@@ -382,8 +382,8 @@ int init_io_controller(struct config_helper *config){
 
 	BIO *accept = NULL;
 
-	char *controller_cert_path_head = NULL, *controller_cert_path_tail = NULL;
-	char *controller_key_path_head = NULL, *controller_key_path_tail = NULL;
+	char *control_cert_path_head = NULL, *control_cert_path_tail = NULL;
+	char *control_key_path_head = NULL, *control_key_path_tail = NULL;
 
 	X509 *remote_cert;
 	unsigned int remote_fingerprint_len;
@@ -407,13 +407,13 @@ int init_io_controller(struct config_helper *config){
 
 	/* Initialize the structures we will need. */
 	if(wordexp(config->keys_dir, &keys_dir_exp, 0)){
-		report_error("init_io_controller(): wordexp(%s, %lx, 0): %s", \
+		report_error("init_io_control(): wordexp(%s, %lx, 0): %s", \
 				config->keys_dir, (unsigned long)  &keys_dir_exp, strerror(errno));
 		return(-1);
 	}
 
 	if(keys_dir_exp.we_wordc != 1){
-		report_error("init_io_controller(): Invalid path: %s", config->keys_dir);
+		report_error("init_io_control(): Invalid path: %s", config->keys_dir);
 		return(-1);
 	}
 
@@ -429,7 +429,7 @@ int init_io_controller(struct config_helper *config){
 	if(config->encryption){
 
 		if((io->ctx = SSL_CTX_new(TLSv1_server_method())) == NULL){
-			report_error("init_io_controller(): SSL_CTX_new(TLSv1_server_method()): %s", strerror(errno));
+			report_error("init_io_control(): SSL_CTX_new(TLSv1_server_method()): %s", strerror(errno));
 			if(verbose){
 				ERR_print_errors_fp(stderr);
 			}
@@ -437,7 +437,7 @@ int init_io_controller(struct config_helper *config){
 		}
 
 		if((io->dh = get_dh()) == NULL){
-			report_error("init_io_controller(): get_dh(): %s", strerror(errno));
+			report_error("init_io_control(): get_dh(): %s", strerror(errno));
 			if(verbose){
 				ERR_print_errors_fp(stderr);
 			}
@@ -445,7 +445,7 @@ int init_io_controller(struct config_helper *config){
 		}
 
 		if(!SSL_CTX_set_tmp_dh(io->ctx, io->dh)){
-			report_error("init_io_controller(): SSL_CTX_set_tmp_dh(%lx, %lx): %s", (unsigned long) io->ctx, (unsigned long) io->dh, strerror(errno));
+			report_error("init_io_control(): SSL_CTX_set_tmp_dh(%lx, %lx): %s", (unsigned long) io->ctx, (unsigned long) io->dh, strerror(errno));
 			if(verbose){
 				ERR_print_errors_fp(stderr);
 			}
@@ -453,7 +453,7 @@ int init_io_controller(struct config_helper *config){
 		}
 
 		if(SSL_CTX_set_cipher_list(io->ctx, config->cipher_list) != 1){
-			report_error("init_io_controller(): SSL_CTX_set_cipher_list(%lx, %s): %s", \
+			report_error("init_io_control(): SSL_CTX_set_cipher_list(%lx, %s): %s", \
 					(unsigned long) io->ctx, config->cipher_list, strerror(errno));
 			if(verbose){
 				ERR_print_errors_fp(stderr);
@@ -464,63 +464,63 @@ int init_io_controller(struct config_helper *config){
 		if(config->encryption == EDH){
 
 			// free() called in this function.
-			if((controller_cert_path_head = (char *) calloc(PATH_MAX, sizeof(char))) == NULL){
-				report_error("init_io_controller(): calloc(%d, %d): %s", PATH_MAX, (int) sizeof(char), strerror(errno));
+			if((control_cert_path_head = (char *) calloc(PATH_MAX, sizeof(char))) == NULL){
+				report_error("init_io_control(): calloc(%d, %d): %s", PATH_MAX, (int) sizeof(char), strerror(errno));
 				return(-1);
 			}
 
-			memcpy(controller_cert_path_head, keys_dir_exp.we_wordv[0], strlen(keys_dir_exp.we_wordv[0]));
-			controller_cert_path_tail = index(controller_cert_path_head, '\0');
-			*(controller_cert_path_tail++) = '/';
-			sprintf(controller_cert_path_tail, CONTROLLER_CERT_FILE);
+			memcpy(control_cert_path_head, keys_dir_exp.we_wordv[0], strlen(keys_dir_exp.we_wordv[0]));
+			control_cert_path_tail = index(control_cert_path_head, '\0');
+			*(control_cert_path_tail++) = '/';
+			sprintf(control_cert_path_tail, CONTROLLER_CERT_FILE);
 
-			if((controller_cert_path_head - controller_cert_path_tail) > PATH_MAX){
-				report_error("init_io_controller(): controller cert file: path too long!");
+			if((control_cert_path_head - control_cert_path_tail) > PATH_MAX){
+				report_error("init_io_control(): control cert file: path too long!");
 				return(-1);
 			}
 
 			// free() called in this function.
-			if((controller_key_path_head = (char *) calloc(PATH_MAX, sizeof(char))) == NULL){
-				report_error("init_io_controller(): calloc(%d, %d): %s", PATH_MAX, (int) sizeof(char), strerror(errno));
+			if((control_key_path_head = (char *) calloc(PATH_MAX, sizeof(char))) == NULL){
+				report_error("init_io_control(): calloc(%d, %d): %s", PATH_MAX, (int) sizeof(char), strerror(errno));
 				return(-1);
 			}
 
-			memcpy(controller_key_path_head, keys_dir_exp.we_wordv[0], strlen(keys_dir_exp.we_wordv[0]));
-			controller_key_path_tail = index(controller_key_path_head, '\0');
-			*(controller_key_path_tail++) = '/';
-			sprintf(controller_key_path_tail, CONTROLLER_KEY_FILE);
+			memcpy(control_key_path_head, keys_dir_exp.we_wordv[0], strlen(keys_dir_exp.we_wordv[0]));
+			control_key_path_tail = index(control_key_path_head, '\0');
+			*(control_key_path_tail++) = '/';
+			sprintf(control_key_path_tail, CONTROLLER_KEY_FILE);
 
-			if((controller_key_path_head - controller_key_path_tail) > PATH_MAX){
-				report_error("init_io_controller(): controller key file: path too long!");
+			if((control_key_path_head - control_key_path_tail) > PATH_MAX){
+				report_error("init_io_control(): control key file: path too long!");
 				return(-1);
 			}
 
 			SSL_CTX_set_verify(io->ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, dummy_verify_callback);
 
-			if(SSL_CTX_use_certificate_file(io->ctx, controller_cert_path_head, SSL_FILETYPE_PEM) != 1){
-				report_error("init_io_controller(): SSL_CTX_use_certificate_file(%lx, %s, SSL_FILETYPE_PEM): %s", \
-						(unsigned long) io->ctx, controller_cert_path_head, strerror(errno));
+			if(SSL_CTX_use_certificate_file(io->ctx, control_cert_path_head, SSL_FILETYPE_PEM) != 1){
+				report_error("init_io_control(): SSL_CTX_use_certificate_file(%lx, %s, SSL_FILETYPE_PEM): %s", \
+						(unsigned long) io->ctx, control_cert_path_head, strerror(errno));
 				if(verbose){
 					ERR_print_errors_fp(stderr);
 				}
 				return(-1);
 			}
 
-			free(controller_cert_path_head);
+			free(control_cert_path_head);
 
-			if(SSL_CTX_use_PrivateKey_file(io->ctx, controller_key_path_head, SSL_FILETYPE_PEM) != 1){
-				report_error("init_io_controller(): SSL_CTX_use_PrivateKey_file(%lx, %s, SSL_FILETYPE_PEM): %s", \
-						(unsigned long) io->ctx, controller_key_path_head, strerror(errno));
+			if(SSL_CTX_use_PrivateKey_file(io->ctx, control_key_path_head, SSL_FILETYPE_PEM) != 1){
+				report_error("init_io_control(): SSL_CTX_use_PrivateKey_file(%lx, %s, SSL_FILETYPE_PEM): %s", \
+						(unsigned long) io->ctx, control_key_path_head, strerror(errno));
 				if(verbose){
 					ERR_print_errors_fp(stderr);
 				}
 				return(-1);
 			}
 
-			free(controller_key_path_head);
+			free(control_key_path_head);
 
 			if(SSL_CTX_check_private_key(io->ctx) != 1){
-				report_error("init_io_controller(): SSL_CTX_check_private_key(%lx): %s", \
+				report_error("init_io_control(): SSL_CTX_check_private_key(%lx): %s", \
 						(unsigned long) io->ctx, strerror(errno));
 				if(verbose){
 					ERR_print_errors_fp(stderr);
@@ -534,7 +534,7 @@ int init_io_controller(struct config_helper *config){
 	act.sa_handler = seppuku;
 
 	if(sigaction(SIGALRM, &act, NULL) == -1){
-		report_error("init_io_controller(): sigaction(%d, %lx, %p): %s", SIGALRM, (unsigned long) &act, NULL, strerror(errno));
+		report_error("init_io_control(): sigaction(%d, %lx, %p): %s", SIGALRM, (unsigned long) &act, NULL, strerror(errno));
 		return(-1);
 	}
 
@@ -544,7 +544,7 @@ int init_io_controller(struct config_helper *config){
 
 		/*  - Open a network connection back to the target. */
 		if((io->connect = BIO_new_connect(config->ip_addr)) == NULL){
-			report_error("init_io_controller(): BIO_new_connect(%s): %s", config->ip_addr, strerror(errno));
+			report_error("init_io_control(): BIO_new_connect(%s): %s", config->ip_addr, strerror(errno));
 			if(verbose){
 				ERR_print_errors_fp(stderr);
 			}
@@ -583,7 +583,7 @@ int init_io_controller(struct config_helper *config){
 		}
 
 		if(retval != 1){
-			report_error("init_io_controller(): BIO_do_connect(%lx): %s", \
+			report_error("init_io_control(): BIO_do_connect(%lx): %s", \
 					(unsigned long) io->connect, strerror(errno));
 			if(verbose){
 				ERR_print_errors_fp(stderr);
@@ -600,7 +600,7 @@ int init_io_controller(struct config_helper *config){
 		report_log("Controller: Listening on %s.", config->ip_addr);
 
 		if((accept = BIO_new_accept(config->ip_addr)) == NULL){
-			report_error("init_io_controller(): BIO_new_accept(%s): %s", \
+			report_error("init_io_control(): BIO_new_accept(%s): %s", \
 					config->ip_addr, strerror(errno));
 			if(verbose){
 				ERR_print_errors_fp(stderr);
@@ -609,7 +609,7 @@ int init_io_controller(struct config_helper *config){
 		}
 
 		if(BIO_set_bind_mode(accept, BIO_BIND_REUSEADDR) <= 0){
-			report_error("init_io_controller(): BIO_set_bind_mode(%lx, BIO_BIND_REUSEADDR): %s", (unsigned long) accept, strerror(errno));
+			report_error("init_io_control(): BIO_set_bind_mode(%lx, BIO_BIND_REUSEADDR): %s", (unsigned long) accept, strerror(errno));
 			if(verbose){
 				ERR_print_errors_fp(stderr);
 			}
@@ -633,7 +633,7 @@ int init_io_controller(struct config_helper *config){
 		}
 
 		if((io->connect = BIO_pop(accept)) == NULL){
-			report_error("init_io_controller(): BIO_pop(%lx): %s", (unsigned long) accept, strerror(errno));
+			report_error("init_io_control(): BIO_pop(%lx): %s", (unsigned long) accept, strerror(errno));
 			if(verbose){
 				ERR_print_errors_fp(stderr);
 			}
@@ -653,7 +653,7 @@ int init_io_controller(struct config_helper *config){
 	alarm(0);
 
 	if(BIO_get_fd(io->connect, &(io->remote_fd)) < 0){
-		report_error("init_io_controller(): BIO_get_fd(%lx, %lx): %s", (unsigned long) io->connect, (unsigned long) &(io->remote_fd), strerror(errno));
+		report_error("init_io_control(): BIO_get_fd(%lx, %lx): %s", (unsigned long) io->connect, (unsigned long) &(io->remote_fd), strerror(errno));
 		if(verbose){
 			ERR_print_errors_fp(stderr);
 		}
@@ -662,7 +662,7 @@ int init_io_controller(struct config_helper *config){
 
 	len = sizeof addr;
 	if(getpeername(io->remote_fd, (struct sockaddr*) &addr, &len) == -1){
-		report_error("init_io_controller(): getpeername(%d, %lx, %lx): %s", io->remote_fd, (unsigned long) &addr, &len, strerror(errno));
+		report_error("init_io_control(): getpeername(%d, %lx, %lx): %s", io->remote_fd, (unsigned long) &addr, &len, strerror(errno));
 	}
 
 	if(addr.ss_family == AF_INET){
@@ -682,7 +682,7 @@ int init_io_controller(struct config_helper *config){
 
 	if(config->encryption){
 		if(!(io->ssl = SSL_new(io->ctx))){
-			report_error("init_io_controller(): SSL_new(%lx): %s", (unsigned long) io->ctx, strerror(errno));
+			report_error("init_io_control(): SSL_new(%lx): %s", (unsigned long) io->ctx, strerror(errno));
 			if(verbose){
 				ERR_print_errors_fp(stderr);
 			}
@@ -692,7 +692,7 @@ int init_io_controller(struct config_helper *config){
 		SSL_set_bio(io->ssl, io->connect, io->connect);
 
 		if(SSL_accept(io->ssl) < 1){
-			report_error("init_io_controller(): SSL_accept(%lx): %s", (unsigned long) io->ssl, strerror(errno));
+			report_error("init_io_control(): SSL_accept(%lx): %s", (unsigned long) io->ssl, strerror(errno));
 			if(verbose){
 				ERR_print_errors_fp(stderr);
 			}
@@ -703,7 +703,7 @@ int init_io_controller(struct config_helper *config){
 		if(config->encryption == EDH){
 			// free() called in this function.
 			if((allowed_cert_path_head = (char *) calloc(PATH_MAX, sizeof(char))) == NULL){
-				report_error("init_io_controller(): calloc(%d, %d): %s", PATH_MAX, (int) sizeof(char), strerror(errno));
+				report_error("init_io_control(): calloc(%d, %d): %s", PATH_MAX, (int) sizeof(char), strerror(errno));
 				return(-1);
 			}
 
@@ -714,19 +714,19 @@ int init_io_controller(struct config_helper *config){
 
 
 			if((allowed_cert_path_head - allowed_cert_path_tail) > PATH_MAX){
-				report_error("init_io_controller(): target fingerprint file: path too long!");
+				report_error("init_io_control(): target fingerprint file: path too long!");
 				return(-1);
 			}
 
 			if((target_fingerprint_fp = fopen(allowed_cert_path_head, "r")) == NULL){
-				report_error("init_io_controller(): fopen(%s, 'r'): %s", allowed_cert_path_head, strerror(errno));
+				report_error("init_io_control(): fopen(%s, 'r'): %s", allowed_cert_path_head, strerror(errno));
 				return(-1);
 			}
 
 			free(allowed_cert_path_head);
 
 			if((allowed_cert = PEM_read_X509(target_fingerprint_fp, NULL, NULL, NULL)) == NULL){
-				report_error("init_io_controller(): PEM_read_X509(%lx, NULL, NULL, NULL): %s", (unsigned long) target_fingerprint_fp, strerror(errno));
+				report_error("init_io_control(): PEM_read_X509(%lx, NULL, NULL, NULL): %s", (unsigned long) target_fingerprint_fp, strerror(errno));
 				if(verbose){
 					ERR_print_errors_fp(stderr);
 				}
@@ -734,12 +734,12 @@ int init_io_controller(struct config_helper *config){
 			}
 
 			if(fclose(target_fingerprint_fp)){
-				report_error("init_io_controller(): fclose(%lx): %s", (unsigned long) target_fingerprint_fp, strerror(errno));
+				report_error("init_io_control(): fclose(%lx): %s", (unsigned long) target_fingerprint_fp, strerror(errno));
 				return(-1);
 			}
 
 			if(!X509_digest(allowed_cert, io->fingerprint_type, allowed_fingerprint, &allowed_fingerprint_len)){
-				report_error("init_io_controller(): X509_digest(%lx, %lx, %lx, %lx): %s", \
+				report_error("init_io_control(): X509_digest(%lx, %lx, %lx, %lx): %s", \
 						(unsigned long) allowed_cert, (unsigned long) io->fingerprint_type, (unsigned long) allowed_fingerprint, (unsigned long) &allowed_fingerprint_len, \
 						strerror(errno));
 				if(verbose){
@@ -757,7 +757,7 @@ int init_io_controller(struct config_helper *config){
 			}
 
 			if((remote_cert = SSL_get_peer_certificate(io->ssl)) == NULL){
-				report_error("init_io_controller(): SSL_get_peer_certificate(%lx): %s", (unsigned long) io->ssl, strerror(errno));
+				report_error("init_io_control(): SSL_get_peer_certificate(%lx): %s", (unsigned long) io->ssl, strerror(errno));
 				if(verbose){
 					ERR_print_errors_fp(stderr);
 				}
@@ -765,7 +765,7 @@ int init_io_controller(struct config_helper *config){
 			}
 
 			if(!X509_digest(remote_cert, io->fingerprint_type, remote_fingerprint, &remote_fingerprint_len)){
-				report_error("init_io_controller(): X509_digest(%lx, %lx, %lx, %lx): %s", \
+				report_error("init_io_control(): X509_digest(%lx, %lx, %lx, %lx): %s", \
 						(unsigned long) remote_cert, (unsigned long) io->fingerprint_type, (unsigned long) remote_fingerprint, (unsigned long) &remote_fingerprint_len, \
 						strerror(errno));
 				if(verbose){
@@ -783,13 +783,13 @@ int init_io_controller(struct config_helper *config){
 			}
 
 			if(allowed_fingerprint_len != remote_fingerprint_len){
-				report_error("init_io_controller(): Fingerprint mistmatch. Possible mitm. Aborting!");
+				report_error("init_io_control(): Fingerprint mistmatch. Possible mitm. Aborting!");
 				return(-1);
 			}
 
 			for(i = 0; i < (int) allowed_fingerprint_len; i++){
 				if(allowed_fingerprint[i] != remote_fingerprint[i]){
-					report_error("init_io_controller(): Fingerprint mistmatch. Possible mitm. Aborting!");
+					report_error("init_io_control(): Fingerprint mistmatch. Possible mitm. Aborting!");
 					return(-1);
 				}
 			}
@@ -828,7 +828,7 @@ int init_io_target(struct config_helper *config){
 #include "keys/target_cert.c"
 	int target_cert_len = sizeof(target_cert);
 
-#include "keys/controller_fingerprint.c"
+#include "keys/control_fingerprint.c"
 	char *remote_fingerprint_str;
 
 	X509 *remote_cert;
@@ -857,7 +857,7 @@ int init_io_target(struct config_helper *config){
 			return(-1);
 		}
 
-		/*  Because the controller host will normally dictate which crypto to use, in bind shell mode */
+		/*  Because the control node will normally dictate which crypto to use, in bind shell mode */
 		/*  we will want to restrict this to only EDH from the target host. Otherwise the bind shell may */
 		/*  serve a shell to any random hacker that knows how to port scan. */
 		if(config->bindshell){
@@ -1000,7 +1000,7 @@ int init_io_target(struct config_helper *config){
 
 	}else{
 
-		/*  - Open a network connection back to a controller. */
+		/*  - Open a network connection back to the control node. */
 		if((io->connect = BIO_new_connect(config->ip_addr)) == NULL){
 			report_error("init_io_target(): BIO_new_connect(%s): %s", config->ip_addr, strerror(errno));
 			if(verbose){
@@ -1120,8 +1120,8 @@ int init_io_target(struct config_helper *config){
 			}
 
 			// free() called in this function.
-			if((remote_fingerprint_str = (char *) calloc(strlen(controller_cert_fingerprint) + 1, sizeof(char))) == NULL){
-				report_error("init_io_target(): calloc(%d, %d): %s", (int) strlen(controller_cert_fingerprint) + 1, (int) sizeof(char), strerror(errno));
+			if((remote_fingerprint_str = (char *) calloc(strlen(control_cert_fingerprint) + 1, sizeof(char))) == NULL){
+				report_error("init_io_target(): calloc(%d, %d): %s", (int) strlen(control_cert_fingerprint) + 1, (int) sizeof(char), strerror(errno));
 				return(-1);
 			}
 
@@ -1129,9 +1129,9 @@ int init_io_target(struct config_helper *config){
 				sprintf(remote_fingerprint_str + (i * 2), "%02x", remote_fingerprint[i]);
 			}
 
-			if(strncmp(controller_cert_fingerprint, remote_fingerprint_str, strlen(controller_cert_fingerprint))){
+			if(strncmp(control_cert_fingerprint, remote_fingerprint_str, strlen(control_cert_fingerprint))){
 				if(verbose){
-					fprintf(stderr, "Remote fingerprint expected:\n\t%s\n", controller_cert_fingerprint);
+					fprintf(stderr, "Remote fingerprint expected:\n\t%s\n", control_cert_fingerprint);
 					fprintf(stderr, "Remote fingerprint received:\n\t%s\n", remote_fingerprint_str);
 				}
 				report_error("init_io_target(): Fingerprint mistmatch. Possible mitm. Aborting!\n");

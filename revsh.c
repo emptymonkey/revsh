@@ -43,11 +43,13 @@
 /* XXX
 
 - Add ~ escape support:
-	~.      Disconnect.
-	~#      List forwarded connections.
-	~?      Display a list of escape characters.
-	~V      Decrease the verbosity (LogLevel) when errors are being written to stderr.
-	~v      Increase the verbosity (LogLevel) when errors are being written to stderr.
+	~.	Disconnect.
+	~#	List forwarded connections.
+	  		Add bytes_read and bytes_written to connection nodes as unsigned longs. Report with ~#.
+	~?	Display a list of escape characters.
+
+
+- Reverse io->controller to io->target.
 
 - Test all the switches.
 - Make a man page.
@@ -229,7 +231,7 @@ int main(int argc, char **argv){
 	/* Set defaults. */
 	io->local_in_fd = fileno(stdin);
 	io->local_out_fd = fileno(stdout);
-	io->controller = 0;
+	io->target = 1;
 	io->eof = 0;
 	io->child_sid = 0;
 	io->proxy_head = NULL;
@@ -317,7 +319,7 @@ int main(int argc, char **argv){
 
 			case 'l':
 			case 'c':
-				io->controller = 1;
+				io->target = 0;
 				break;
 
 			case 'x':
@@ -414,7 +416,7 @@ int main(int argc, char **argv){
 		usage(-1);
 	}
 
-	if(io->controller){
+	if(!io->target){
 		/* Before anything else, let's try and get the log file opened. */
 		if(wordexp(config->log_file, &log_file_exp, 0)){
 			report_error("main(): wordexp(%s, %lx, 0): %s", config->log_file, (unsigned long)  &log_file_exp, strerror(errno));
@@ -499,7 +501,7 @@ int main(int argc, char **argv){
 
 	
 	/* Call the appropriate conductor. */
-	if(io->controller){
+	if(!io->target){
 		do{
 			// If this is set, we've run once already. Let's clean up the io struct.
 			if(io->init_complete){
@@ -545,7 +547,7 @@ void clean_io(struct config_helper *config){
 
 	io->child_sid = 0;
 
-	if(!io->controller){
+	if(io->target){
 		close(io->local_in_fd);
 		io->local_in_fd = 0;
 		io->local_out_fd = 0;

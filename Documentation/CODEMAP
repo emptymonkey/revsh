@@ -53,7 +53,7 @@ Some design decisions should be explained:
 - control.c
 	-- do_control()
 		--- Acts as the conductor for control nodes.
-		--- Calls init_io_controller() to setup the io layer.
+		--- Calls init_io_control() to setup the io layer.
 		--- Calls negotiate_protocol() to setup the messaging layer.
 		--- Talks with the remote partner to synchronize the revsh environment.
 		--- Calls broker().
@@ -149,7 +149,7 @@ Some design decisions should be explained:
 		--- read() from our socket, w/SSL involvement.
 	-- remote_write_encrypted()
 		--- write() to our socket, w/SSL involvement.
-	-- init_io_controller()
+	-- init_io_control()
 		--- Setup the network layer for the control node.
 	-- init_io_target()
 		--- Setup the network layer for the target node.

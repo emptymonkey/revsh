@@ -36,8 +36,8 @@ void report_error(char *fmt, ...){
 	}
 
 	if(verbose > 1){
-		if(io && io->controller){
-			// io->controller's tty is raw right now. Stick a \r in there for legibility.
+		if(io && !io->target){
+			// the control node's tty is raw right now. Stick a \r in there for legibility.
 			fprintf(stderr, "\r");
 		}
 
@@ -49,9 +49,9 @@ void report_error(char *fmt, ...){
 		return;
 	}
 
-	if(io->controller || io->init_complete){
+	if(!io->target || io->init_complete){
 
-		if(io->controller){
+		if(!io->target){
 			if(io->log_stream){
 				if(report_log_string(error_string) == -1){
 					if(verbose){

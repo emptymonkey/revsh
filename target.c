@@ -196,7 +196,7 @@ int do_target(struct config_helper *config){
 		return(-1);
 	}
 
-	/*  - Send basic information back to the controller about the connecting host. */
+	/*  - Send basic information back to the control node about the connecting host. */
 	// free() called in this function.
 	if((buff_head = (char *) calloc(LOCAL_BUFF_SIZE, sizeof(char))) == NULL){
 		report_error("do_target(): calloc(%d, %d): %s", LOCAL_BUFF_SIZE, (int) sizeof(char), strerror(errno));

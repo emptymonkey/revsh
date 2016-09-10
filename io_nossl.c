@@ -136,15 +136,15 @@ int remote_write_plaintext(void *buff, size_t count){
 
 /***********************************************************************************************************************
  *
- * init_io_controller()
+ * init_io_control()
  *
  * Input:  A pointer to our io_helper object and a pointer to our configuration_helper object.
  * Output: An int showing success (by returning the remote_fd) or failure (by returning -1).
  *
- * Purpose: To initialize a controller's network io layer.
+ * Purpose: To initialize the control nodes network io layer.
  *
  **********************************************************************************************************************/
-int init_io_controller(struct config_helper *config){
+int init_io_control(struct config_helper *config){
 
 	int tmp_sock;
 
@@ -167,9 +167,9 @@ int init_io_controller(struct config_helper *config){
 	struct sockaddr_in6 *s6;
 
 
-	/* In the no ssl build, there is no difference between a controller in bindshell mode, and a target. */
+	/* In the no ssl build, there is no difference between a control in bindshell mode, and a target. */
 	/* As such, we'll just pass through to the other rather than repeat code. */
-	if(io->controller && config->bindshell){
+	if(!io->target && config->bindshell){
 		return(init_io_target(config));
 	}
 
@@ -179,21 +179,21 @@ int init_io_controller(struct config_helper *config){
 	// free() called in this function.
 	ip_address_len = strlen(config->ip_addr);
 	if((ip_address = calloc(ip_address_len + 1, sizeof(char))) == NULL){
-		report_error("init_io_controller(): calloc(%d, %d): %s", ip_address_len, (int) sizeof(char), strerror(errno));
+		report_error("init_io_control(): calloc(%d, %d): %s", ip_address_len, (int) sizeof(char), strerror(errno));
 		return(-1);
 	}
 
 	memcpy(ip_address, config->ip_addr, ip_address_len);
 
 	if((ip_port = strchr(ip_address, ':')) == NULL){
-		report_error("init_io_controller(): strchr(%s, ':'): Port not found!", ip_address);
+		report_error("init_io_control(): strchr(%s, ':'): Port not found!", ip_address);
 		return(-1);
 	}
 	*ip_port = '\0';
 	ip_port++;
 
 	if((host = gethostbyname(ip_address)) == NULL){
-		report_error("init_io_controller(): gethostbyname(%s): %s", ip_address, strerror(errno));
+		report_error("init_io_control(): gethostbyname(%s): %s", ip_address, strerror(errno));
 		return(-1);
 	}
 
@@ -204,12 +204,12 @@ int init_io_controller(struct config_helper *config){
 	name.sin_port = htons(strtol(ip_port, NULL, 10));
 
 	if((tmp_sock = socket(AF_INET, SOCK_STREAM, 0)) == -1){
-		report_error("init_io_controller(): socket(AF_INET, SOCK_STREAM, 0): %s", strerror(errno));
+		report_error("init_io_control(): socket(AF_INET, SOCK_STREAM, 0): %s", strerror(errno));
 		return(-1);
 	}
 
 	if(setsockopt(tmp_sock, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) == -1){
-		report_error("init_io_controller(): setsockopt(%d, SOL_SOCKET, SO_REUSEADDR, %lx, %d): %s", \
+		report_error("init_io_control(): setsockopt(%d, SOL_SOCKET, SO_REUSEADDR, %lx, %d): %s", \
 				tmp_sock, (unsigned long) &yes, (int) sizeof(yes), strerror(errno));
 		return(-1);
 	}
@@ -218,7 +218,7 @@ int init_io_controller(struct config_helper *config){
 	act.sa_handler = seppuku;
 
 	if(sigaction(SIGALRM, &act, NULL) == -1){
-		report_error("init_io_controller(): sigaction(%d, %lx, %p): %s", SIGALRM, (unsigned long) &act, NULL, strerror(errno));
+		report_error("init_io_control(): sigaction(%d, %lx, %p): %s", SIGALRM, (unsigned long) &act, NULL, strerror(errno));
 		return(-1);
 	}
 
@@ -231,30 +231,30 @@ int init_io_controller(struct config_helper *config){
 	report_log("Controller: Listening on %s.", config->ip_addr);
 
 	if(bind(tmp_sock, (struct sockaddr *) &name, sizeof(name)) == -1){
-		report_error("init_io_controller(): bind(%d, %lx, %d): %s", \
+		report_error("init_io_control(): bind(%d, %lx, %d): %s", \
 				tmp_sock, (unsigned long) &name, (int) sizeof(name), strerror(errno));
 		return(-1);
 	}
 
 	if(listen(tmp_sock, 1) == -1){
-		report_error("init_io_controller(): listen(%d, 1): %s", tmp_sock, strerror(errno));
+		report_error("init_io_control(): listen(%d, 1): %s", tmp_sock, strerror(errno));
 		return(-1);
 	}  
 
 	if((io->remote_fd = accept(tmp_sock, NULL, NULL)) == -1){
-		report_error("init_io_controller(): accept(%d, NULL, NULL): %s", tmp_sock, strerror(errno));
+		report_error("init_io_control(): accept(%d, NULL, NULL): %s", tmp_sock, strerror(errno));
 		return(-1);
 	}
 
 	if(close(tmp_sock) == -1){
-		report_error("init_io_controller(): close(%d): %s", tmp_sock, strerror(errno));
+		report_error("init_io_control(): close(%d): %s", tmp_sock, strerror(errno));
 		return(-1);
 	}
 
 	act.sa_handler = SIG_DFL;
 
 	if(sigaction(SIGALRM, &act, NULL) == -1){
-		report_error("init_io_controller(): sigaction(%d, %lx, %p): %s", SIGALRM, (unsigned long) &act, NULL, strerror(errno));
+		report_error("init_io_control(): sigaction(%d, %lx, %p): %s", SIGALRM, (unsigned long) &act, NULL, strerror(errno));
 		return(-1);
 	}
 
@@ -262,7 +262,7 @@ int init_io_controller(struct config_helper *config){
 
 	len = sizeof addr;
 	if(getpeername(io->remote_fd, (struct sockaddr*) &addr, &len) == -1){
-		report_error("init_io_controller(): getpeername(%d, %lx, %lx): %s", io->remote_fd, (unsigned long) &addr, &len, strerror(errno));
+		report_error("init_io_control(): getpeername(%d, %lx, %lx): %s", io->remote_fd, (unsigned long) &addr, &len, strerror(errno));
 	}
 
 	if(addr.ss_family == AF_INET){
@@ -315,10 +315,10 @@ int init_io_target(struct config_helper *config){
 	struct timespec req;
 
 
-	/* In the no ssl build, there is no difference between a target in bindshell mode, and a controller. */
+	/* In the no ssl build, there is no difference between a target in bindshell mode, and the control node for networking. */
 	/* As such, we'll just pass through to the other rather than repeat code. */
-	if(!io->controller && config->bindshell){
-		return(init_io_controller(config));
+	if(io->target && config->bindshell){
+		return(init_io_control(config));
 	}
 
 	/* Initialize the structures we will need. */

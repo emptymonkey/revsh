@@ -64,14 +64,14 @@ keys:
     $(OPENSSL) dhparam -C $(KEY_BITS) -noout >$(KEYS_DIR)/dh_params.c ; \
 		echo "DH *(*get_dh)() = &get_dh$(KEY_BITS);" >>$(KEYS_DIR)/dh_params.c ; \
   fi
-	if [ ! -e $(KEYS_DIR)/controller_key.pem ]; then \
-		$(OPENSSL) req -batch -newkey rsa:$(KEY_BITS) -nodes -x509 -days 36500 -keyout $(KEYS_DIR)/controller_key.pem -out $(KEYS_DIR)/controller_cert.pem ; \
+	if [ ! -e $(KEYS_DIR)/control_key.pem ]; then \
+		$(OPENSSL) req -batch -newkey rsa:$(KEY_BITS) -nodes -x509 -days 36500 -keyout $(KEYS_DIR)/control_key.pem -out $(KEYS_DIR)/control_cert.pem ; \
 	fi
 	if [ ! -e $(KEYS_DIR)/target_key.pem ]; then \
     $(OPENSSL) req -batch -newkey rsa:$(KEY_BITS) -nodes -x509 -days 36500 -keyout $(KEYS_DIR)/target_key.pem -out $(KEYS_DIR)/target_cert.pem ; \
 	fi
-	if [ ! -e $(KEYS_DIR)/controller_fingerprint.c ]; then \
-		./in_the_key_of_c -c $(KEYS_DIR)/controller_cert.pem -f >$(KEYS_DIR)/controller_fingerprint.c ; \
+	if [ ! -e $(KEYS_DIR)/control_fingerprint.c ]; then \
+		./in_the_key_of_c -c $(KEYS_DIR)/control_cert.pem -f >$(KEYS_DIR)/control_fingerprint.c ; \
 	fi
 	if [ ! -e $(KEYS_DIR)/target_key.c ]; then \
 		./in_the_key_of_c -k $(KEYS_DIR)/target_key.pem >$(KEYS_DIR)/target_key.c ; \

@@ -81,8 +81,8 @@
  ******************************************************************************/
 
 #define TARGET_CERT_FILE "target_cert.pem"
-#define CONTROLLER_CERT_FILE "controller_cert.pem"
-#define CONTROLLER_KEY_FILE "controller_key.pem"
+#define CONTROLLER_CERT_FILE "control_cert.pem"
+#define CONTROLLER_KEY_FILE "control_key.pem"
 
 /* Encryption definitions. */
 #define PLAINTEXT 0
@@ -194,7 +194,7 @@ int dummy_verify_callback(int preverify_ok, X509_STORE_CTX* ctx);
 #endif /* OPENSSL */
 
 /* io_nossl.c & io_ssl.c */
-int init_io_controller(struct config_helper *config);
+int init_io_control(struct config_helper *config);
 int init_io_target(struct config_helper *config);
 
 /* message.c */

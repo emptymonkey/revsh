@@ -99,7 +99,7 @@
  *
  *	Other headers used with DT_PROXY and DT_CONNECTION:
  *		- header_type				: unsigned short (network order)
- *		- header_origin			: unsigned long (network order)	:	Lists if controller or target is the owner.
+ *		- header_origin			: unsigned long (network order)	:	Lists if control or target is the owner.
  *		- header_id					: unsigned long (network order)	:	FD of the connection at it's origin.
  *		- header_proxy_type	: unsigned long (network order)	: Used during DT_PROXY_HT_CREATE to relay proxy type.
  * 
@@ -150,7 +150,7 @@
 /* DT_NOP: No Operation dummy message used for network keep-alive. */
 #define DT_NOP				6
 
-/* DT_ERROR: Used to send error reporting back to the controller for logging. */
+/* DT_ERROR: Used to send error reporting back to the control node for logging. */
 #define DT_ERROR			7
 
 /* DT_TAP and DT_TUN allow for forwarding raw ethernet frames and raw ip packets, respectfully, via a tun/tap device. */

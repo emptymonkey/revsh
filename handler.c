@@ -546,7 +546,7 @@ int handle_message_dt_connection(){
 			if(count == MESSAGE_DEPTH_MAX){
 				message->data_type = DT_CONNECTION;
 				message->header_type = DT_CONNECTION_HT_DORMANT;
-				message->header_origin = io->controller;
+				message->header_origin = io->target;
 				message->header_id = cur_connection_node->fd;
 				message->data_len = 0;
 
@@ -592,7 +592,7 @@ int handle_proxy_read(struct proxy_node *cur_proxy_node){
 	}
 	fcntl(cur_connection_node->fd, F_SETFL, O_NONBLOCK);
 
-	cur_connection_node->origin = io->controller;
+	cur_connection_node->origin = io->target;
 	cur_connection_node->id = cur_connection_node->fd;
 
 	if(cur_proxy_node->type == PROXY_DYNAMIC){
@@ -683,7 +683,7 @@ int handle_connection_write(struct connection_node *cur_connection_node){
 		if(!cur_connection_node->write_head){
 			message->data_type = DT_CONNECTION;
 			message->header_type = DT_CONNECTION_HT_ACTIVE;
-			message->header_origin = io->controller;
+			message->header_origin = io->target;
 			message->header_id = cur_connection_node->fd;
 			message->data_len = 0;
 
@@ -1038,7 +1038,7 @@ struct connection_node *handle_tun_tap_init(int ifr_flag){
 		report_error("handle_tun_tap_init(): open(%s, O_RDWR): %s", DEV_NET_TUN, strerror(errno));
 		return(NULL);
 	}
-	cur_connection_node->origin = io->controller;
+	cur_connection_node->origin = io->target;
 	cur_connection_node->id = cur_connection_node->fd;
 
 	memset(&ifr, 0, sizeof(ifr));
