@@ -42,11 +42,14 @@
 
 /* XXX
 
-- Test all the switches.
-- Test on freebsd.
-- Test nossl legacy build.
+- Add ~ escape support:
+	~.      Disconnect.
+	~#      List forwarded connections.
+	~?      Display a list of escape characters.
+	~V      Decrease the verbosity (LogLevel) when errors are being written to stderr.
+	~v      Increase the verbosity (LogLevel) when errors are being written to stderr.
 
-- Make static binary default.
+- Test all the switches.
 - Make a man page.
 - Use daily til Toorcon.
 
@@ -503,7 +506,9 @@ int main(int argc, char **argv){
 				clean_io(config);
 			}
 			retval = do_control(config);
+#ifdef OPENSSL
 			SSL_shutdown(io->ssl);
+#endif
 		} while(retval != -1 && config->keepalive);
 	}else{
 		do{
@@ -511,7 +516,9 @@ int main(int argc, char **argv){
 				clean_io(config);
 			}
 			retval = do_target(config);
+#ifdef OPENSSL
 			SSL_shutdown(io->ssl);
+#endif
 		} while(retval != -1 && config->keepalive);
 	}
 
@@ -588,6 +595,9 @@ void clean_io(struct config_helper *config){
 			io->ctx = NULL;
 		}
 	}
+#else
+	// nop reference to quiet compiler warnings in the compat build case.
+	config->nop += 0;
 #endif 
 
 	while(io->proxy_head){
