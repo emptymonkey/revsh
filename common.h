@@ -107,6 +107,11 @@
 #define SOCKS_V5_REPLY "\x05\x00\x00\x01\x00\x00\x00\x00\x00\x00"
 #define SOCKS_V5_REPLY_LEN 10
 
+/* States possible in the escape character processing state machine. */
+#define ESCAPE_NONE 0
+#define ESCAPE_CR 1
+#define ESCAPE_TILDE 2
+
 /* Maximum possible size of a socks request. */
 /*
 	 Max size cases:
@@ -155,6 +160,17 @@ void signal_handler(int signal);
 
 /* control.c */
 int do_control(struct config_helper *config);
+
+/* escape.c */
+int escape_check();
+int send_consumed();
+int message_send(int count);
+void message_shift(int count);
+int is_valid_escape(char c);
+int process_escape(char c);
+void list_valid_escapes();
+void list_connections();
+int forward_escape(char c);
 
 /* handler.c */
 int handle_signal_sigwinch();

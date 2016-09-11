@@ -209,4 +209,8 @@ struct io_helper {
 	// Used to track number of open fds. Select can't handle more than 1024.
 	unsigned int fd_count;
 
+	// Used to handle escape character ('~') interactions.
+	unsigned int escape_state;
+	unsigned int escape_depth;
+
 };

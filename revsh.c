@@ -49,8 +49,6 @@
 	~?	Display a list of escape characters.
 
 
-- Reverse io->controller to io->target.
-
 - Test all the switches.
 - Make a man page.
 - Use daily til Toorcon.
@@ -105,9 +103,9 @@ void usage(int ret_code){
 	fprintf(out_stream, "\nTARGET_OPTIONS:\n");
 	fprintf(out_stream, "\t-t SEC\t\tSet the connection timeout to SEC seconds.\t(Default is \"%d\".)\n", TIMEOUT);
 	fprintf(out_stream, "\t-r SEC1,SEC2\tSet the retry time to be SEC1 seconds, or\t(Default is \"%s\".)\n\t\t\tto be random in the range from SEC1 to SEC2.\n", RETRY);
-	fprintf(out_stream, "\t-k\t\tRun in keep-alive mode.\n\t\t\tTarget will never seppuku.\n");
 
 	fprintf(out_stream, "\nMUTUAL_OPTIONS:\n");
+	fprintf(out_stream, "\t-k\t\tRun in keep-alive mode.\n\t\t\tNode will neither exit normally, nor seppuku from timeout.\n");
 	fprintf(out_stream, "\t-L [LHOST:]LPORT:RHOST:RPORT\n");
 	fprintf(out_stream, "\t\t\tLocal forward connections from the local\n\t\t\tlistener at LHOST:LPORT to RHOST:RPORT.\n"); 
 	fprintf(out_stream, "\t-D [LHOST:]LPORT\n");
@@ -236,6 +234,8 @@ int main(int argc, char **argv){
 	io->child_sid = 0;
 	io->proxy_head = NULL;
 	io->proxy_tail = NULL;
+	io->escape_state = ESCAPE_NONE;
+	io->escape_depth = 0;
 
 	config->interactive = 1;
 	config->shell = NULL;
@@ -509,7 +509,9 @@ int main(int argc, char **argv){
 			}
 			retval = do_control(config);
 #ifdef OPENSSL
-			SSL_shutdown(io->ssl);
+			if(io->ssl){
+				SSL_shutdown(io->ssl);
+			}
 #endif
 		} while(retval != -1 && config->keepalive);
 	}else{
@@ -519,7 +521,9 @@ int main(int argc, char **argv){
 			}
 			retval = do_target(config);
 #ifdef OPENSSL
-			SSL_shutdown(io->ssl);
+			if(io->ssl){
+				SSL_shutdown(io->ssl);
+			}
 #endif
 		} while(retval != -1 && config->keepalive);
 	}

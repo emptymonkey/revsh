@@ -129,9 +129,23 @@ int handle_local_read(){
 		if(!message->data_len){
 			return(-2);
 		}else{
-			if((retval = message_push()) == -1){
-				report_error("handle_local_read(): message_push(): %s", strerror(errno));
-				return(-1);
+
+			if(!io->target){
+				if((retval = escape_check()) < 0){
+					if(retval == -1){
+						report_error("handle_local_read(): escape_check(): %s", strerror(errno));
+					}
+					fprintf(stderr, "\rDEBUG: handle_local_read(): retval: %d\n", retval);
+					return(retval);
+				}
+			}
+
+			// Check again for data_len, because we may have consumed the characters in the buffer during the escape_check().
+			if(message->data_len){
+				if((retval = message_push()) == -1){
+					report_error("handle_local_read(): message_push(): %s", strerror(errno));
+					return(-1);
+				}
 			}
 		}
 	}
@@ -247,7 +261,7 @@ int handle_message_dt_proxy_ht_destroy(){
 
 	struct connection_node *cur_connection_node;
 	unsigned short header_errno;
-	
+
 
 	memcpy(&header_errno, message->data, sizeof(short));	
 	header_errno = ntohs(header_errno);
