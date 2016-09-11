@@ -135,7 +135,6 @@ int handle_local_read(){
 					if(retval == -1){
 						report_error("handle_local_read(): escape_check(): %s", strerror(errno));
 					}
-					fprintf(stderr, "\rDEBUG: handle_local_read(): retval: %d\n", retval);
 					return(retval);
 				}
 			}
