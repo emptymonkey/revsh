@@ -153,10 +153,6 @@
 /* DT_ERROR: Used to send error reporting back to the control node for logging. */
 #define DT_ERROR			7
 
-/* DT_TAP and DT_TUN allow for forwarding raw ethernet frames and raw ip packets, respectfully, via a tun/tap device. */
-#define DT_TUN				8
-#define DT_TAP				9
-
 /* 
 	 Other protocol constants used in messaging.
  */

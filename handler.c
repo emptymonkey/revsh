@@ -13,7 +13,6 @@
 #include "common.h"
 
 
-
 /******************************************************************************
  *
  * handle_signal_sigwinch()
@@ -124,6 +123,7 @@ int handle_local_read(){
 
 	}else{
 
+    io->tty_io_written += retval;
 		message->data_len = retval;
 
 		if(!message->data_len){
@@ -182,6 +182,8 @@ int handle_message_dt_tty(){
 			return(-1);
 		}
 	}
+
+	io->tty_io_read += retval;
 
 	if(retval != message->data_len){
 		new_message = message_helper_create(message->data + retval, message->data_len - retval, io->message_data_size);
@@ -535,6 +537,8 @@ int handle_message_dt_connection(){
 		retval = 0;
 	}
 
+	cur_connection_node->io_read = retval;
+
 	if(retval != message->data_len){
 		new_message = message_helper_create(message->data + retval, message->data_len - retval, io->message_data_size);
 
@@ -746,6 +750,7 @@ int handle_connection_read(struct connection_node *cur_connection_node){
 
 	}
 
+	cur_connection_node->io_written = retval;
 	message->data_len = retval;
 
 	if((retval = message_push()) == -1){
@@ -894,6 +899,8 @@ int handle_connection_socks_init(struct connection_node *cur_connection_node){
 				return(-1);
 			}
 		}
+
+		cur_connection_node->io_written = retval;
 	}
 
 	return(0);

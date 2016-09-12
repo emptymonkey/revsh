@@ -181,6 +181,58 @@ Note: the remote_read_*() and remote_write_*() functions are called through
 		    log an even that isn't really an error. (e.g. successful connections)
 
 
+# Escape Sequence Processing
+
+- escape.c
+	-- escape_check()
+		--- This is the primary function for processing escape sequences from the
+		    tty. It is semi-recursive in order to handle potential escape sequences
+		    surrounded by normal non-escape related input. It handles a chunk of
+		    data appropriately, regardless of message or escape data, then shifts
+		    the remaining message buffer, then calling itself to handle to
+		    remaining message data.
+	-- send_consumed()
+		--- When an escape sequence is processed, the individual characters are
+		    "consumed" (recorded in the state machine, but overwritten and ignored).
+		    If we then discover the sequence being processed isn't a valid escape
+		    sequence, then we must send the consumed characters as a message for
+		    processing. This is the function that handles that case. When it's
+		    time to handle the multiple '~' character case, we just decrement
+		    the tilde count by one, and send_consumed() to do the right thing.
+		    The command char gets shifted over to the beginning of the message
+		    and is handled when it all falls through to the normal data case.
+	-- message_send()
+		--- This does a normal message_push, but only sends the first subset of
+		    of the message, up to a spot that looks like the start of an escape
+		    sequence.
+	-- message_shift()
+		--- This function just shifts the array data in message over towards the
+		    beginning of the array. This is good for consuming escape characters
+		    seen, escape messages already processed, or non-escape characters 
+		    that we have already processed with message_send(). This ensures that
+		    when we call escape_check() recursively, it's always able to start
+		    from the beginning of the message.
+	-- is_valid_escape()
+		--- Checks if the character handed to represents a valid escape character,
+		    not including \r or ~. E.g. "\r~." would be processed by asking if
+		    '.' is_valid_escape(), which of course it is.
+	-- process_escape()
+		--- If the command is_valid_escape(), then next we process_escape(). This
+		    is just a wrapper to call the correct command function associated with
+		    that escape character.
+	-- list_valid_escapes()
+		-- The command character '?' results in printing the usage info for the
+		   valid escape commands / characters. This function processes that 
+		   command.
+	-- list_connections()
+		-- The command character '#' results in printing the connection info for
+		   the current active connections. This function processes that command.
+
+Note: I have kept the supported escape sequences to be a strict subset of the
+      ssh escape sequences. These should, in theory, always interact well 
+      with each other.
+
+
 # Misc. Headers
 
 - common.h

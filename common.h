@@ -170,7 +170,6 @@ int is_valid_escape(char c);
 int process_escape(char c);
 void list_valid_escapes();
 void list_connections();
-int forward_escape(char c);
 
 /* handler.c */
 int handle_signal_sigwinch();

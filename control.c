@@ -220,6 +220,8 @@ int do_control(struct config_helper *config){
 			}
 		}
 
+		io->tty_io_written += message->data_len;
+
 		close(rc_fd);
 	}
 

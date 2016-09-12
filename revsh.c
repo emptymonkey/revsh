@@ -42,13 +42,6 @@
 
 /* XXX
 
-- Add ~ escape support:
-	~.	Disconnect.
-	~#	List forwarded connections.
-	  		Add bytes_read and bytes_written to connection nodes as unsigned longs. Report with ~#.
-	~?	Display a list of escape characters.
-
-
 - Test all the switches.
 - Make a man page.
 - Use daily til Toorcon.
@@ -583,6 +576,9 @@ void clean_io(struct config_helper *config){
 		message_helper_destroy(message_ptr);
 	}
 
+	io->tty_io_read = 0;
+	io->tty_io_written = 0;
+
 #ifdef OPENSSL
 	if(config->encryption){
 
@@ -623,6 +619,7 @@ void clean_io(struct config_helper *config){
 	}
 
 	io->fd_count = 0;
+
 }
 
 

@@ -129,6 +129,9 @@ struct connection_node {
 	// Current state of the connecction. (E.g. CON_EINPROGRESS, CON_ACTIVE, etc.)
 	unsigned int state;
 
+	unsigned long io_read;
+	unsigned long io_written;
+
 	// This will allow for write queues.
 	//  Note, no write_tail element. Iterate through every time you want to add an element, thus calculating the message depth dynamically.
 	//  If MAX_MESSAGE_DEPTH is hit, tell the remote node to stop listening its associated fd.
@@ -188,6 +191,9 @@ struct io_helper {
 
 	// this message_helper node is used for the write buffer queue for the tty/shell.
 	struct message_helper *tty_write_head;
+
+	unsigned long tty_io_read;
+	unsigned long tty_io_written;
 
 #ifdef OPENSSL
 	BIO *connect;

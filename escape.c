@@ -44,24 +44,16 @@
  *
  ******************************************************************************/
 
-// XXX return -2 for the '.' exit case.
-// XXX If message_depth > 1 for a valid sequence, forward it off. Don't process locally. 
-
-
 int escape_check(){
 
 	int i, retval;
 
-	//	fprintf(stderr, "\n\rDEBUG: escape_check(): message->data_len: %d\n", message->data_len);
-	//	fprintf(stderr, "\rDEBUG: escape_check(): io->escape_state: %d\n", io->escape_state);
 
 	for(i = 0; i < message->data_len; i++){
 
 		if(io->escape_state == ESCAPE_NONE){
-			//		fprintf(stderr, "\rDEBUG: ESCAPE_NONE\n");
 
 			if(message->data[i] == '\r'){
-				//				fprintf(stderr, "\rDEBUG: ESCAPE_NONE: \\r\n");
 				if(message_send(i + 1) == -1){
 					report_error("escape_check(): message_send(%d): %s", i + 1, strerror(errno));
 					return(-1);
@@ -72,21 +64,17 @@ int escape_check(){
 			}
 
 		}else if(io->escape_state == ESCAPE_CR){
-			//		fprintf(stderr, "\rDEBUG: ESCAPE_CR\n");
 
 			if(message->data[i] == '~'){
-				//				fprintf(stderr, "\rDEBUG: ESCAPE_CR: ~\n");
 				io->escape_state = ESCAPE_TILDE;
 				io->escape_depth++;
 				if(i + 1 == message->data_len){
 					message_shift(i + 1);
 				}
 			}else{
-				//				fprintf(stderr, "\rDEBUG: ESCAPE_CR: !~: %c\n", message->data[i]);
 
 				// Check case when enter is hit multiple times.
 				if(message->data[i] == '\r'){
-					//					fprintf(stderr, "\rDEBUG: ESCAPE_NONE: \\r\n");
 					if(message_send(i + 1) == -1){
 						report_error("escape_check(): message_send(%d): %s", i + 1, strerror(errno));
 						return(-1);
@@ -101,45 +89,44 @@ int escape_check(){
 			}
 
 		}else if(io->escape_state == ESCAPE_TILDE){
-			//			fprintf(stderr, "\rDEBUG: ESCAPE_TILDE\n");
 
 			if(message->data[i] == '~'){
-				//				fprintf(stderr, "\rDEBUG: ESCAPE_TILDE: ~\n");
 				io->escape_depth++;
 				if(i + 1 == message->data_len){
 					message_shift(i + 1);
 				}
 
 			}else{
-				//				fprintf(stderr, "\rDEBUG: ESCAPE_TILDE: !~: %c\n", message->data[i]);
 				if(is_valid_escape(message->data[i])){
-					//					fprintf(stderr, "\rDEBUG: ESCAPE_TILDE: !~: is_valid_escape()\n");
 
 					if(io->escape_depth == 1){
-						//						fprintf(stderr, "\rDEBUG: ESCAPE_TILDE: !~: is_valid_escape(): io->escape_depth == 1\n");
+
 						if((retval = process_escape(message->data[i])) < 0){
 							if(retval == -1){
 								report_error("escape_check(): forward_escape('%c'): %s", message->data[i], strerror(errno));
 							}
-//							fprintf(stderr, "\rDEBUG: escape_check(): retval < 0: %d\n", retval);
 							return(retval);
 						}
-//						fprintf(stderr, "\rDEBUG: escape_check(): retval: %d\n", retval);
 
+						message_shift(i + 1);
+						io->escape_state = ESCAPE_NONE;
+						io->escape_depth = 0;
+						return(escape_check()); 
 					}else{
-						//						fprintf(stderr, "\rDEBUG: ESCAPE_TILDE: !~: is_valid_escape(): io->escape_depth != 1\n");
-						if(forward_escape(message->data[i]) == -1){
-							report_error("escape_check(): forward_escape('%c'): %s", message->data[i], strerror(errno));
+
+						message_shift(i);
+						io->escape_depth--;
+
+						if(send_consumed() == -1){
+							report_error("escape_check(): send_consumed(): %s", strerror(errno));
 							return(-1);
 						}
+						io->escape_state = ESCAPE_NONE;
+						io->escape_depth = 0;
+						return(escape_check()); 
 					}
-					message_shift(i + 1);
-					io->escape_state = ESCAPE_NONE;
-					io->escape_depth = 0;
-					return(escape_check()); 
 
 				}else{
-					//					fprintf(stderr, "\rDEBUG: ESCAPE_TILDE: !~: !is_valid_escape()\n");
 					message_shift(i);
 					if(send_consumed() == -1){
 						report_error("escape_check(): send_consumed(): %s", strerror(errno));
@@ -256,28 +243,20 @@ int is_valid_escape(char c){
 	char valid_escapes[] = VALID_ESCAPE_ACTIONS;
 	char *escape_ptr = valid_escapes;
 
-//	fprintf(stderr, "\rDEBUG: is_valid_escape(): start\n");
-//	fprintf(stderr, "\rDEBUG: is_valid_escape(): c: 0x%02x\n", c);
 
 	while(*escape_ptr){
-//		fprintf(stderr, "\rDEBUG: is_valid_escape(): *escape_ptr: %c\n", *escape_ptr);
 		if(c == *escape_ptr){
-//			fprintf(stderr, "\rDEBUG: is_valid_escape(): MATCH!\n");
 			return(1);
 		}
 		escape_ptr++;
 	}
 
-//	fprintf(stderr, "\rDEBUG: is_valid_escape(): start\n");
 	return(0);	
 }
 
 
 
 int process_escape(char c){
-
-//	fprintf(stderr, "\rDEBUG: process_escape(): start\n");
-//	fprintf(stderr, "\rDEBUG: process_escape(): c: 0x%02x\n", c);
 
 	switch(c){
 
@@ -293,26 +272,46 @@ int process_escape(char c){
 			break;
 
 		default:
-			//			report_error("process_escape(): Unknown escape action \'%c\'. Maybe it was added to the is_valid_escape() map, but forgot to add a process_escape() case to handle it?!\n", c);
-			report_error("process_escape(): Unknown escape action. Should not be here.");
+			report_error("process_escape(): Unknown escape action for character w/hex value 0x%02x. Should not be here.", c);
 			return(-1);
 	}
 
-//	fprintf(stderr, "\rDEBUG: process_escape(): stop\n");
 	return(0);
 }
 
-
 void list_connections(){
-	fprintf(stderr, "\r\n\nDEBUG: list_connections(): Do the needful!\n");
+
+  struct connection_node *cur_connection_node;
+
+	printf("\n\n");
+	printf("\rActive revsh connections:\n");
+	printf("\n");
+	printf("\rID\tRead\t\tWritten\t\tNAME\n");
+
+	printf("\r%d-%d\t%ld\t\t%ld\t\tTerminal\n", io->target, io->remote_fd,\
+			io->tty_io_read, io->tty_io_written);
+
+	cur_connection_node = io->connection_head;
+	while(cur_connection_node){
+
+		printf("\r%d-%d\t%ld\t\t%ld\t\t%s\n", cur_connection_node->origin, cur_connection_node->id,\
+				cur_connection_node->io_read, cur_connection_node->io_written, cur_connection_node->rhost_rport);
+
+		cur_connection_node = cur_connection_node->next;
+	}
+
+	printf("\r\n");
+
 }
 
 void list_valid_escapes(){
-	fprintf(stderr, "\r\n\nDEBUG: list_valid_escapes(): Do the needful!\n");
-}
 
-int forward_escape(char c){
+	printf("\n\n");
+	printf("\rSupported revsh escape sequences:\n");
+	printf("\n");
+	printf("\r~.\tExit. (Good for killing an unresponsive session.)\n");
+	printf("\r~#\tList active connections with usage statistics.\n");
+	printf("\r~?\tList the supported revsh escape sequences.\n");
+	printf("\r\n");
 
-	fprintf(stderr, "\r\n\nDEBUG: forward_escape(): c: %c\n", c);
-	return(0);
 }
