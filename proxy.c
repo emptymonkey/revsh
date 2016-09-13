@@ -41,12 +41,11 @@ struct proxy_node *proxy_node_new(char *proxy_string, int proxy_type){
 	} 
 
 	// Now let's start setting up the nodes.
-	// free() called in io_clean().
-	if((new_node = (struct proxy_node *) calloc(1, sizeof(struct proxy_node))) == NULL){
-		report_error("proxy_node_new(): calloc(1, sizeof(struct proxy_node)): %s", strerror(errno));
+	if((new_node = proxy_node_create()) == NULL){
+		report_error("proxy_node_new(): proxy_node_create(): %s", strerror(errno));
 		return(NULL);
 	}
-	new_node->type = proxy_type;	
+	new_node->proxy_type = proxy_type;	
 
 	// free() called in io_clean().
 	if((new_node->mem_ptr = (char *) calloc(strlen(proxy_string) + 1, sizeof(char))) == NULL){
@@ -100,6 +99,9 @@ struct proxy_node *proxy_node_new(char *proxy_string, int proxy_type){
 		goto CLEANUP;
 	}
 
+	new_node->orig_request = proxy_string;
+	new_node->origin = io->target;
+	new_node->id = new_node->fd;
 	return(new_node);
 
 CLEANUP:
@@ -257,6 +259,114 @@ int proxy_connect(char *rhost_rport){
 	}
 
 	return(connector);
+}
+
+
+/******************************************************************************
+ *
+ *	proxy_node_create()
+ *
+ *	Inputs: None, though we will heavily utilize the global io struct.
+ *
+ *	Outputs: A pointer to the new proxy_node.
+ *
+ *	Purpose: Initialize a new proxy node, and put it into it's place in the linked list.
+ *
+ ******************************************************************************/
+struct proxy_node *proxy_node_create(){
+
+	struct proxy_node *cur_proxy_node, *tmp_proxy_node;
+
+	// free() called in proxy_node_delete().
+	if((cur_proxy_node = (struct proxy_node *) calloc(1, sizeof(struct proxy_node))) == NULL){
+		report_error("proxy_node_create(): calloc(1, %d): %s", (int) sizeof(struct proxy_node), strerror(errno));
+		return(NULL);
+	}
+
+	tmp_proxy_node = io->proxy_tail;
+	if(!tmp_proxy_node){
+		io->proxy_head = cur_proxy_node;
+		io->proxy_tail = cur_proxy_node;
+	}else{
+		tmp_proxy_node->next = cur_proxy_node;
+		cur_proxy_node->prev = tmp_proxy_node;
+		io->proxy_tail = cur_proxy_node;
+	}
+
+	io->fd_count++;
+	return(cur_proxy_node);
+}
+
+
+/******************************************************************************
+ *
+ *	proxy_node_delete()
+ *
+ *	Inputs: A pointer to the proxy_node we wish to destroy.
+ *
+ *	Outputs: None.
+ *
+ *	Purpose: Destroy a proxy node and remove it froms the linked list.
+ *
+ ******************************************************************************/
+void proxy_node_delete(struct proxy_node *cur_proxy_node){
+
+	if(cur_proxy_node == io->proxy_head){
+		io->proxy_head = cur_proxy_node->next;
+	}
+	if(cur_proxy_node == io->proxy_tail){
+		io->proxy_tail = cur_proxy_node->prev;
+	}
+	if(cur_proxy_node->prev){
+		cur_proxy_node->prev->next = cur_proxy_node->next;
+	}
+	if(cur_proxy_node->next){
+		cur_proxy_node->next->prev = cur_proxy_node->prev;
+	}
+
+	if(cur_proxy_node->origin == io->target){
+
+		if(cur_proxy_node->fd){
+			close(cur_proxy_node->fd);
+		}
+		io->fd_count--;
+
+		if(cur_proxy_node->mem_ptr){
+			free(cur_proxy_node->mem_ptr);
+		}
+
+	}else{
+		free(cur_proxy_node->orig_request);
+	}
+
+	if(cur_proxy_node){
+		free(cur_proxy_node);
+	}
+}
+
+
+/******************************************************************************
+ *
+ *	proxy_node_find()
+ *
+ *	Inputs: The tuple of (origin, id) that represents the unique id of a proxy.
+ *
+ *	Outputs: The pointer to the matching proxy_node.
+ *
+ *	Purpose: Find the matching proxy_node.
+ *
+ ******************************************************************************/
+struct proxy_node *proxy_node_find(unsigned short origin, unsigned short id){
+	struct proxy_node *tmp_proxy_node;
+
+	tmp_proxy_node = io->proxy_head;
+	while(tmp_proxy_node){
+		if((tmp_proxy_node->origin == origin) && (tmp_proxy_node->id == id)){
+			return(tmp_proxy_node);
+		}
+		tmp_proxy_node = tmp_proxy_node->next;
+	}
+	return(NULL);
 }
 
 
@@ -670,11 +780,12 @@ char *addr_to_string(int atype, char *addr, char *port, int len){
 
 	// strlen("255.255.255.255:65535") -> 21
 	int string_len = 21;
+	// strlen(":65535") -> 6
+	int port_len = 6;
 
 	if(atype == 0x03){
 		string_len = len;
-		// strlen(":65535") -> 6
-		string_len += 6;
+		string_len += port_len;
 
 	}else if(atype == 0x04){
 		// strlen("[ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff]:65535") -> 47 
@@ -689,7 +800,8 @@ char *addr_to_string(int atype, char *addr, char *port, int len){
 
 	string_len++;
 	if(atype == 0x03){
-		snprintf(ptr, string_len, "%s:%d", addr, port_num);
+		memcpy(ptr, addr, len);
+		snprintf(ptr + len, port_len, ":%d", port_num);
 	}else if(atype == 0x04){
 		snprintf(ptr, string_len, "[%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x]:%d", \
 				(unsigned char) addr[0], (unsigned char) addr[1], (unsigned char) addr[2], (unsigned char) addr[3], \
@@ -703,3 +815,5 @@ char *addr_to_string(int atype, char *addr, char *port, int len){
 
 	return(ptr);
 }
+
+

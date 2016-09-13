@@ -6,7 +6,8 @@
 
 /*  Default address, so you can bake in your own C2. */
 /*  Format is "ADDRESS:PORT". */
-#define ADDRESS "0.0.0.0:2200"
+#define CONTROL_ADDRESS "0.0.0.0"
+#define CONTROL_PORT "2200"
 
 /*  Default socks proxy listener port */
 #define	SOCKS_LISTENER	"2280"
@@ -38,8 +39,8 @@
 #define TARGET_CIPHER EDH_CIPHER ":" ADH_CIPHER
 #define CONTROLLER_CIPHER "!" ADH_CIPHER ":" EDH_CIPHER
 
-/* Comment out to disable logging on the c2. */
-#define LOG_FILE	REVSH_DIR "log"
+/* Uncomment this to enable logging on the c2. */
+//#define LOG_FILE	REVSH_DIR "log"
 
 /* If defined, use the RETRY values above to also time the sending a keep-alive NOP message. */
 /* In some environments, this will ensure the networking gear doesn't kill the connection for lack of activity. */

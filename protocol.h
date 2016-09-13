@@ -9,6 +9,10 @@
  *
  */
 
+// These are exchanged and used in reporting, but as it's the first protocol, everything is interoperable!!
+#define PROTOCOL_MAJOR_VERSION	1
+#define PROTOCOL_MINOR_VERSION	0
+
 /**********************************************************************************************************************
  *
  * Network connection:
@@ -99,9 +103,10 @@
  *
  *	Other headers used with DT_PROXY and DT_CONNECTION:
  *		- header_type				: unsigned short (network order)
- *		- header_origin			: unsigned long (network order)	:	Lists if control or target is the owner.
- *		- header_id					: unsigned long (network order)	:	FD of the connection at it's origin.
- *		- header_proxy_type	: unsigned long (network order)	: Used during DT_PROXY_HT_CREATE to relay proxy type.
+ *		- header_origin			: unsigned short (network order)	:	Lists if control or target is the owner.
+ *		- header_id					: unsigned short (network order)	:	FD of the connection at it's origin.
+ *		- header_proxy_type	: unsigned short (network order)	: Used during DT_PROXY_HT_CREATE, DT_PROXY_HT_REPORT, 
+ *                                                            and DT_CONNECTION_HT_CREATE to relay proxy type.
  * 
  *		Note: (header_origin, header_id) together form a tuple that acts as a unique identifier for the connection this
  *          message refers to.
@@ -119,39 +124,43 @@
 
 /* Data Types */
 /* DT_INIT: Initialization sequence data. */
-#define DT_INIT				1
+#define DT_INIT				0
 
 /* DT_TTY: TTY interaction data. */
 /* This message type is always given priority because, despite added functionality, we are still a shell at heart. */
 /* This will also be the data type used for passing data in the non-interactive mode. */
-#define DT_TTY				2
+#define DT_TTY				1
 
 /* DT_WINRESIZE: Window re-size event data. */
-#define DT_WINRESIZE	3
+#define DT_WINRESIZE	2
 
 /* DT_PROXY: Proxy meta-data. (e.g. setup, teardown, etc.) */
-#define DT_PROXY			4
-#define DT_PROXY_HT_CREATE				1
-#define DT_PROXY_HT_DESTROY				2
-#define DT_PROXY_HT_RESPONSE			3
+#define DT_PROXY			3
+#define DT_PROXY_HT_CREATE				0
+#define DT_PROXY_HT_DESTROY				1
+
+// Used for sending data about listening proxies to the control node for reporting.
+#define DT_PROXY_HT_REPORT				2
 
 /* DT_CONNECTION: Information related to established connections. */
-#define DT_CONNECTION	5
+#define DT_CONNECTION	4
+#define DT_CONNECTION_HT_CREATE				0
+#define DT_CONNECTION_HT_DESTROY			1
 /* Normal data to be brokered back and forth. */
-#define DT_CONNECTION_HT_DATA			0
+#define DT_CONNECTION_HT_DATA			2
 /*
 	 DT_CONNECTION_HT_DORMANT is used when a fd would block for writing, and our message queue is getting deep.
 	 Tells the other side to stop reading from the associated remote fd until otherwise notified. Reset to normal
 	 with DT_CONNECTION_HT_ACTIVE once the message write queue for this connection is empty. 
  */
-#define DT_CONNECTION_HT_DORMANT	1
-#define DT_CONNECTION_HT_ACTIVE		2
+#define DT_CONNECTION_HT_DORMANT	3
+#define DT_CONNECTION_HT_ACTIVE		4
 
 /* DT_NOP: No Operation dummy message used for network keep-alive. */
-#define DT_NOP				6
+#define DT_NOP				5
 
 /* DT_ERROR: Used to send error reporting back to the control node for logging. */
-#define DT_ERROR			7
+#define DT_ERROR			6
 
 /* 
 	 Other protocol constants used in messaging.
@@ -162,4 +171,13 @@
 #define PROXY_DYNAMIC	1
 #define PROXY_TUN			2
 #define PROXY_TAP			3
+#define PROXY_FILE		4
+
+/* String representations of the proxy types above for reporting purposes. */
+#define PROXY_STATIC_STRING "Static"
+#define PROXY_DYNAMIC_STRING "Dynamic"
+#define PROXY_TUN_STRING "Tun"
+#define PROXY_TAP_STRING "Tap"
+#define PROXY_FILE_STRING "File"
+
 

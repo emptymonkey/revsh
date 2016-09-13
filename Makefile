@@ -10,6 +10,8 @@ OPENSSL = /usr/bin/openssl
 CC = /usr/bin/cc
 STRIP = /usr/bin/strip
 
+INSTALL_BIN = /usr/local/bin
+
 
 ########################################################################################################################
 # Build specifications. Pick one and uncomment.
@@ -122,9 +124,10 @@ install:
 	else \
 		cp -r $(KEYS_DIR) $(HOME)/.revsh ; \
 		cp revsh $(HOME)/.revsh/$(KEYS_DIR) ; \
-		if [ ! -e $(HOME)/.revsh/revsh ]; then \
-			ln -s $(HOME)/.revsh/$(KEYS_DIR)/revsh $(HOME)/.revsh/revsh ; \
+		if [ ! -e $(INSTALL_BIN) ]; then \
+			echo "\nERROR: $(INSTALL_BIN) does not exist!" ; \
 		fi ; \
+		cp revsh $(INSTALL_BIN) ; \
 		if [ ! -e $(HOME)/.revsh/rc ]; then \
 			cp rc $(HOME)/.revsh/ ; \
 		fi \

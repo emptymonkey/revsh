@@ -246,10 +246,44 @@ int handle_message_dt_winresize(){
 	return(0);
 }
 
+int handle_message_dt_proxy_ht_destroy(){
+	// XXX stub
+//	fprintf(stderr, "\rDEBUG: handle_message_dt_proxy_ht_destroy()\n");
+	return(0);
+}
+
+int handle_message_dt_proxy_ht_create(){
+	// XXX stub
+//	fprintf(stderr, "\rDEBUG: handle_message_dt_proxy_ht_create()\n");
+	return(0);
+}
+
+int handle_message_dt_proxy_ht_report(){
+	
+	struct proxy_node *cur_proxy_node;
+
+  if((cur_proxy_node = proxy_node_create()) == NULL){
+    report_error("proxy_node_new(): proxy_node_create(): %s", strerror(errno));
+    return(-1);
+  }
+  
+	cur_proxy_node->origin = message->header_origin;
+	cur_proxy_node->id = message->header_id;
+	cur_proxy_node->proxy_type = message->header_proxy_type;
+
+	// free() called in proxy_node_destroy()
+	if((cur_proxy_node->orig_request = (char *) calloc(message->data_len + 1, sizeof(char))) == NULL){
+		report_error("handle_message_dt_proxy_ht_report(): calloc(%d, %d): %s", message->data_len + 1, (int) sizeof(char), strerror(errno));
+		return(-1);
+	}
+	memcpy(cur_proxy_node->orig_request, message->data, message->data_len);
+
+	return(0);
+}
 
 /******************************************************************************
  *
- * handle_message_dt_proxy_ht_destroy()
+ * handle_message_dt_connection_ht_destroy()
  *
  * Inputs: None, but we will leverage the global io struct.
  * Outputs: 0 for success. -1 on fatal error.
@@ -258,17 +292,18 @@ int handle_message_dt_winresize(){
  *   remote node, and it is a request to destroy an existing connection.
  *
  ******************************************************************************/
-int handle_message_dt_proxy_ht_destroy(){
+int handle_message_dt_connection_ht_destroy(){
 
 	struct connection_node *cur_connection_node;
 	unsigned short header_errno;
 
+	//	fprintf(stderr, "\rDEBUG: handle_message_dt_connection_ht_destroy()\n");
 
 	memcpy(&header_errno, message->data, sizeof(short));	
 	header_errno = ntohs(header_errno);
 	if((cur_connection_node = connection_node_find(message->header_origin, message->header_id))){
 		if(verbose && header_errno){
-			fprintf(stderr, "\rhandle_message_dt_proxy_ht_destroy(): Connection %s closed: %s\n", cur_connection_node->rhost_rport, strerror(header_errno));
+			fprintf(stderr, "\rhandle_message_dt_connection_ht_destroy(): Connection %s closed: %s\n", cur_connection_node->rhost_rport, strerror(header_errno));
 		}
 
 		connection_node_delete(cur_connection_node);
@@ -280,7 +315,7 @@ int handle_message_dt_proxy_ht_destroy(){
 
 /******************************************************************************
  *
- * handle_message_dt_proxy_ht_create()
+ * handle_message_dt_connection_ht_create()
  *
  * Inputs: None, but we will leverage the global io struct.
  * Outputs: 0 for success. -1 on fatal error. -2 on non-fatal error.
@@ -289,10 +324,12 @@ int handle_message_dt_proxy_ht_destroy(){
  *   remote node, and it is a request to create a new connection.
  *
  ******************************************************************************/
-int handle_message_dt_proxy_ht_create(){
+int handle_message_dt_connection_ht_create(){
 
 	int retval;
 	struct connection_node *cur_connection_node;
+
+	//	fprintf(stderr, "\rDEBUG: handle_message_dt_connection_ht_create()\n");
 
 	if((cur_connection_node = connection_node_find(message->header_origin, message->header_id))){
 		connection_node_delete(cur_connection_node);
@@ -302,16 +339,16 @@ int handle_message_dt_proxy_ht_create(){
 	// Handle TUN / TAP case first.
 	if(message->header_proxy_type == PROXY_TUN || message->header_proxy_type == PROXY_TAP){
 
-		if((retval = handle_message_dt_proxy_ht_create_tun_tap()) == -1){
-			report_error("handle_message_dt_proxy_ht_create(): handle_message_dt_proxy_ht_create_tun_tap(): %s", strerror(errno));
+		if((retval = handle_message_dt_connection_ht_create_tun_tap()) == -1){
+			report_error("handle_message_dt_connection_ht_create(): handle_message_dt_connection_ht_create_tun_tap(): %s", strerror(errno));
 		}
 
 		if(retval == -2){
 			if(verbose > 2){
-				fprintf(stderr, "\rhandle_message_dt_proxy_ht_create(): Unable to create tun/tap interface.\n");
+				fprintf(stderr, "\rhandle_message_dt_connection_ht_create(): Unable to create tun/tap interface.\n");
 			}
-			if(handle_send_dt_proxy_ht_destroy(message->header_origin, message->header_id, ENODEV) == -1){
-				report_error("handle_message_dt_proxy_ht_create(): handle_send_dt_proxy_ht_destroy(%d, %d, ENODEV): %s", message->header_origin, message->header_id, strerror(errno));
+			if(handle_send_dt_connection_ht_destroy(message->header_origin, message->header_id, ENODEV) == -1){
+				report_error("handle_message_dt_connection_ht_create(): handle_send_dt_connection_ht_destroy(%d, %d, ENODEV): %s", message->header_origin, message->header_id, strerror(errno));
 				return(-1);
 			}
 
@@ -322,7 +359,7 @@ int handle_message_dt_proxy_ht_create(){
 	// Remaining cases are a traditional proxy, either dynamic or static.
 
 	if((cur_connection_node = connection_node_create()) == NULL){
-		report_error("handle_message_dt_proxy_ht_create(): connection_node_create(): %s", strerror(errno));
+		report_error("handle_message_dt_connection_ht_create(): connection_node_create(): %s", strerror(errno));
 		return(-1);
 	}
 
@@ -332,7 +369,7 @@ int handle_message_dt_proxy_ht_create(){
 
 	// free() called in connection_node_delete().
 	if((cur_connection_node->rhost_rport = (char *) calloc(message->data_len + 1, sizeof(char))) == NULL){
-		report_error("handle_message_dt_proxy_ht_create(): calloc(%d, %d): %s", message->data_len + 1, (int) sizeof(char), strerror(errno));
+		report_error("handle_message_dt_connection_ht_create(): calloc(%d, %d): %s", message->data_len + 1, (int) sizeof(char), strerror(errno));
 		return(-1);
 	}
 
@@ -346,7 +383,7 @@ int handle_message_dt_proxy_ht_create(){
 
 		if(cur_connection_node->fd == -1){
 			if(verbose){
-				report_error("handle_message_dt_proxy_ht_create(): proxy_connect(\"%s\"): %s\n", cur_connection_node->rhost_rport, strerror(errno));
+				report_error("handle_message_dt_connection_ht_create(): proxy_connect(\"%s\"): %s\n", cur_connection_node->rhost_rport, strerror(errno));
 				return(-1);
 			}
 		}
@@ -355,8 +392,8 @@ int handle_message_dt_proxy_ht_create(){
 			fprintf(stderr, "\rproxy_connect(\"%s\"): Unable to connect: %s\n", cur_connection_node->rhost_rport, strerror(errno));
 		}
 
-		if(handle_send_dt_proxy_ht_destroy(cur_connection_node->origin, cur_connection_node->id, errno) == -1){
-			report_error("handle_message_dt_proxy_ht_create(): handle_send_dt_proxy_ht_destroy(%d, %d, errno): %s", cur_connection_node->origin, cur_connection_node->id, strerror(errno));
+		if(handle_send_dt_connection_ht_destroy(cur_connection_node->origin, cur_connection_node->id, errno) == -1){
+			report_error("handle_message_dt_connection_ht_create(): handle_send_dt_connection_ht_destroy(%d, %d, errno): %s", cur_connection_node->origin, cur_connection_node->id, strerror(errno));
 			return(-1);
 		}
 		connection_node_delete(cur_connection_node);
@@ -376,7 +413,7 @@ int handle_message_dt_proxy_ht_create(){
 
 /******************************************************************************
  *
- * handle_message_dt_proxy_ht_create_tun_tap()
+ * handle_message_dt_connection_ht_create_tun_tap()
  *
  * Inputs: None, but we will leverage the global io struct.
  * Outputs: 0 for success. -1 on fatal error. -2 on non-fatal error.
@@ -385,7 +422,7 @@ int handle_message_dt_proxy_ht_create(){
  *   remote node, and it is a request to create a new tun/tap connection.
  *
  ******************************************************************************/
-int handle_message_dt_proxy_ht_create_tun_tap(){
+int handle_message_dt_connection_ht_create_tun_tap(){
 
 #ifdef FREEBSD
 	return(-2);
@@ -395,12 +432,14 @@ int handle_message_dt_proxy_ht_create_tun_tap(){
 	unsigned short origin = message->header_origin;
 	unsigned short id = message->header_id;
 
+	//	fprintf(stderr, "\rDEBUG: handle_message_dt_connection_ht_create_tun_tap()\n");
+
 
 	if(message->header_proxy_type == PROXY_TUN){
 		if((cur_connection_node = handle_tun_tap_init(IFF_TUN)) == NULL){
-			report_error("handle_message_dt_proxy_ht_create_tun_tap(): handle_tun_tap_init(IFF_TUN): %s", strerror(errno));
-			if(handle_send_dt_proxy_ht_destroy(origin, id, errno) == -1){
-				report_error("handle_message_dt_proxy_ht_create_tun_tap(): handle_send_dt_proxy_ht_destroy(%d, %d, errno): %s", origin, id, strerror(errno));
+			report_error("handle_message_dt_connection_ht_create_tun_tap(): handle_tun_tap_init(IFF_TUN): %s", strerror(errno));
+			if(handle_send_dt_connection_ht_destroy(origin, id, errno) == -1){
+				report_error("handle_message_dt_connection_ht_create_tun_tap(): handle_send_dt_connection_ht_destroy(%d, %d, errno): %s", origin, id, strerror(errno));
 				return(-1);
 			}
 			return(-2);
@@ -408,19 +447,21 @@ int handle_message_dt_proxy_ht_create_tun_tap(){
 
 	}else if(message->header_proxy_type == PROXY_TAP){
 		if((cur_connection_node = handle_tun_tap_init(IFF_TAP)) == NULL){
-			report_error("handle_message_dt_proxy_ht_create_tun_tap(): handle_tun_tap_init(IFF_TAP): %s", strerror(errno));
-			if(handle_send_dt_proxy_ht_destroy(origin, id, errno) == -1){
-				report_error("handle_message_dt_proxy_ht_create_tun_tap(): handle_send_dt_proxy_ht_destroy(%d, %d, errno): %s", origin, id, strerror(errno));
+			report_error("handle_message_dt_connection_ht_create_tun_tap(): handle_tun_tap_init(IFF_TAP): %s", strerror(errno));
+			if(handle_send_dt_connection_ht_destroy(origin, id, errno) == -1){
+				report_error("handle_message_dt_connection_ht_create_tun_tap(): handle_send_dt_connection_ht_destroy(%d, %d, errno): %s", origin, id, strerror(errno));
 				return(-1);
 			}
 			return(-2);
 		}
 	}
 
-	cur_connection_node->origin = message->header_origin;
-	cur_connection_node->id = message->header_id;
+	if(cur_connection_node){
+		cur_connection_node->origin = message->header_origin;
+		cur_connection_node->id = message->header_id;
 
-	cur_connection_node->state = CON_ACTIVE;
+		cur_connection_node->state = CON_ACTIVE;
+	}
 
 	return(0);
 #endif
@@ -444,12 +485,13 @@ int handle_connection_activate(struct connection_node *cur_connection_node){
 	int optval;
 	socklen_t optlen;
 
+	//	fprintf(stderr, "\rDEBUG: handle_connection_activate()\n");
 
 	optlen = sizeof(optval);
 	if(getsockopt(cur_connection_node->fd, SOL_SOCKET, SO_ERROR, &optval, &optlen) == -1){
 
-		if(handle_send_dt_proxy_ht_destroy(cur_connection_node->origin, cur_connection_node->id, errno) == -1){
-			report_error("handle_connection_activate(): handle_send_dt_proxy_ht_destroy(%d, %d, errno): %s", cur_connection_node->origin, cur_connection_node->id, strerror(errno));
+		if(handle_send_dt_connection_ht_destroy(cur_connection_node->origin, cur_connection_node->id, errno) == -1){
+			report_error("handle_connection_activate(): handle_send_dt_connection_ht_destroy(%d, %d, errno): %s", cur_connection_node->origin, cur_connection_node->id, strerror(errno));
 			return(-1);
 		}
 
@@ -462,8 +504,8 @@ int handle_connection_activate(struct connection_node *cur_connection_node){
 			fprintf(stderr, "\rConnection failed: %s, %s\n", cur_connection_node->rhost_rport, strerror(optval));
 		}
 
-		if(handle_send_dt_proxy_ht_destroy(cur_connection_node->origin, cur_connection_node->id, 0) == -1){
-			report_error("handle_connection_activate(): handle_send_dt_proxy_ht_destroy(%d, %d, 0): %s", cur_connection_node->origin, cur_connection_node->id, strerror(errno));
+		if(handle_send_dt_connection_ht_destroy(cur_connection_node->origin, cur_connection_node->id, 0) == -1){
+			report_error("handle_connection_activate(): handle_send_dt_connection_ht_destroy(%d, %d, 0): %s", cur_connection_node->origin, cur_connection_node->id, strerror(errno));
 			return(-1);
 		}
 
@@ -477,33 +519,19 @@ int handle_connection_activate(struct connection_node *cur_connection_node){
 }
 
 
-/******************************************************************************
- *
- * handle_message_dt_connection()
- *
- * Inputs: None, but we will leverage the global io struct.
- * Outputs: 0 for success. -1 on fatal error. -2 on non-fatal error.
- *
- * Purpose: Handle the broker case where a message has arrived from the 
- *   remote node, and it is a request to handle an existing connection.
- *
- ******************************************************************************/
-int handle_message_dt_connection(){
-
-	int retval;
-	struct message_helper *new_message, *tmp_message;
+int handle_message_dt_connection_ht_active_dormant(){
 	struct connection_node *cur_connection_node;
-	int count, errno;
+
+	//	fprintf(stderr, "\rDEBUG: handle_message_dt_connection_ht_active_dormant()\n");
 
 	if((cur_connection_node = connection_node_find(message->header_origin, message->header_id)) == NULL){
 
-		if(handle_send_dt_proxy_ht_destroy(message->header_origin, message->header_id, 0) == -1){
-			report_error("handle_message_dt_connection(): handle_send_dt_proxy_ht_destroy(%d, %d, 0): %s", cur_connection_node->origin, cur_connection_node->id, strerror(errno));
+		if(handle_send_dt_connection_ht_destroy(message->header_origin, message->header_id, 0) == -1){
+			report_error("handle_message_dt_connection(): handle_send_dt_connection_ht_destroy(%d, %d, 0): %s", message->header_origin, message->header_id, strerror(errno));
 			return(-1);
 		}
-		return(0);
+		return(-2);
 	}
-
 
 	if(message->header_type == DT_CONNECTION_HT_DORMANT){
 		cur_connection_node->state = CON_DORMANT;
@@ -515,7 +543,42 @@ int handle_message_dt_connection(){
 		return(0);
 	}
 
-	// DT_CONNECTION_HT_DATA
+	if(handle_send_dt_connection_ht_destroy(message->header_origin, message->header_id, 0) == -1){
+		report_error("handle_message_dt_connection(): handle_send_dt_connection_ht_destroy(%d, %d, 0): %s", message->header_origin, message->header_id, strerror(errno));
+		return(-1);
+	}
+	return(-2);
+}
+
+/******************************************************************************
+ *
+ * handle_message_dt_connection()
+ *
+ * Inputs: None, but we will leverage the global io struct.
+ * Outputs: 0 for success. -1 on fatal error. -2 on non-fatal error.
+ *
+ * Purpose: Handle the broker case where a message has arrived from the 
+ *   remote node, and it is a request to handle an existing connection.
+ *
+ ******************************************************************************/
+int handle_message_dt_connection_ht_data(){
+
+	int retval;
+	struct message_helper *new_message, *tmp_message;
+	struct connection_node *cur_connection_node;
+	int count, errno;
+
+	//	fprintf(stderr, "\rDEBUG: handle_message_dt_connection()\n");
+
+	if((cur_connection_node = connection_node_find(message->header_origin, message->header_id)) == NULL){
+
+		if(handle_send_dt_connection_ht_destroy(message->header_origin, message->header_id, 0) == -1){
+			report_error("handle_message_dt_connection(): handle_send_dt_connection_ht_destroy(%d, %d, 0): %s", message->header_origin, message->header_id, strerror(errno));
+			return(-1);
+		}
+		return(-2);
+	}
+
 	if(cur_connection_node->write_head){
 		retval = 0;
 	} else {
@@ -527,8 +590,8 @@ int handle_message_dt_connection(){
 			report_error("handle_message_dt_connection(): write(%d, %lx, %d): %s", \
 					cur_connection_node->fd, (unsigned long) message->data, message->data_len, strerror(errno));
 
-			if(handle_send_dt_proxy_ht_destroy(cur_connection_node->origin, cur_connection_node->id, 0) == -1){
-				report_error("handle_message_dt_connection(): handle_send_dt_proxy_ht_destroy(%d, %d, 0): %s", cur_connection_node->origin, cur_connection_node->id, strerror(errno));
+			if(handle_send_dt_connection_ht_destroy(cur_connection_node->origin, cur_connection_node->id, 0) == -1){
+				report_error("handle_message_dt_connection(): handle_send_dt_connection_ht_destroy(%d, %d, 0): %s", cur_connection_node->origin, cur_connection_node->id, strerror(errno));
 				return(-1);
 			}
 			connection_node_delete(cur_connection_node);
@@ -596,6 +659,7 @@ int handle_proxy_read(struct proxy_node *cur_proxy_node){
 	int count;
 	struct connection_node *cur_connection_node;
 
+	//	fprintf(stderr, "\rDEBUG: handle_proxy_read()\n");
 
 	/* Create a new connection object. */
 	if((cur_connection_node = connection_node_create()) == NULL){
@@ -612,7 +676,7 @@ int handle_proxy_read(struct proxy_node *cur_proxy_node){
 	cur_connection_node->origin = io->target;
 	cur_connection_node->id = cur_connection_node->fd;
 
-	if(cur_proxy_node->type == PROXY_DYNAMIC){
+	if(cur_proxy_node->proxy_type == PROXY_DYNAMIC){
 		// PROXY_DYNAMIC case goes here.
 
 		// free() called in connection_node_delete().
@@ -628,7 +692,7 @@ int handle_proxy_read(struct proxy_node *cur_proxy_node){
 
 		cur_connection_node->state = CON_SOCKS_INIT;
 
-	}else if(cur_proxy_node->type == PROXY_STATIC){
+	}else if(cur_proxy_node->proxy_type == PROXY_STATIC){
 
 		count = strlen(cur_proxy_node->rhost_rport);
 		// free() called in connection_node_delete().
@@ -640,8 +704,8 @@ int handle_proxy_read(struct proxy_node *cur_proxy_node){
 		cur_connection_node->proxy_type = PROXY_STATIC;
 
 		cur_connection_node->state = CON_ACTIVE;
-		if(handle_send_dt_proxy_ht_create(cur_connection_node) == -1){
-			report_error("handle_proxy_read(): handle_send_dt_proxy_ht_create(%lx): %s", (unsigned long) cur_connection_node, strerror(errno));
+		if(handle_send_dt_connection_ht_create(cur_connection_node) == -1){
+			report_error("handle_proxy_read(): handle_send_dt_connection_ht_create(%lx): %s", (unsigned long) cur_connection_node, strerror(errno));
 			return(-1);
 		}
 	}
@@ -667,6 +731,9 @@ int handle_connection_write(struct connection_node *cur_connection_node){
 	int retval;
 	struct message_helper *tmp_message;
 
+	//	fprintf(stderr, "\rDEBUG: handle_connection_write()\n");
+
+
 	while(cur_connection_node->write_head){
 
 		tmp_message = cur_connection_node->write_head;
@@ -678,8 +745,8 @@ int handle_connection_write(struct connection_node *cur_connection_node){
 				report_error("handle_connection_write(): write(%d, %lx, %d): %s", \
 						io->local_out_fd, (unsigned long) tmp_message->data, tmp_message->data_len, strerror(errno));
 
-				if(handle_send_dt_proxy_ht_destroy(cur_connection_node->origin, cur_connection_node->id, 0) == -1){
-					report_error("handle_connection_write(): handle_send_dt_proxy_ht_destroy(%d, %d, 0): %s", cur_connection_node->origin, cur_connection_node->id, strerror(errno));
+				if(handle_send_dt_connection_ht_destroy(cur_connection_node->origin, cur_connection_node->id, 0) == -1){
+					report_error("handle_connection_write(): handle_send_dt_connection_ht_destroy(%d, %d, 0): %s", cur_connection_node->origin, cur_connection_node->id, strerror(errno));
 					return(-1);
 				}
 				connection_node_delete(cur_connection_node);
@@ -730,6 +797,8 @@ int handle_connection_read(struct connection_node *cur_connection_node){
 
 	int retval;
 
+	//	fprintf(stderr, "\rDEBUG: handle_connection_read()\n");
+
 	message->data_type = DT_CONNECTION;
 	message->header_type = DT_CONNECTION_HT_DATA;
 	message->header_origin = cur_connection_node->origin;
@@ -741,8 +810,8 @@ int handle_connection_read(struct connection_node *cur_connection_node){
 			fprintf(stderr, "\rhandle_connection_read(): Connection %s closed: %s\n", cur_connection_node->rhost_rport, strerror(errno));
 		}
 
-		if(handle_send_dt_proxy_ht_destroy(cur_connection_node->origin, cur_connection_node->id, errno) == -1){
-			report_error("handle_connection_read(): handle_send_dt_proxy_ht_destroy(%d, %d, errno): %s", cur_connection_node->origin, cur_connection_node->id, strerror(errno));
+		if(handle_send_dt_connection_ht_destroy(cur_connection_node->origin, cur_connection_node->id, errno) == -1){
+			report_error("handle_connection_read(): handle_send_dt_connection_ht_destroy(%d, %d, errno): %s", cur_connection_node->origin, cur_connection_node->id, strerror(errno));
 			return(-1);
 		}
 		connection_node_delete(cur_connection_node);
@@ -784,6 +853,9 @@ int handle_connection_socks_init(struct connection_node *cur_connection_node){
 	int reply_buff_len = 0;
 	int new_state;
 
+	//	fprintf(stderr, "\rDEBUG: handle_connection_socks_init()\n");
+
+
 	if((retval = read(cur_connection_node->fd, cur_connection_node->buffer_tail, cur_connection_node->buffer_size - (cur_connection_node->buffer_tail - cur_connection_node->buffer_head) - 1)) < 1){
 
 		// Sorry if this syntax feels awkward. The case defined below is the re-call of the handle_connection_socks_init() by the handle_connection_socks_init() 
@@ -800,8 +872,8 @@ int handle_connection_socks_init(struct connection_node *cur_connection_node){
 				fprintf(stderr, "\rConnection %s closed: %s\n", cur_connection_node->rhost_rport, strerror(errno));
 			}
 
-			if(handle_send_dt_proxy_ht_destroy(cur_connection_node->origin, cur_connection_node->id, 0) == -1){
-				report_error("handle_connection_socks_init(): handle_send_dt_proxy_ht_destroy(%d, %d, 0): %s", cur_connection_node->origin, cur_connection_node->id, strerror(errno));
+			if(handle_send_dt_connection_ht_destroy(cur_connection_node->origin, cur_connection_node->id, 0) == -1){
+				report_error("handle_connection_socks_init(): handle_send_dt_connection_ht_destroy(%d, %d, 0): %s", cur_connection_node->origin, cur_connection_node->id, strerror(errno));
 				return(-1);
 			}
 			connection_node_delete(cur_connection_node);
@@ -813,8 +885,8 @@ int handle_connection_socks_init(struct connection_node *cur_connection_node){
 
 	if((new_state = parse_socks_request(cur_connection_node)) == -1){
 		report_error("handle_connection_socks_init(): parse_sock_request(%lx): Malformed SOCKS request.", (unsigned long) cur_connection_node);
-		if(handle_send_dt_proxy_ht_destroy(cur_connection_node->origin, cur_connection_node->id, 0) == -1){
-			report_error("handle_connection_socks_init(): handle_send_dt_proxy_ht_destroy(%d, %d, 0): %s", cur_connection_node->origin, cur_connection_node->id, strerror(errno));
+		if(handle_send_dt_connection_ht_destroy(cur_connection_node->origin, cur_connection_node->id, 0) == -1){
+			report_error("handle_connection_socks_init(): handle_send_dt_connection_ht_destroy(%d, %d, 0): %s", cur_connection_node->origin, cur_connection_node->id, strerror(errno));
 			return(-1);
 		}
 		connection_node_delete(cur_connection_node);
@@ -826,8 +898,8 @@ int handle_connection_socks_init(struct connection_node *cur_connection_node){
 		// Buffer is full, but still no complete socks request?!
 		if(!(cur_connection_node->buffer_size - (cur_connection_node->buffer_tail - cur_connection_node->buffer_head) - 1)){
 			report_error("handle_connection_socks_init(): parse_sock_request(%lx): Malformed SOCKS request.", (unsigned long) cur_connection_node);
-			if(handle_send_dt_proxy_ht_destroy(cur_connection_node->origin, cur_connection_node->id, 0) == -1){
-				report_error("handle_connection_socks_init(): handle_send_dt_proxy_ht_destroy(%d, %d, 0): %s", cur_connection_node->origin, cur_connection_node->id, strerror(errno));
+			if(handle_send_dt_connection_ht_destroy(cur_connection_node->origin, cur_connection_node->id, 0) == -1){
+				report_error("handle_connection_socks_init(): handle_send_dt_connection_ht_destroy(%d, %d, 0): %s", cur_connection_node->origin, cur_connection_node->id, strerror(errno));
 				return(-1);
 			}
 			connection_node_delete(cur_connection_node);
@@ -859,8 +931,8 @@ int handle_connection_socks_init(struct connection_node *cur_connection_node){
 
 	if(retval != reply_buff_len){
 		report_error("handle_connection_socks_init(): write(%d, %lx, %d): Unable to send SOCKS reply.", cur_connection_node->fd, (unsigned long) reply_buff, reply_buff_len);
-		if(handle_send_dt_proxy_ht_destroy(cur_connection_node->origin, cur_connection_node->id, 0) == -1){
-			report_error("handle_connection_socks_init(): handle_send_dt_proxy_ht_destroy(%d, %d, 0): %s", cur_connection_node->origin, cur_connection_node->id, strerror(errno));
+		if(handle_send_dt_connection_ht_destroy(cur_connection_node->origin, cur_connection_node->id, 0) == -1){
+			report_error("handle_connection_socks_init(): handle_send_dt_connection_ht_destroy(%d, %d, 0): %s", cur_connection_node->origin, cur_connection_node->id, strerror(errno));
 			return(-1);
 		}
 		connection_node_delete(cur_connection_node);
@@ -880,8 +952,8 @@ int handle_connection_socks_init(struct connection_node *cur_connection_node){
 
 	if(cur_connection_node->state == CON_ACTIVE){
 
-		if(handle_send_dt_proxy_ht_create(cur_connection_node) == -1){
-			report_error("handle_connection_socks_init(): handle_send_dt_proxy_ht_create(%lx): %s", (unsigned long) cur_connection_node, strerror(errno));
+		if(handle_send_dt_connection_ht_create(cur_connection_node) == -1){
+			report_error("handle_connection_socks_init(): handle_send_dt_connection_ht_create(%lx): %s", (unsigned long) cur_connection_node, strerror(errno));
 			return(-1);
 		}
 
@@ -907,9 +979,31 @@ int handle_connection_socks_init(struct connection_node *cur_connection_node){
 }
 
 
+int handle_send_dt_proxy_ht_report(struct proxy_node *cur_proxy_node){
+	int retval;
+
+	message->data_type = DT_PROXY;
+	message->header_type = DT_PROXY_HT_REPORT;
+	message->header_origin = cur_proxy_node->origin;
+	message->header_id = cur_proxy_node->id;
+	message->header_proxy_type = cur_proxy_node->proxy_type;
+
+	retval = strlen(cur_proxy_node->orig_request);
+	message->data_len = retval > io->message_data_size ? io->message_data_size : retval;
+	memcpy(message->data, cur_proxy_node->orig_request, message->data_len);
+
+	if((retval = message_push()) == -1){
+		report_error("handle_send_dt_proxy_ht_report(): message_push(): %s", strerror(errno));
+		return(-1);
+	}
+
+	return(0);
+}
+
+
 /******************************************************************************
  *
- * handle_send_dt_proxy_ht_destroy()
+ * handle_send_dt_connection_ht_destroy()
  *
  * Inputs: The origin and id tuple that identify the related connection.
  *   The errno related to the need for destruction.
@@ -920,12 +1014,14 @@ int handle_connection_socks_init(struct connection_node *cur_connection_node){
  *   that a connection is no longer valid and needs to be destroyed.
  *
  ******************************************************************************/
-int handle_send_dt_proxy_ht_destroy(unsigned short origin, unsigned short id, unsigned short header_errno){
+int handle_send_dt_connection_ht_destroy(unsigned short origin, unsigned short id, unsigned short header_errno){
 
 	int retval;
 
-	message->data_type = DT_PROXY;
-	message->header_type = DT_PROXY_HT_DESTROY;
+	//	fprintf(stderr, "\rDEBUG: handle_send_dt_connection_ht_destroy()\n");
+
+	message->data_type = DT_CONNECTION;
+	message->header_type = DT_CONNECTION_HT_DESTROY;
 	message->header_origin = origin;
 	message->header_id = id;
 
@@ -938,7 +1034,7 @@ int handle_send_dt_proxy_ht_destroy(unsigned short origin, unsigned short id, un
 	}
 
 	if((retval = message_push()) == -1){
-		report_error("handle_send_dt_proxy_ht_destroy(): message_push(): %s", strerror(errno));
+		report_error("handle_send_dt_connection_ht_destroy(): message_push(): %s", strerror(errno));
 		return(-1);
 	}
 
@@ -948,7 +1044,7 @@ int handle_send_dt_proxy_ht_destroy(unsigned short origin, unsigned short id, un
 
 /******************************************************************************
  *
- * handle_send_dt_proxy_ht_create()
+ * handle_send_dt_connection_ht_create()
  *
  * Inputs: A pointer to an active connection node. 
  *   We will also leverage the global io struct.
@@ -958,12 +1054,14 @@ int handle_send_dt_proxy_ht_destroy(unsigned short origin, unsigned short id, un
  *   that a connection needs to be created.
  *
  ******************************************************************************/
-int handle_send_dt_proxy_ht_create(struct connection_node *cur_connection_node){
+int handle_send_dt_connection_ht_create(struct connection_node *cur_connection_node){
 
 	int count, retval;
 
-	message->data_type = DT_PROXY;
-	message->header_type = DT_PROXY_HT_CREATE;
+	//	fprintf(stderr, "\rDEBUG: handle_send_dt_connection_ht_create()\n");
+
+	message->data_type = DT_CONNECTION;
+	message->header_type = DT_CONNECTION_HT_CREATE;
 	message->header_origin = cur_connection_node->origin;
 	message->header_id = cur_connection_node->id;
 	message->header_proxy_type = cur_connection_node->proxy_type;
@@ -1036,6 +1134,8 @@ struct connection_node *handle_tun_tap_init(int ifr_flag){
 	struct connection_node *cur_connection_node;
 
 	int tmp_sock = 0;
+
+	//	fprintf(stderr, "\rDEBUG: handle_tun_tap_init()\n");
 
 
 	if(ifr_flag == IFF_TUN){

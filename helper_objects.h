@@ -34,6 +34,7 @@ struct message_helper {
 struct proxy_request_node {
 	char *request_string;
 	int type;
+	int remote;
 
 	struct proxy_request_node *next;
 };
@@ -87,6 +88,10 @@ struct config_helper {
  ******************************************************************************/
 struct proxy_node {
 
+	unsigned short origin;
+	unsigned short id;
+	unsigned short proxy_type;
+
 	// Remembers the original malloc() address. Depending on the case, this 
   // value will end up in one of the strings below. Adding this pointer will 
 	// simplify the free() call.
@@ -97,10 +102,13 @@ struct proxy_node {
 	char *lport;
 	char *rhost_rport;
 
-	int type;
 	int fd;
 
+	// pointer to the original request string;
+	char *orig_request;
+
 	struct proxy_node *next;
+	struct proxy_node *prev;
 };
 
 
@@ -148,6 +156,12 @@ struct connection_node {
  *	There should only ever be one of these, and it is a global.
  ******************************************************************************/
 struct io_helper {
+
+	unsigned short control_proto_major;
+	unsigned short control_proto_minor;
+
+	unsigned short target_proto_major;
+	unsigned short target_proto_minor;
 
 	/* Denote whether this node is a target node or the control node. */
 	// Done as a "target" flag, so control is always 0. If we expand to allow node chaining in the future,

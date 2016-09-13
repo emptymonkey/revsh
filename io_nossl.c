@@ -275,9 +275,6 @@ int init_io_control(struct config_helper *config){
 		inet_ntop(AF_INET6, &s6->sin6_addr, ipstr, sizeof ipstr);
 	}
 
-	if(verbose){
-		printf("\tConnected from %s:%d\n", ipstr, port);
-	}
 	report_log("Controller: Connected from %s:%d.", ipstr, port);
 
 	return(io->remote_fd);

@@ -42,6 +42,17 @@
 
 /* XXX
 
+- Convert tabs to spaces in comments and docs, sanely.
+
+- Implement -R remote forward. (Implement as a -L on the target node.)
+
+- Implement ~C. Commands:
+  - help: Prints usage.
+  - upload (ul): upload a file. Default to "current directory" if no path or second parameter given.
+  - download (dl): download a file. Default to "current directory" if no path or second parameter given.
+	- Add connections: L R D E X Y
+	- Kill a connection / proxy based off X-Y uid reported in ~#.
+
 - Test all the switches.
 - Make a man page.
 - Use daily til Toorcon.
@@ -55,6 +66,9 @@ XXX */
 char *GLOBAL_calling_card = CALLING_CARD;
 
 volatile sig_atomic_t sig_found = 0;
+
+/* strlen("65535") */
+#define PORT_STRING_LEN 5
 
 
 /***********************************************************************************************************************
@@ -75,8 +89,8 @@ void usage(int ret_code){
 		out_stream = stderr;
 	}
 
-	fprintf(out_stream, "\nControl:\t%s -c [CONTROL_OPTIONS] [MUTUAL_OPTIONS] [ADDRESS:PORT]\n", program_invocation_short_name);
-	fprintf(out_stream, "Target:\t\t%s     [TARGET_OPTIONS] [MUTUAL_OPTIONS] [ADDRESS:PORT]\n", program_invocation_short_name);
+	fprintf(out_stream, "\nControl:\t%s -c [CONTROL_OPTIONS] [MUTUAL_OPTIONS] [ADDRESS[:PORT]]\n", program_invocation_short_name);
+	fprintf(out_stream, "Target:\t\t%s     [TARGET_OPTIONS] [MUTUAL_OPTIONS] [ADDRESS[:PORT]]\n", program_invocation_short_name);
 	fprintf(out_stream, "\nCONTROL_OPTIONS:\n");
 	fprintf(out_stream, "\t-c\t\tRun in \"command and control\" mode.\t\t(Default is target mode.)\n");
 #ifndef GENERIC_BUILD
@@ -101,8 +115,12 @@ void usage(int ret_code){
 	fprintf(out_stream, "\t-k\t\tRun in keep-alive mode.\n\t\t\tNode will neither exit normally, nor seppuku from timeout.\n");
 	fprintf(out_stream, "\t-L [LHOST:]LPORT:RHOST:RPORT\n");
 	fprintf(out_stream, "\t\t\tLocal forward connections from the local\n\t\t\tlistener at LHOST:LPORT to RHOST:RPORT.\n"); 
+	fprintf(out_stream, "\t-R [RHOST:]RPORT:LHOST:LPORT\n");
+	fprintf(out_stream, "\t\t\tLocal forward connections from the remote\n\t\t\tlistener at RHOST:RPORT to LHOST:LPORT.\n"); 
 	fprintf(out_stream, "\t-D [LHOST:]LPORT\n");
 	fprintf(out_stream, "\t\t\tDynamic forward connections from the local\n\t\t\tlistener at LHOST:LPORT.\t\t\t(Socks 4, 4a, and 5. TCP connect only.)\n");
+	fprintf(out_stream, "\t-E [RHOST:]RPORT\n");
+	fprintf(out_stream, "\t\t\tDynamic forward connections from the remote\n\t\t\tlistener at RHOST:RPORT.\t\t\t(Socks 4, 4a, and 5. TCP connect only.)\n");
 	fprintf(out_stream, "\t-x\t\tDisable the default tun device.\n");
 	fprintf(out_stream, "\t-y\t\tDisable the default tap device.\n");
 	fprintf(out_stream, "\t-z\t\tDisable the default proxy listener.\t\t(Default listener on port %s)\n", SOCKS_LISTENER);
@@ -113,7 +131,8 @@ void usage(int ret_code){
 	fprintf(out_stream, "\t-h\t\tPrint this help.\n");
 	fprintf(out_stream, "\t-e\t\tPrint out some usage examples.\n");
 
-	fprintf(out_stream, "\n\tADDRESS:PORT\tThe address and port of the listening socket.\t(Default is \"%s\".)\n", ADDRESS);
+	fprintf(out_stream, "\n\tADDRESS\t\tThe address of the control listener.\t\t(Default is \"%s\".)\n", CONTROL_ADDRESS);
+	fprintf(out_stream, "\tPORT\t\tThe port of the control listener.\t\t(Default is \"%s\".)\n", CONTROL_PORT);
 
 #ifdef GENERIC_BUILD
 	fprintf(out_stream, "\n\tThis is the GENERIC_BUILD of revsh, which defaults to Anonymous Diffie-Hellman encryption.\n");
@@ -187,6 +206,7 @@ int main(int argc, char **argv){
 	int retval;
 	int opt;
 	char *tmp_ptr;
+	size_t tmp_size;
 
 	struct proxy_request_node *tmp_proxy_ptr = NULL;
 	struct proxy_request_node *cur_proxy_ptr = NULL;
@@ -220,6 +240,8 @@ int main(int argc, char **argv){
 	message = &io->message;
 
 	/* Set defaults. */
+	io->control_proto_major = PROTOCOL_MAJOR_VERSION;
+	io->control_proto_minor = PROTOCOL_MINOR_VERSION;
 	io->local_in_fd = fileno(stdin);
 	io->local_out_fd = fileno(stdout);
 	io->target = 1;
@@ -273,7 +295,7 @@ int main(int argc, char **argv){
 	}
 
 	/* Grab the configuration from the command line. */
-	while((opt = getopt(argc, argv, "hepbkalcxyzs:d:f:L:R:D:r:F:t:nv")) != -1){
+	while((opt = getopt(argc, argv, "hepbkalcxyzs:d:f:L:R:D:E:r:F:t:nv")) != -1){
 		switch(opt){
 
 			case 'h':
@@ -336,7 +358,9 @@ int main(int argc, char **argv){
 				break;
 
 			case 'L':
+			case 'R':
 			case 'D':
+			case 'E':
 				if((tmp_proxy_ptr = (struct proxy_request_node *) calloc(1, sizeof(struct proxy_request_node))) == NULL){
 					report_error("main(): calloc(1, %d): %s", (int) sizeof(struct proxy_node), strerror(errno));
 					return(-1);
@@ -352,8 +376,13 @@ int main(int argc, char **argv){
 				cur_proxy_ptr->request_string = optarg;
 
 				cur_proxy_ptr->type = PROXY_STATIC;
-				if(opt == 'D'){
+				if(opt == 'D' || opt == 'E'){
 					cur_proxy_ptr->type = PROXY_DYNAMIC;
+				}
+
+				cur_proxy_ptr->remote = 0;
+				if(opt == 'R' || opt == 'E'){
+					cur_proxy_ptr->remote = 1;
 				}
 				break;
 			
@@ -404,12 +433,33 @@ int main(int argc, char **argv){
 	if((argc - optind) == 1){
 		config->ip_addr = argv[optind];
 	}else if((argc - optind) == 0){
-		config->ip_addr = ADDRESS;
+		config->ip_addr = CONTROL_ADDRESS;
 	}else{
 		usage(-1);
 	}
 
-	if(!io->target){
+	if(config->ip_addr[0] == '\0' || config->ip_addr[0] == ':'){
+		report_error("main(): ADDRESS cannot be empty!");
+		usage(-1);	
+	}
+
+	// If the operator didn't add the optional port number, add it for him now.
+	if((tmp_ptr = strchr(config->ip_addr, ':')) == NULL){
+	
+		// +1 for ':' character.
+		tmp_size = strlen(config->ip_addr) + 1 + PORT_STRING_LEN;	
+		// free() not called. One time allocation core to the process state. No way to change after initialization.
+		if((tmp_ptr = (char *) calloc(tmp_size + 1, sizeof(char))) == NULL){
+			report_error("main(): calloc(%d, %d): %s", tmp_size + PORT_STRING_LEN + 1, (int) sizeof(char), strerror(errno));
+			return(-1);
+		}
+
+		snprintf(tmp_ptr, tmp_size, "%s:%s", config->ip_addr, CONTROL_PORT);
+		config->ip_addr = tmp_ptr;
+	}
+
+	if(!io->target && config->log_file){
+
 		/* Before anything else, let's try and get the log file opened. */
 		if(wordexp(config->log_file, &log_file_exp, 0)){
 			report_error("main(): wordexp(%s, %lx, 0): %s", config->log_file, (unsigned long)  &log_file_exp, strerror(errno));
@@ -539,8 +589,10 @@ int main(int argc, char **argv){
  **********************************************************************************************************************/
 void clean_io(struct config_helper *config){
 
-  struct proxy_node *proxy_ptr;
   struct message_helper *message_ptr;
+
+	io->target_proto_major = 0;
+	io->target_proto_minor = 0;
 
 	io->child_sid = 0;
 
@@ -603,14 +655,7 @@ void clean_io(struct config_helper *config){
 #endif 
 
 	while(io->proxy_head){
-		proxy_ptr = io->proxy_head;
-		io->proxy_head = proxy_ptr->next;
-
-		close(proxy_ptr->fd);
-		if(proxy_ptr->mem_ptr){
-			free(proxy_ptr->mem_ptr);
-		}
-		free(proxy_ptr);
+		proxy_node_delete(io->proxy_head);
 	}
 	io->proxy_tail = NULL;
 
@@ -619,7 +664,6 @@ void clean_io(struct config_helper *config){
 	}
 
 	io->fd_count = 0;
-
 }
 
 

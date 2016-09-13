@@ -149,18 +149,19 @@ int report_log_string(char *error_string){
 		*tmp_ptr = '\0';
 	}
 
-	fprintf(io->log_stream, "%s\t", date_string);
+	if(io->log_stream){
+		fprintf(io->log_stream, "%s\t", date_string);
 
-	if(fprintf(io->log_stream, "%s\n", error_string) < 0){
-		if(verbose){
-			fprintf(stderr, "report_log_string(): fprintf(%lx, \"%%s\\n\", %lx): %s\n", \
-					(unsigned long) io->log_stream, (unsigned long) error_string, strerror(errno));
+		if(fprintf(io->log_stream, "%s\n", error_string) < 0){
+			if(verbose){
+				fprintf(stderr, "report_log_string(): fprintf(%lx, \"%%s\\n\", %lx): %s\n", \
+						(unsigned long) io->log_stream, (unsigned long) error_string, strerror(errno));
+			}
+			return(-1);
 		}
-		return(-1);
 
+		fflush(io->log_stream);
 	}
-
-	fflush(io->log_stream);
 
 	return(0);
 }

@@ -279,26 +279,51 @@ int process_escape(char c){
 	return(0);
 }
 
+
+
 void list_connections(){
 
+  struct proxy_node *cur_proxy_node;
   struct connection_node *cur_connection_node;
 
-	printf("\n\n");
-	printf("\rActive revsh connections:\n");
-	printf("\n");
-	printf("\rID\tRead\t\tWritten\t\tNAME\n");
+	char *proxy_type_strings[] = {PROXY_STATIC_STRING, PROXY_DYNAMIC_STRING, PROXY_TUN_STRING, PROXY_TAP_STRING, PROXY_FILE_STRING};
 
-	printf("\r%d-%d\t%ld\t\t%ld\t\tTerminal\n", io->target, io->remote_fd,\
+	printf("\n\n");
+	printf("\r################################################################################\n");
+	printf("\r# Proxy listeners:\n");
+	printf("\r################################################################################\n");
+	printf("\n");
+	printf("\rID\tType\tName\n");
+	cur_proxy_node = io->proxy_head;
+	while(cur_proxy_node){
+
+		printf("\r%d-%d\t%s\t%s\n", cur_proxy_node->origin, cur_proxy_node->id,\
+				proxy_type_strings[cur_proxy_node->proxy_type], cur_proxy_node->orig_request);
+
+		cur_proxy_node = cur_proxy_node->next;
+	}
+	printf("\r\n");
+
+
+	printf("\r################################################################################\n");
+	printf("\r# Active connections:\n");
+	printf("\r################################################################################\n");
+	printf("\n");
+	printf("\rID\tRead\tWritten\tType\tName\n");
+
+	printf("\r%d-%d\t%ld\t%ld\tTTY\tTerminal\n", io->target, io->remote_fd,\
 			io->tty_io_read, io->tty_io_written);
 
 	cur_connection_node = io->connection_head;
 	while(cur_connection_node){
 
-		printf("\r%d-%d\t%ld\t\t%ld\t\t%s\n", cur_connection_node->origin, cur_connection_node->id,\
-				cur_connection_node->io_read, cur_connection_node->io_written, cur_connection_node->rhost_rport);
+		printf("\r%d-%d\t%ld\t%ld\t%s\t%s\n", cur_connection_node->origin, cur_connection_node->id,\
+				cur_connection_node->io_read, cur_connection_node->io_written, \
+				proxy_type_strings[cur_connection_node->proxy_type], cur_connection_node->rhost_rport);
 
 		cur_connection_node = cur_connection_node->next;
 	}
+
 
 	printf("\r\n");
 

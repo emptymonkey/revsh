@@ -55,6 +55,33 @@ int negotiate_protocol(){
 		return(-1);
 	}
 
+	/* Send and receive protocol major and minor numbers. */
+	// This information isn't used outside of reporting yet. 
+	tmp_ushort = htons(io->control_proto_major);
+	if(io->remote_write(&tmp_ushort, sizeof(tmp_ushort)) == -1){
+		report_error("negotiate_protocol(): io->remote_write(%lx, %d): %s", \
+				(unsigned long) &tmp_ushort, (int) sizeof(tmp_ushort), strerror(errno));
+		return(-1);
+	}
+	tmp_ushort = htons(io->control_proto_minor);
+	if(io->remote_write(&tmp_ushort, sizeof(tmp_ushort)) == -1){
+		report_error("negotiate_protocol(): io->remote_write(%lx, %d): %s", \
+				(unsigned long) &tmp_ushort, (int) sizeof(tmp_ushort), strerror(errno));
+		return(-1);
+	}
+	if(io->remote_read(&tmp_ushort, sizeof(tmp_ushort)) == -1){
+		report_error("negotiate_protocol(): io->remote_read(%lx, %d): %s", \
+				(unsigned long) &tmp_ushort, (int) sizeof(tmp_ushort), strerror(errno));
+		return(-1);
+	}
+	io->target_proto_major = ntohs(tmp_ushort);
+	if(io->remote_read(&tmp_ushort, sizeof(tmp_ushort)) == -1){
+		report_error("negotiate_protocol(): io->remote_read(%lx, %d): %s", \
+				(unsigned long) &tmp_ushort, (int) sizeof(tmp_ushort), strerror(errno));
+		return(-1);
+	}
+	io->target_proto_minor = ntohs(tmp_ushort);
+
 	/* Send our desired message size. */
 	tmp_ushort = htons(io->message_data_size);
 	if(io->remote_write(&tmp_ushort, sizeof(tmp_ushort)) == -1){

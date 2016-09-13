@@ -51,18 +51,20 @@ int broker(struct config_helper *config){
 		/* Set up proxies requested during launch. */
 		while(cur_proxy_req_node){
 
-			cur_proxy_node = proxy_node_new(cur_proxy_req_node->request_string, cur_proxy_req_node->type);	
-
-			if(!cur_proxy_node){
-				report_error("do_control(): proxy_node_new(%s, %d): %s", cur_proxy_req_node->request_string, cur_proxy_req_node->type, strerror(errno));
+			if(cur_proxy_req_node->remote){
+			// XXX  send the request to launch the proxy remotely.	
 			}else{
+				cur_proxy_node = proxy_node_new(cur_proxy_req_node->request_string, cur_proxy_req_node->type);	
 
-				if(!io->proxy_head){
-					io->proxy_head = cur_proxy_node;
-					io->proxy_tail = cur_proxy_node;
+				if(!cur_proxy_node){
+					report_error("do_control(): proxy_node_new(%s, %d): %s", cur_proxy_req_node->request_string, cur_proxy_req_node->type, strerror(errno));
 				}else{
-					io->proxy_tail->next = cur_proxy_node;
-					io->proxy_tail = cur_proxy_node;
+					if(io->target){
+						if((retval = handle_send_dt_proxy_ht_report(cur_proxy_node)) == -1){
+							report_error("broker(): handle_send_dt_proxy_ht_report(): %s", strerror(errno));
+							return(-1);
+						}
+					}
 				}
 			}
 			cur_proxy_req_node = cur_proxy_req_node->next;
@@ -91,8 +93,8 @@ int broker(struct config_helper *config){
 				if((cur_connection_node = handle_tun_tap_init(IFF_TUN)) == NULL){
 					report_error("broker(): handle_tun_tap_init(IFF_TUN): %s", strerror(errno));
 				}else{
-					if(handle_send_dt_proxy_ht_create(cur_connection_node) == -1){
-						report_error("broker(): handle_send_dt_proxy_ht_create(%lx): %s", (unsigned long) cur_connection_node, strerror(errno));
+					if(handle_send_dt_connection_ht_create(cur_connection_node) == -1){
+						report_error("broker(): handle_send_dt_connection_ht_create(%lx): %s", (unsigned long) cur_connection_node, strerror(errno));
 						return(-1);
 					}
 				}
@@ -102,8 +104,8 @@ int broker(struct config_helper *config){
 				if((cur_connection_node = handle_tun_tap_init(IFF_TAP)) == NULL){
 					report_error("broker(): handle_tun_tap_init(IFF_TAP): %s", strerror(errno));
 				}else{
-					if(handle_send_dt_proxy_ht_create(cur_connection_node) == -1){
-						report_error("broker(): handle_send_dt_proxy_ht_create(%lx): %s", (unsigned long) cur_connection_node, strerror(errno));
+					if(handle_send_dt_connection_ht_create(cur_connection_node) == -1){
+						report_error("broker(): handle_send_dt_connection_ht_create(%lx): %s", (unsigned long) cur_connection_node, strerror(errno));
 						return(-1);
 					}
 				}
@@ -117,8 +119,12 @@ int broker(struct config_helper *config){
 		timeout_ptr = &timeout;
 	}
 
+//	int debug_ctr = 1000;
 	/*  Start the broker() loop. */
 	while(1){
+//		if(!debug_ctr--){
+//			return(-1);
+//		}
 
 		/* Initialize fds we will want to select() on this loop. */
 		fd_max = 0;
@@ -154,7 +160,7 @@ int broker(struct config_helper *config){
 
 		/* Only add proxy file descriptors to select() if we have enough space for more connections.  */
 		cur_proxy_node = io->proxy_head;
-		while((io->fd_count < FD_SETSIZE) && cur_proxy_node){
+		while((io->fd_count < FD_SETSIZE) && cur_proxy_node && (cur_proxy_node->origin == io->target)){
 
 			FD_SET(cur_proxy_node->fd, &read_fds);
 			fd_max = cur_proxy_node->fd > fd_max ? cur_proxy_node->fd : fd_max;
@@ -279,28 +285,57 @@ int broker(struct config_helper *config){
 
 					}else if(message->header_type == DT_PROXY_HT_CREATE){
 
-						retval = handle_message_dt_proxy_ht_create();
-
-						if(retval == -1){
+						if((retval = handle_message_dt_proxy_ht_create()) == -1){
 							report_error("broker(): handle_message_dt_proxy_ht_create(): %s", strerror(errno));
 							goto RETURN;
 						}
 
+					}else if(message->header_type == DT_PROXY_HT_REPORT){
+
+						if((retval = handle_message_dt_proxy_ht_report()) == -1){
+							report_error("broker(): handle_message_dt_proxy_ht_report(): %s", strerror(errno));
+							goto RETURN;
+						}
+
 					}else{
-						// Malformed request.
-						report_error("broker(): Unknown Proxy Header Type: %d", message->header_type);
-						retval = -1;
-						goto RETURN;
+						report_error("broker(): Unknown Proxy Header Type: %d: Ignoring.", message->header_type);
 					}
 					break;
 
 				case DT_CONNECTION:
 
-					if((retval = handle_message_dt_connection()) == -1){
-						report_error("broker(): handle_message_dt_connection(): %s", strerror(errno));
-						goto RETURN;
-					}
+					if(message->header_type == DT_CONNECTION_HT_DESTROY){
 
+						if((retval = handle_message_dt_connection_ht_destroy()) == -1){
+							report_error("broker(): handle_message_dt_connection_ht_destroy(): %s", strerror(errno));
+							goto RETURN;
+						}
+
+					}else if(message->header_type == DT_CONNECTION_HT_CREATE){
+
+						if((retval = handle_message_dt_connection_ht_create()) == -1){
+							report_error("broker(): handle_message_dt_connection_ht_create(): %s", strerror(errno));
+							goto RETURN;
+						}
+
+					}else if(message->header_type == DT_CONNECTION_HT_DATA){
+
+						if((retval = handle_message_dt_connection_ht_data()) == -1){
+							report_error("broker(): handle_message_dt_connection_ht_data(): %s", strerror(errno));
+							goto RETURN;
+						}
+
+					}else if(message->header_type == DT_CONNECTION_HT_ACTIVE || message->header_type == DT_CONNECTION_HT_DORMANT){
+
+						if((retval = handle_message_dt_connection_ht_active_dormant()) == -1){
+							report_error("broker(): handle_message_dt_connection_ht_active_dormant(): %s", strerror(errno));
+							goto RETURN;
+						}
+
+					}else{
+						// Malformed request.
+						report_error("broker(): Unknown Connection Header Type: %d: Ignoring.", message->header_type);
+					}
 					break;
 
 				case DT_NOP:
@@ -317,7 +352,7 @@ int broker(struct config_helper *config){
 
 				default:
 					// Malformed request.
-					report_error("broker(): Unknown Proxy Header Type: %d", message->header_type);
+					report_error("broker(): Unknown Proxy Header Type: %d: Ignoring.", message->header_type);
 					break;
 			}
 
@@ -327,7 +362,7 @@ int broker(struct config_helper *config){
 		/* Check the proxy listeners for new connections. Handle if appropriate. */
 		found = 0;
 		cur_proxy_node = io->proxy_head;
-		while(cur_proxy_node){
+		while(cur_proxy_node && (cur_proxy_node->origin == io->target)){
 
 			if(FD_ISSET(cur_proxy_node->fd, &read_fds)){
 				if((retval = handle_proxy_read(cur_proxy_node)) == -1){
