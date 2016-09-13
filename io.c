@@ -82,6 +82,10 @@ int negotiate_protocol(){
 	}
 	io->target_proto_minor = ntohs(tmp_ushort);
 
+	if(io->control_proto_major != io->target_proto_major || io->control_proto_minor != io->target_proto_minor){
+		report_error("Protocol mismatch: control v%d.%d != target v%d.%d: Continuing...");
+	}
+
 	/* Send our desired message size. */
 	tmp_ushort = htons(io->message_data_size);
 	if(io->remote_write(&tmp_ushort, sizeof(tmp_ushort)) == -1){
@@ -90,7 +94,7 @@ int negotiate_protocol(){
 		return(-1);
 	}
 
-	/* Recieve their desired message size. */
+	/* Receive their desired message size. */
 	if(io->remote_read(&tmp_ushort, sizeof(tmp_ushort)) == -1){
 		report_error("negotiate_protocol(): io->remote_read(%lx, %d): %s", \
 				(unsigned long) &tmp_ushort, (int) sizeof(tmp_ushort), strerror(errno));
