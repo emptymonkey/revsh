@@ -17,6 +17,7 @@
 int do_target(struct config_helper *config){
 
 	int retval;
+	int fcntl_flags;
 
 	char *pty_name;
 	int pty_master, pty_slave;
@@ -296,6 +297,29 @@ int do_target(struct config_helper *config){
 
 		io->local_in_fd = pty_master;
 		io->local_out_fd = pty_master;
+
+		/* Set the tty to non-blocking. */
+		if((fcntl_flags = fcntl(io->local_in_fd, F_GETFL, 0)) == -1){
+			report_error("do_target(): fcntl(%d, F_GETFL, 0): %s", io->local_in_fd, strerror(errno));
+			return(-1);
+		}
+
+		fcntl_flags |= O_NONBLOCK;
+		if(fcntl(io->local_in_fd, F_SETFL, fcntl_flags) == -1){
+			report_error("do_target(): fcntl(%d, F_SETFL, %d): %s", io->local_in_fd, fcntl_flags, strerror(errno));
+			return(-1);
+		}
+
+		if((fcntl_flags = fcntl(io->local_out_fd, F_GETFL, 0)) == -1){
+			report_error("do_target(): fcntl(%d, F_GETFL, 0): %s", io->local_out_fd, strerror(errno));
+			return(-1);
+		}
+
+		fcntl_flags |= O_NONBLOCK;
+		if(fcntl(io->local_out_fd, F_SETFL, fcntl_flags) == -1){
+			report_error("do_target(): fcntl(%d, F_SETFL, %d): %s", io->local_out_fd, fcntl_flags, strerror(errno));
+			return(-1);
+		}
 
 		retval = broker(config);
 

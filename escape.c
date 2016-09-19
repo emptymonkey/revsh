@@ -1,7 +1,7 @@
 #include "common.h"
 
 #define LOCAL_BUFF_SIZE 64
-#define VALID_ESCAPE_ACTIONS ".#?"
+#define VALID_ESCAPE_ACTIONS ".#C?"
 
 /*
  * escape sequence processing strategy:
@@ -12,7 +12,7 @@
  * The process will look something like:
  *
  *   - Read first chunk of buffer.
- *     -- If first chunk is tty data, message_send() just that data.
+ *     -- If first chunk is tty data, send_message() just that data.
  *     -- If the first chunk is consumed escape chars for a non-valid sequence, send_consumed() those characters.
  *     -- If the first chunk is consumed escape chars for a valid sequence, call the appropriate payload function.
  *   - message_shift() the remaining message data to the front.
@@ -22,7 +22,7 @@
  *     -- io->escape_state - Marks the spot in the state machine.
  *     -- io->escape_depth - Records the number of tildes seen.
  *
- * This approach should be reasonable because message_shift()s and partial message_send()s
+ * This approach should be reasonable because message_shift()s and partial send_message()s
  * (and the associated malloc()s + memcpy()s inside those functions to back up the remaining message data while
  * processing) will only occur in the worst case scenarios. In the average case, it will be one character at a time
  * at the control node (because humans are slow) or a couple of characters at a time as a full valid escape request
@@ -47,6 +47,7 @@
 int escape_check(){
 
 	int i, retval;
+	char esc_char;
 
 
 	for(i = 0; i < message->data_len; i++){
@@ -54,8 +55,8 @@ int escape_check(){
 		if(io->escape_state == ESCAPE_NONE){
 
 			if(message->data[i] == '\r'){
-				if(message_send(i + 1) == -1){
-					report_error("escape_check(): message_send(%d): %s", i + 1, strerror(errno));
+				if(send_message(i + 1) == -1){
+					report_error("escape_check(): send_message(%d): %s", i + 1, strerror(errno));
 					return(-1);
 				}
 				message_shift(i + 1);
@@ -75,8 +76,8 @@ int escape_check(){
 
 				// Check case when enter is hit multiple times.
 				if(message->data[i] == '\r'){
-					if(message_send(i + 1) == -1){
-						report_error("escape_check(): message_send(%d): %s", i + 1, strerror(errno));
+					if(send_message(i + 1) == -1){
+						report_error("escape_check(): send_message(%d): %s", i + 1, strerror(errno));
 						return(-1);
 					}
 					message_shift(i + 1);
@@ -101,17 +102,18 @@ int escape_check(){
 
 					if(io->escape_depth == 1){
 
-						if((retval = process_escape(message->data[i])) < 0){
+						esc_char = message->data[i];
+						message_shift(i + 1);
+						if((retval = process_escape(esc_char)) < 0){
+							report_error("escape_check(): process_escape('%c'): %s", message->data[i], strerror(errno));
 							if(retval == -1){
-								report_error("escape_check(): forward_escape('%c'): %s", message->data[i], strerror(errno));
+								return(retval);
 							}
-							return(retval);
 						}
 
-						message_shift(i + 1);
 						io->escape_state = ESCAPE_NONE;
 						io->escape_depth = 0;
-						return(escape_check()); 
+						return(0); 
 					}else{
 
 						message_shift(i);
@@ -203,10 +205,7 @@ CLEANUP:
 }
 
 
-
-
-
-int message_send(int count){
+int send_message(int count){
 
 	int backup_data_len = message->data_len;
 
@@ -217,7 +216,7 @@ int message_send(int count){
 	message->data_type = DT_TTY;
 	message->data_len = count;
 	if(message_push() == -1){
-		report_error("handle_local_read(): message_push(): %s", strerror(errno));
+		report_error("send_message(): message_push(): %s", strerror(errno));
 		return(-1);
 	}
 	message->data_len = backup_data_len;
@@ -234,8 +233,6 @@ void message_shift(int count){
 	}
 	message->data_len -= count;
 }
-
-
 
 
 int is_valid_escape(char c){
@@ -255,7 +252,6 @@ int is_valid_escape(char c){
 }
 
 
-
 int process_escape(char c){
 
 	switch(c){
@@ -264,11 +260,18 @@ int process_escape(char c){
 			return(-2);
 
 		case '#':
-			list_connections();
+			list_all();
+			break;
+
+		case 'C':
+			if(esc_shell_start() == -1){
+				report_error("process_escape(): esc_shell_start(): %s", strerror(errno));
+				return(-1);
+			}
 			break;
 
 		case '?':
-			list_valid_escapes();
+			print_valid_escapes();
 			break;
 
 		default:
@@ -281,45 +284,57 @@ int process_escape(char c){
 
 
 
-void list_connections(){
+void list_all(){
+	printf("\n\n");
+	list_listeners();
+	list_connections();
+}
+
+
+void list_listeners(){
 
   struct proxy_node *cur_proxy_node;
-  struct connection_node *cur_connection_node;
 
 	char *proxy_type_strings[] = {PROXY_STATIC_STRING, PROXY_DYNAMIC_STRING, PROXY_TUN_STRING, PROXY_TAP_STRING, PROXY_FILE_STRING};
+	char *target_strings[] = {"Local", "Remote"};
 
-	printf("\n\n");
 	printf("\r################################################################################\n");
 	printf("\r# Proxy listeners:\n");
 	printf("\r################################################################################\n");
 	printf("\n");
-	printf("\rID\tType\tName\n");
+	printf("\rCID\tOrigin\tType\tDescription\n");
 	cur_proxy_node = io->proxy_head;
 	while(cur_proxy_node){
 
-		printf("\r%d-%d\t%s\t%s\n", cur_proxy_node->origin, cur_proxy_node->id,\
-				proxy_type_strings[cur_proxy_node->proxy_type], cur_proxy_node->orig_request);
+		printf("\r%d-%d\t%s\t%s\t%s\n", cur_proxy_node->origin, cur_proxy_node->id,\
+				target_strings[cur_proxy_node->origin], proxy_type_strings[cur_proxy_node->proxy_type], cur_proxy_node->orig_request);
 
 		cur_proxy_node = cur_proxy_node->next;
 	}
 	printf("\r\n");
+}
 
+void list_connections(){
+
+  struct connection_node *cur_connection_node;
+
+	char *proxy_type_strings[] = {PROXY_STATIC_STRING, PROXY_DYNAMIC_STRING, PROXY_TUN_STRING, PROXY_TAP_STRING, PROXY_FILE_STRING};
+	char *target_strings[] = {"Local", "Remote"};
 
 	printf("\r################################################################################\n");
 	printf("\r# Active connections:\n");
 	printf("\r################################################################################\n");
 	printf("\n");
-	printf("\rID\tRead\tWritten\tType\tName\n");
+	printf("\rCID\tRead\tWritten\tOrigin\tType\tDescription\n");
 
-	printf("\r%d-%d\t%ld\t%ld\tTTY\tTerminal\n", io->target, io->remote_fd,\
+	printf("\r%d-%d\t%ld\t%ld\tLocal\ttty\tTerminal\n", io->target, io->remote_fd,\
 			io->tty_io_read, io->tty_io_written);
 
 	cur_connection_node = io->connection_head;
 	while(cur_connection_node){
-
-		printf("\r%d-%d\t%ld\t%ld\t%s\t%s\n", cur_connection_node->origin, cur_connection_node->id,\
+		printf("\r%d-%d\t%ld\t%ld\t%s\t%s\t%s\n", cur_connection_node->origin, cur_connection_node->id,\
 				cur_connection_node->io_read, cur_connection_node->io_written, \
-				proxy_type_strings[cur_connection_node->proxy_type], cur_connection_node->rhost_rport);
+				target_strings[cur_connection_node->origin], proxy_type_strings[cur_connection_node->proxy_type], cur_connection_node->rhost_rport);
 
 		cur_connection_node = cur_connection_node->next;
 	}
@@ -329,14 +344,16 @@ void list_connections(){
 
 }
 
-void list_valid_escapes(){
+void print_valid_escapes(){
 
 	printf("\n\n");
 	printf("\rSupported revsh escape sequences:\n");
 	printf("\n");
 	printf("\r~.\tExit. (Good for killing an unresponsive session.)\n");
 	printf("\r~#\tList active connections with usage statistics.\n");
+	printf("\r~C\tOpen the revsh command shell. Type \"help\" inside that shell for more information.\n");
 	printf("\r~?\tList the supported revsh escape sequences.\n");
 	printf("\r\n");
 
 }
+

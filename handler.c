@@ -72,7 +72,10 @@ int handle_local_write(){
 
 		tmp_message = io->tty_write_head;
 
-		retval = write(io->local_out_fd, tmp_message->data, tmp_message->data_len);
+		retval = 0;
+		if(!io->command_buff){
+			retval = write(io->local_out_fd, tmp_message->data, tmp_message->data_len);
+		}
 
 		if(retval == -1){
 			if(errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK){
@@ -123,12 +126,10 @@ int handle_local_read(){
 
 	}else{
 
-    io->tty_io_written += retval;
+		io->tty_io_written += retval;
 		message->data_len = retval;
 
-		if(!message->data_len){
-			return(-2);
-		}else{
+		if(message->data_len){
 
 			if(!io->target){
 				if((retval = escape_check()) < 0){
@@ -137,6 +138,8 @@ int handle_local_read(){
 					}
 					return(retval);
 				}
+//				fprintf(stderr, "\r\nDEBUG: handle_local_read(): escape_check() retval: %d\n", retval);
+//				fprintf(stderr, "\r\nDEBUG: handle_local_read(): message->data_len: %d\n", message->data_len);
 			}
 
 			// Check again for data_len, because we may have consumed the characters in the buffer during the escape_check().
@@ -246,27 +249,64 @@ int handle_message_dt_winresize(){
 	return(0);
 }
 
+
+// XXX
 int handle_message_dt_proxy_ht_destroy(){
-	// XXX stub
-//	fprintf(stderr, "\rDEBUG: handle_message_dt_proxy_ht_destroy()\n");
+
+	struct proxy_node *cur_proxy_node;
+	unsigned short header_errno;
+
+	//	fprintf(stderr, "\rDEBUG: handle_message_dt_proxy_ht_destroy()\n");
+
+	memcpy(&header_errno, message->data, sizeof(short));	
+	header_errno = ntohs(header_errno);
+	if((cur_proxy_node = proxy_node_find(message->header_origin, message->header_id))){
+		if(verbose && header_errno){
+			fprintf(stderr, "\rhandle_message_dt_proxy_ht_destroy(): Connection %s closed: %s\n", cur_proxy_node->rhost_rport, strerror(header_errno));
+		}
+
+		proxy_node_delete(cur_proxy_node);
+	}
+
 	return(0);
 }
 
+//XXX
 int handle_message_dt_proxy_ht_create(){
-	// XXX stub
-//	fprintf(stderr, "\rDEBUG: handle_message_dt_proxy_ht_create()\n");
-	return(0);
-}
 
-int handle_message_dt_proxy_ht_report(){
-	
 	struct proxy_node *cur_proxy_node;
 
-  if((cur_proxy_node = proxy_node_create()) == NULL){
-    report_error("proxy_node_new(): proxy_node_create(): %s", strerror(errno));
-    return(-1);
-  }
-  
+	//	fprintf(stderr, "\rDEBUG: handle_message_dt_proxy_ht_create()\n");
+
+	if((cur_proxy_node = proxy_node_find(message->header_origin, message->header_id))){
+		proxy_node_delete(cur_proxy_node);
+	}
+
+	if((cur_proxy_node = proxy_node_new(message->data, message->header_proxy_type)) == NULL){
+		report_error("handle_message_dt_proxy_ht_create(): proxy_node_new(%lx, %d): %s", (unsigned long) message->data, message->header_proxy_type, strerror(errno));
+		return(-1);
+	}
+
+	if(io->target){
+		if(handle_send_dt_proxy_ht_report(cur_proxy_node) == -1){
+			report_error("handle_message_dt_proxy_ht_create(): handle_send_dt_proxy_ht_report(%lx): %s", (unsigned long) cur_proxy_node, strerror(errno));
+			return(-1);
+		}
+	}
+	return(0);
+}
+
+
+// XXX
+int handle_message_dt_proxy_ht_report(){
+
+	struct proxy_node *cur_proxy_node;
+
+	if((cur_proxy_node = proxy_node_create()) == NULL){
+		report_error("proxy_node_new(): proxy_node_create(): %s", strerror(errno));
+		return(-1);
+	}
+
 	cur_proxy_node->origin = message->header_origin;
 	cur_proxy_node->id = message->header_id;
 	cur_proxy_node->proxy_type = message->header_proxy_type;
@@ -280,6 +320,7 @@ int handle_message_dt_proxy_ht_report(){
 
 	return(0);
 }
+
 
 /******************************************************************************
  *
@@ -375,9 +416,6 @@ int handle_message_dt_connection_ht_create(){
 
 	memcpy(cur_connection_node->rhost_rport, message->data, message->data_len);
 
-	cur_connection_node->origin = message->header_origin;
-	cur_connection_node->id = message->header_id;
-
 	errno = 0;
 	if((cur_connection_node->fd = proxy_connect(cur_connection_node->rhost_rport)) < 0){
 
@@ -424,16 +462,19 @@ int handle_message_dt_connection_ht_create(){
  ******************************************************************************/
 int handle_message_dt_connection_ht_create_tun_tap(){
 
-#ifdef FREEBSD
-	return(-2);
-#else
-	struct connection_node *cur_connection_node = NULL;
-
 	unsigned short origin = message->header_origin;
 	unsigned short id = message->header_id;
 
-	//	fprintf(stderr, "\rDEBUG: handle_message_dt_connection_ht_create_tun_tap()\n");
+#ifdef FREEBSD
+	// ENOSYS : It's not clear to me if ENOSYS is reserved for the OS or if this is a reasonable use case. 
+	handle_send_dt_connection_ht_destroy(origin, id, ENOSYS);
+	report_error("handle_message_dt_connection_ht_create_tun_tap(): revsh does not currently support tun/tap devices on FreeBSD.");
+	return(-2);
+#else
 
+	struct connection_node *cur_connection_node = NULL;
+
+	//	fprintf(stderr, "\rDEBUG: handle_message_dt_connection_ht_create_tun_tap()\n");
 
 	if(message->header_proxy_type == PROXY_TUN){
 		if((cur_connection_node = handle_tun_tap_init(IFF_TUN)) == NULL){
@@ -978,7 +1019,65 @@ int handle_connection_socks_init(struct connection_node *cur_connection_node){
 	return(0);
 }
 
+// XXX
+int handle_send_dt_proxy_ht_destroy(unsigned short origin, unsigned short id, unsigned short header_errno){
+	int retval;
 
+	//	fprintf(stderr, "\rDEBUG: handle_send_dt_proxy_ht_destroy()\n");
+
+	message->data_type = DT_PROXY;
+	message->header_type = DT_PROXY_HT_DESTROY;
+	message->header_origin = origin;
+	message->header_id = id;
+
+	if(header_errno){
+		header_errno = htons(header_errno);
+		message->data_len = sizeof(short);
+		memcpy(message->data, &header_errno, message->data_len);
+	}else{
+		message->data_len = 0;
+	}
+
+	if((retval = message_push()) == -1){
+		report_error("handle_send_dt_proxy_ht_destroy(): message_push(): %s", strerror(errno));
+		return(-1);
+	}
+
+	return(0);
+}
+
+// XXX
+int handle_send_dt_proxy_ht_create(char *proxy_string, int proxy_type){
+
+	int count, retval;
+
+	//	fprintf(stderr, "\rDEBUG: handle_send_dt_proxy_ht_create()\n");
+
+	message->data_type = DT_PROXY;
+	message->header_type = DT_PROXY_HT_CREATE;
+	message->header_origin = 0;
+	message->header_id = 0;
+	message->header_proxy_type = proxy_type;
+
+	memset(message->data, 0, io->message_data_size);
+
+	count = strlen(proxy_string);
+	if(count > io->message_data_size - 1){
+		report_error("handle_proxy_read(): Proxy request string too long!\n");
+		return(-2);
+	}
+	memcpy(message->data, proxy_string, count);
+	message->data_len = count;
+
+	if((retval = message_push()) == -1){
+		report_error("handle_proxy_read(): message_push(): %s", strerror(errno));
+		return(-1);
+	}
+
+	return(0);
+}
+
+// XXX
 int handle_send_dt_proxy_ht_report(struct proxy_node *cur_proxy_node){
 	int retval;
 
@@ -1124,6 +1223,7 @@ int handle_send_dt_nop(){
 struct connection_node *handle_tun_tap_init(int ifr_flag){
 
 #ifdef FREEBSD
+	report_error("handle_tun_tap_init(): revsh does not currently support tun/tap devices on FreeBSD.");
 	return(NULL);
 #else
 

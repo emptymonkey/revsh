@@ -1,7 +1,15 @@
 
-This document is intended as an overview of the structure of the revsh
-codebase. For a more complete explanation of how the code works, go read the
-code itself.
+I believe reading the code is the best way to understand the tactics used by
+the coder to drive the machine from moment to moment. However, I think that
+reading the code is a horrible way to understand the strategy the coder is
+taking to solve the problem overall. This document is therefore intended as
+an overview of the revsh codebase from a high level, showing how all of the
+different files and functions fit together. Ultimately, humans are prone to
+error, human language is imprecise, and sometimes you forget to update the 
+docs. As such, the code itself is ultimately authoritative, though I do hope
+this document helps you understand my intent and methods better.
+
+tactics != strategy
 
 
 ################################################################################
@@ -13,14 +21,14 @@ messaging system for passing "messages" between the control node and the target
 node. These messages can be of many different types, all defined in the
 protocol.h header file. 
 
-The main work is done in a broker loop that does select() based non-blocking
-io. The file-descriptor (fd) for the tty has priority. Next in priority is the
-message bus fd. After that the fds for socks listeners or established
-connections (including tun/tap virtual networking interfaces) are handled in a
-loop. These connections live in a linked list with a primitive form of
-round-robin scheduling.
+The main work is done in the broker() loop that does select() based
+non-blocking io. The file-descriptor (fd) for the tty has priority. Next in
+priority is the message bus fd. After that the fds for socks listeners or
+established connections (including tun/tap virtual networking interfaces) are
+handled in a loop. These connections live in a linked list with a primitive
+form of round-robin scheduling.
 
-That's it. That's the main idea.
+That's it. 
 
 
 Some design decisions should be explained:
@@ -30,7 +38,7 @@ Some design decisions should be explained:
 	- I decided on a single connection between control and target for stealth.
 	- I decided to use OpenSSL because it is available on the broadest set of 
 	  machines. However, the version differences are still a pain to deal with
-	  so we end up always statically building. I may try to switch to LibreSSL
+	  so we end up always building statically. I may try to switch to LibreSSL
 	  at some point. I don't rule out writing my own crypto either (though I'd
 	  prefer not to.)
 
@@ -75,6 +83,7 @@ Some design decisions should be explained:
 # Broker Loop
 
 - broker.c
+	-- broker() runs the show.
 	-- Uses message_pull() and message_push() to read and write data.
 	-- Reads data from either the local or remote file descriptor, then writes it
 	   down the other.

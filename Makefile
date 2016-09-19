@@ -12,6 +12,16 @@ STRIP = /usr/bin/strip
 
 INSTALL_BIN = /usr/local/bin
 
+########################################################################################################################
+# LINENOISE lib is used as a readline replacement.
+# Comment these out if you don't want that library.
+# (That will disable the revsh esc-sequence command shell feature.)
+########################################################################################################################
+
+LINENOISE_OBJS = linenoise.o
+LINENOISE_DIR = ../linenoise
+LINENOISE_CFLAGS = -DLINENOISE
+LINENOISE_IFLAGS = -I$(LINENOISE_DIR)
 
 ########################################################################################################################
 # Build specifications. Pick one and uncomment.
@@ -50,12 +60,12 @@ IO_DEP = io_ssl.c
 # make directives - Not intended for modification.
 ########################################################################################################################
 
-OBJS = string_to_vector.o io.o report.o control.o target.o handler.o broker.o message.o proxy.o escape.o
+OBJS = string_to_vector.o io.o report.o control.o target.o handler.o broker.o message.o proxy.o escape.o esc_shell.o
 
 all: revsh
 
-revsh: revsh.c helper_objects.h common.h config.h $(KEY_OF_C) $(KEYS_DIR) $(OBJS)
-	$(CC) $(CFLAGS) $(OBJS) -o revsh revsh.c $(LIBS)
+revsh: revsh.c helper_objects.h common.h config.h $(KEY_OF_C) $(KEYS_DIR) $(OBJS) $(LINENOISE_OBJS)
+	$(CC) $(CFLAGS) $(LINENOISE_IFLAGS) $(OBJS) $(LINENOISE_OBJS) -o revsh revsh.c $(LIBS)
 	$(STRIP) ./revsh
 
 keys:
@@ -112,6 +122,12 @@ proxy.o: proxy.c common.h config.h helper_objects.h
 escape.o: escape.c common.h config.h helper_objects.h
 	$(CC) $(CFLAGS) -c -o escape.o escape.c
 
+esc_shell.o: esc_shell.c common.h config.h helper_objects.h esc_shell.h $(LINENOISE_OBJS)
+	$(CC) $(CFLAGS) $(LINENOISE_CFLAGS) $(LINENOISE_IFLAGS) -c -o esc_shell.o esc_shell.c
+
+linenoise.o: $(LINENOISE_DIR)/linenoise.c $(LINENOISE_DIR)/linenoise.h
+	$(CC) $(CFLAGS) -c -o linenoise.o $(LINENOISE_DIR)/linenoise.c
+
 in_the_key_of_c: in_the_key_of_c.c
 	$(CC) $(CFLAGS) -o in_the_key_of_c in_the_key_of_c.c $(LIBS)
 
@@ -135,7 +151,7 @@ install:
 
 # "make dirty" deletes executables and object files.
 dirty:
-	rm revsh $(OBJS) $(KEY_OF_C) 
+	rm revsh $(OBJS) $(LINENOISE_OBJS) $(KEY_OF_C) 
 
 # "make clean" calls "make dirty", then also removes the keys folder.
 clean: dirty

@@ -107,11 +107,6 @@
 #define SOCKS_V5_REPLY "\x05\x00\x00\x01\x00\x00\x00\x00\x00\x00"
 #define SOCKS_V5_REPLY_LEN 10
 
-/* States possible in the escape character processing state machine. */
-#define ESCAPE_NONE 0
-#define ESCAPE_CR 1
-#define ESCAPE_TILDE 2
-
 /* Maximum possible size of a socks request. */
 /*
 	 Max size cases:
@@ -123,9 +118,20 @@
  */
 #define SOCKS_REQ_MAX	520
 
-
 /* The max number of messages we will queue for delivery before requesting the remote client to throttle the connection. */
 #define MESSAGE_DEPTH_MAX	64
+
+/* States possible in the escape sequence processing state machine. */
+#define ESCAPE_NONE 0
+#define ESCAPE_CR 1
+#define ESCAPE_TILDE 2
+
+/* The max length of the escape sequence command input strings. Arbitrary, but probably more than long enough. */
+// MAX_INPUT and MAX_CANON both seem unusually small given that we can take two file names as arguments,
+// and each file name can be upwards of 255 characters.
+#define ESC_COMMAND_MAX 1024
+
+#define REVSH_PROMPT "revsh>"
 
 
 /******************************************************************************
@@ -164,12 +170,23 @@ int do_control(struct config_helper *config);
 /* escape.c */
 int escape_check();
 int send_consumed();
-int message_send(int count);
+int send_message(int count);
 void message_shift(int count);
 int is_valid_escape(char c);
 int process_escape(char c);
-void list_valid_escapes();
+void list_all();
+void list_listeners();
 void list_connections();
+void print_valid_escapes();
+
+/* esc_shell.c */
+int esc_shell_start();
+int esc_shell_stop();
+#ifdef LINENOISE
+int esc_shell_loop();
+void esc_shell_help(char **command_vec);
+char **completion_strings_initialize();
+#endif
 
 /* handler.c */
 int handle_signal_sigwinch();
@@ -191,6 +208,8 @@ int handle_proxy_read(struct proxy_node *cur_proxy_node);
 int handle_connection_write(struct connection_node *cur_connection_node);
 int handle_connection_read(struct connection_node *cur_connection_node);
 int handle_connection_socks_init(struct connection_node *cur_connection_node);
+int handle_send_dt_proxy_ht_destroy(unsigned short origin, unsigned short id, unsigned short header_errno);
+int handle_send_dt_proxy_ht_create(char *proxy_string, int proxy_type);
 int handle_send_dt_proxy_ht_report(struct proxy_node *cur_proxy_node);
 int handle_send_dt_connection_ht_destroy(unsigned short origin, unsigned short id, unsigned short header_errno);
 int handle_send_dt_connection_ht_create(struct connection_node *cur_connection_node);
@@ -258,3 +277,4 @@ void free_vector(char **vector);
 /* target.c */
 int do_target(struct config_helper *config);
 int remote_printf(char *fmt, ...);
+

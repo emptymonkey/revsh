@@ -16,9 +16,10 @@ int do_control(struct config_helper *config){
 
 	int i;
 	int retval;
+	int fcntl_flags;
+
 	int err_flag;
 
-	struct termios saved_termios_attrs, new_termios_attrs;
 	char **exec_envp;
 	struct winsize tty_winsize;
 
@@ -177,25 +178,35 @@ int do_control(struct config_helper *config){
 	// The initialization protocol is now finished. Rest of initialization is local.
 	io->init_complete = 1;
 
-	/*  - Set local terminal to raw.  */
-	if(tcgetattr(STDIN_FILENO, &saved_termios_attrs) == -1){
-		report_error("do_control(): tcgetattr(STDIN_FILENO, %lx): %s", (unsigned long) &saved_termios_attrs, strerror(errno));
+	if((io->saved_termios_attrs = (struct termios *) calloc(1, sizeof(struct termios))) == NULL){
+		report_error("do_control(): calloc(1, %d): %s", (int) sizeof(struct termios), strerror(errno));
 		return(-1);
 	}
 
-	memcpy(&new_termios_attrs, &saved_termios_attrs, sizeof(struct termios));
+	if((io->revsh_termios_attrs = (struct termios *) calloc(1, sizeof(struct termios))) == NULL){
+		report_error("do_control(): calloc(1, %d): %s", (int) sizeof(struct termios), strerror(errno));
+		return(-1);
+	}
 
-	new_termios_attrs.c_lflag &= ~(ECHO|ICANON|IEXTEN|ISIG);
-	new_termios_attrs.c_iflag &= ~(BRKINT|ICRNL|INPCK|ISTRIP|IXON);
-	new_termios_attrs.c_cflag &= ~(CSIZE|PARENB);
-	new_termios_attrs.c_cflag |= CS8;
-	new_termios_attrs.c_oflag &= ~(OPOST);
+	/*  - Set local terminal to raw.  */
+	if(tcgetattr(STDIN_FILENO, io->saved_termios_attrs) == -1){
+		report_error("do_control(): tcgetattr(STDIN_FILENO, %lx): %s", (unsigned long) io->saved_termios_attrs, strerror(errno));
+		return(-1);
+	}
 
-	new_termios_attrs.c_cc[VMIN] = 1;
-	new_termios_attrs.c_cc[VTIME] = 0;
+	memcpy(io->revsh_termios_attrs, io->saved_termios_attrs, sizeof(struct termios));
 
-	if(tcsetattr(STDIN_FILENO, TCSANOW, &new_termios_attrs) == -1){
-		report_error("do_control(): tcsetattr(STDIN_FILENO, TCSANOW, %lx): %s", (unsigned long) &new_termios_attrs, strerror(errno));
+	io->revsh_termios_attrs->c_lflag &= ~(ECHO|ICANON|IEXTEN|ISIG);
+	io->revsh_termios_attrs->c_iflag &= ~(BRKINT|ICRNL|INPCK|ISTRIP|IXON);
+	io->revsh_termios_attrs->c_cflag &= ~(CSIZE|PARENB);
+	io->revsh_termios_attrs->c_cflag |= CS8;
+	io->revsh_termios_attrs->c_oflag &= ~(OPOST);
+
+	io->revsh_termios_attrs->c_cc[VMIN] = 1;
+	io->revsh_termios_attrs->c_cc[VTIME] = 0;
+
+	if(tcsetattr(STDIN_FILENO, TCSANOW, io->revsh_termios_attrs) == -1){
+		report_error("do_control(): tcsetattr(STDIN_FILENO, TCSANOW, %lx): %s", (unsigned long) io->revsh_termios_attrs, strerror(errno));
 		return(-1);
 	}	
 
@@ -225,9 +236,32 @@ int do_control(struct config_helper *config){
 		close(rc_fd);
 	}
 
-	err_flag = 0;
+	/* Set the tty to non-blocking. */
+  if((fcntl_flags = fcntl(io->local_in_fd, F_GETFL, 0)) == -1){
+    report_error("do_control(): fcntl(%d, F_GETFL, 0): %s", io->local_in_fd, strerror(errno));
+    return(-1);
+  }
+  
+  fcntl_flags |= O_NONBLOCK;
+  if(fcntl(io->local_in_fd, F_SETFL, fcntl_flags) == -1){
+    report_error("do_control(): fcntl(%d, F_SETFL, %d): %s", io->local_in_fd, fcntl_flags, strerror(errno));
+    return(-1);
+  }
+  
+  if((fcntl_flags = fcntl(io->local_out_fd, F_GETFL, 0)) == -1){
+    report_error("do_control(): fcntl(%d, F_GETFL, 0): %s", io->local_out_fd, strerror(errno));
+    return(-1);
+  }
+
+  fcntl_flags |= O_NONBLOCK;
+  if(fcntl(io->local_out_fd, F_SETFL, fcntl_flags) == -1){
+    report_error("do_control(): fcntl(%d, F_SETFL, %d): %s", io->local_out_fd, fcntl_flags, strerror(errno));
+    return(-1);
+  }
+
 
 	/*  - Enter broker() for tty brokering. */
+	err_flag = 0;
 	retval = broker(config);
 
 	if(retval == -1 && !io->eof){
@@ -240,9 +274,11 @@ int do_control(struct config_helper *config){
 	}
 
 	/*  - Reset local term. */
-	if(tcsetattr(STDIN_FILENO, TCSANOW, &saved_termios_attrs) == -1){
-		report_error("do_control(): tcsetattr(STDIN_FILENO, TCSANOW, %lx): %s", (unsigned long) &saved_termios_attrs, strerror(errno));
+	if(tcsetattr(STDIN_FILENO, TCSANOW, io->saved_termios_attrs) == -1){
+		report_error("do_control(): tcsetattr(STDIN_FILENO, TCSANOW, %lx): %s", (unsigned long) io->saved_termios_attrs, strerror(errno));
 	}
+	free(io->saved_termios_attrs);
+	free(io->revsh_termios_attrs);
 
 	/*  - Exit. */
 	if(!err_flag){

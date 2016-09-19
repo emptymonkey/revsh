@@ -47,6 +47,14 @@ struct proxy_node *proxy_node_new(char *proxy_string, int proxy_type){
 	}
 	new_node->proxy_type = proxy_type;	
 
+	// free() called in proxy_node_delete().
+	if((new_node->orig_request = (char *) calloc(strlen(proxy_string) + 1, sizeof(char))) == NULL){
+			report_error("proxy_node_new(): calloc(%d, sizeof(char)): %s", (int) strlen(proxy_string), strerror(errno));
+		free(new_node);
+		return(NULL);
+	}
+	memcpy(new_node->orig_request, proxy_string, strlen(proxy_string));
+
 	// free() called in io_clean().
 	if((new_node->mem_ptr = (char *) calloc(strlen(proxy_string) + 1, sizeof(char))) == NULL){
 			report_error("proxy_node_new(): calloc(%d, sizeof(char)): %s", (int) strlen(proxy_string), strerror(errno));
@@ -99,7 +107,6 @@ struct proxy_node *proxy_node_new(char *proxy_string, int proxy_type){
 		goto CLEANUP;
 	}
 
-	new_node->orig_request = proxy_string;
 	new_node->origin = io->target;
 	new_node->id = new_node->fd;
 	return(new_node);
@@ -330,6 +337,10 @@ void proxy_node_delete(struct proxy_node *cur_proxy_node){
 			close(cur_proxy_node->fd);
 		}
 		io->fd_count--;
+
+		if(cur_proxy_node->orig_request){
+			free(cur_proxy_node->orig_request);
+		}
 
 		if(cur_proxy_node->mem_ptr){
 			free(cur_proxy_node->mem_ptr);

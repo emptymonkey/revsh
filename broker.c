@@ -52,7 +52,12 @@ int broker(struct config_helper *config){
 		while(cur_proxy_req_node){
 
 			if(cur_proxy_req_node->remote){
-			// XXX  send the request to launch the proxy remotely.	
+				if((retval = handle_send_dt_proxy_ht_create(cur_proxy_req_node->request_string, cur_proxy_req_node->type)) < 0){
+					report_error("broker(): handle_send_dt_proxy_ht_create(): %s", strerror(errno));
+					if(retval == -1){
+						return(-1);
+					}
+				}
 			}else{
 				cur_proxy_node = proxy_node_new(cur_proxy_req_node->request_string, cur_proxy_req_node->type);	
 
@@ -71,9 +76,14 @@ int broker(struct config_helper *config){
 		}
 
 
-		/* Prepare for window resize event handling. */
+		/* Prepare for broker() loop signal handling. */
 		memset(&act, 0, sizeof(act));
 		act.sa_handler = signal_handler;
+
+		if((retval = sigaction(SIGCHLD, &act, NULL)) == -1){
+			report_error("broker(): sigaction(SIGWINCH, %lx, NULL): %s", (unsigned long) &act, strerror(errno));
+			return(-1);
+		}
 
 		if((retval = sigaction(SIGWINCH, &act, NULL)) == -1){
 			report_error("broker(): sigaction(SIGWINCH, %lx, NULL): %s", (unsigned long) &act, strerror(errno));
@@ -119,12 +129,12 @@ int broker(struct config_helper *config){
 		timeout_ptr = &timeout;
 	}
 
-//	int debug_ctr = 1000;
+	//	XXX int debug_ctr = 1000;
 	/*  Start the broker() loop. */
 	while(1){
-//		if(!debug_ctr--){
-//			return(-1);
-//		}
+		//		if(!debug_ctr--){
+		//			return(-1);
+		//		}
 
 		/* Initialize fds we will want to select() on this loop. */
 		fd_max = 0;
@@ -132,8 +142,16 @@ int broker(struct config_helper *config){
 		FD_ZERO(&write_fds);
 
 		/* TTY / Shell  and message bus will always be select()ed. */
-		FD_SET(io->local_in_fd, &read_fds);
-		fd_max = io->local_in_fd > fd_max ? io->local_in_fd : fd_max;
+		if(!io->command_buff){
+			FD_SET(io->local_in_fd, &read_fds);
+			fd_max = io->local_in_fd > fd_max ? io->local_in_fd : fd_max;
+			if(io->tty_write_head){
+				FD_SET(io->local_out_fd, &write_fds);
+				fd_max = io->local_out_fd > fd_max ? io->local_out_fd : fd_max;
+			}
+		}else{
+			// Put esc_shell child proc shared pipe fd in here.
+		}
 
 		FD_SET(io->remote_fd, &read_fds);
 		fd_max = io->remote_fd > fd_max ? io->remote_fd : fd_max;
@@ -209,6 +227,14 @@ int broker(struct config_helper *config){
 							report_error("broker(): handle_signal_sigwinch(): %s", strerror(errno));
 							goto RETURN;
 						}
+						break;
+
+					case SIGCHLD:
+						if(esc_shell_stop() == -1){
+							report_error("broker(): esc_shell_stop(): %s", strerror(errno));
+							return(-1);
+						}
+
 						break;
 				}
 			}

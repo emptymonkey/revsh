@@ -42,20 +42,47 @@
 
 /* XXX
 
-- Convert tabs to spaces in comments and docs, sanely.
+- Add a license switch that prints license info, both mine and that of any libraries.
 
-- Implement -R remote forward. (Implement as a -L on the target node.)
+Escape Sequence Commands:
+- Implement ~C commands. Either command name or () shortcut. Must be followed by '\r'. '~' commands should be honored. '~~' commands should be forwarded.
+	- file (f) : Copy a file.
+    -- upload (u) : upload a file. Default to "current directory" if no path or second parameter given.
+    -- download (d) : download a file. Default to "current directory" if no path or second parameter given.
+	- proxy (p) : setup a listener. 
+	  -- local (L) : Point-to-point port forwarding with a local listener.
+	  -- dynamic (D) : Dynamic Socks proxy port forwarding with a local listener.
+    -- remote (R) : Point-to-point port forwarding with a remote listener.
+	  -- bypass (B) : Dynamic Socks proxy port forwarding with a remote listener.
+	- tun (=) : Establish a tun device both locally and remotely.
+	- tap (+) : Establish a tap device both locally and remotely.
+	- list (l) : List connections. Same as ~#.
+	- kill (k) : Destroy a connection / proxy based off the X-Y cid reported in ~#.
+	- ttyscript (t) : Forward the ttyscript commands to the remote hosts tty.
+  - help (?) : Prints usage. 
+    -- When given a command above as an argument to help, additional help should be printed.
 
-- Implement ~C. Commands:
-  - help: Prints usage.
-  - upload (ul): upload a file. Default to "current directory" if no path or second parameter given.
-  - download (dl): download a file. Default to "current directory" if no path or second parameter given.
-	- Add connections: L R D E X Y
-	- Kill a connection / proxy based off X-Y uid reported in ~#.
-
+General Cleanup:
+- Convert tabs to spaces sanely.
 - Test all the switches.
 - Make a man page.
 - Use daily til Toorcon.
+
+- Future:
+- node chaining!!!  revsh sessions!!!  "~c sessions" to list sessions and "~c s1" to flip to session 1!!!.
+- add target ids to message bus.
+  -- make id's a string of chars. Each char represents depth from control. This means 255 max children. Probably another char to represent depth to target for a max 255 depth. This makes a sort of base 256 number system where the exponent represents depth. Need to add both a variable char array to the message header as well as a depth (or char count) variable.
+  -- examine routing methods.
+- add target state (listening, connected, etc.)
+- add parent concept for routing. (e.g.  i am node 2. nodes 5 and 7 are my children. Short circuit any routing requsts.)
+- add escape shell command to ascii art draw the tree.
+- extend escape commands to take node arguments. (e.g. copy file from node 5:/etc/passwd to node 7:)
+- Disable proxy, tun, tap by default. Once ~C shell commands work, user can dynamically create easily enough.
+- ~C command for printing an ascii art version of the tree.
+
+- Make new tty_node linked list.
+- redo linked lists so that ttys, proxys, and connections are all the same struct with the same create() destroy() functions.
+	-- keep them as separate heads as they are different, but unify the struct types.
 
 XXX */
 
@@ -114,16 +141,14 @@ void usage(int ret_code){
 	fprintf(out_stream, "\nMUTUAL_OPTIONS:\n");
 	fprintf(out_stream, "\t-k\t\tRun in keep-alive mode.\n\t\t\tNode will neither exit normally, nor seppuku from timeout.\n");
 	fprintf(out_stream, "\t-L [LHOST:]LPORT:RHOST:RPORT\n");
-	fprintf(out_stream, "\t\t\tLocal forward connections from the local\n\t\t\tlistener at LHOST:LPORT to RHOST:RPORT.\n"); 
+	fprintf(out_stream, "\t\t\tStatic socket forwarding with a local\n\t\t\tlistener at LHOST:LPORT forwarding to RHOST:RPORT.\n"); 
 	fprintf(out_stream, "\t-R [RHOST:]RPORT:LHOST:LPORT\n");
-	fprintf(out_stream, "\t\t\tLocal forward connections from the remote\n\t\t\tlistener at RHOST:RPORT to LHOST:LPORT.\n"); 
+	fprintf(out_stream, "\t\t\tStatic socket forwarding with a remote\n\t\t\tlistener at RHOST:RPORT forwarding to LHOST:LPORT.\n"); 
 	fprintf(out_stream, "\t-D [LHOST:]LPORT\n");
-	fprintf(out_stream, "\t\t\tDynamic forward connections from the local\n\t\t\tlistener at LHOST:LPORT.\t\t\t(Socks 4, 4a, and 5. TCP connect only.)\n");
-	fprintf(out_stream, "\t-E [RHOST:]RPORT\n");
-	fprintf(out_stream, "\t\t\tDynamic forward connections from the remote\n\t\t\tlistener at RHOST:RPORT.\t\t\t(Socks 4, 4a, and 5. TCP connect only.)\n");
-	fprintf(out_stream, "\t-x\t\tDisable the default tun device.\n");
-	fprintf(out_stream, "\t-y\t\tDisable the default tap device.\n");
-	fprintf(out_stream, "\t-z\t\tDisable the default proxy listener.\t\t(Default listener on port %s)\n", SOCKS_LISTENER);
+	fprintf(out_stream, "\t\t\tDynamic socket forwarding with a local\n\t\t\tlistener at LHOST:LPORT.\t\t\t(Socks 4, 4a, and 5. TCP connect only.)\n");
+	fprintf(out_stream, "\t-B [RHOST:]RPORT\n");
+	fprintf(out_stream, "\t\t\tDynamic socket forwarding with a remote\n\t\t\tlistener at LHOST:LPORT.\t\t\t(Socks 4, 4a, and 5. TCP connect only.)\n");
+	fprintf(out_stream, "\t-x\t\tDisable automatic setup of proxies.\t\t(Defaults: Proxy D%s and tun/tap devices.)\n", SOCKS_LISTENER);
 	fprintf(out_stream, "\t-b\t\tStart in bind shell mode.\t\t\t(Default is reverse shell mode.)\n");
 	fprintf(out_stream, "\t\t\tThe -b flag must be invoked on both ends.\n");
 	fprintf(out_stream, "\t-n\t\tNon-interactive netcat style data broker.\t(Default is interactive w/remote tty.)\n\t\t\tNo tty. Useful for copying files.\n");
@@ -295,7 +320,7 @@ int main(int argc, char **argv){
 	}
 
 	/* Grab the configuration from the command line. */
-	while((opt = getopt(argc, argv, "hepbkalcxyzs:d:f:L:R:D:E:r:F:t:nv")) != -1){
+	while((opt = getopt(argc, argv, "hepbkalcxs:d:f:L:R:D:B:r:F:t:nv")) != -1){
 		switch(opt){
 
 			case 'h':
@@ -339,13 +364,7 @@ int main(int argc, char **argv){
 
 			case 'x':
 				config->tun = 0;
-				break;
-
-			case 'y':
 				config->tap = 0;
-				break;
-
-			case 'z':
 				config->socks = NULL;
 				break;
 
@@ -360,7 +379,7 @@ int main(int argc, char **argv){
 			case 'L':
 			case 'R':
 			case 'D':
-			case 'E':
+			case 'B':
 				if((tmp_proxy_ptr = (struct proxy_request_node *) calloc(1, sizeof(struct proxy_request_node))) == NULL){
 					report_error("main(): calloc(1, %d): %s", (int) sizeof(struct proxy_node), strerror(errno));
 					return(-1);
@@ -376,12 +395,12 @@ int main(int argc, char **argv){
 				cur_proxy_ptr->request_string = optarg;
 
 				cur_proxy_ptr->type = PROXY_STATIC;
-				if(opt == 'D' || opt == 'E'){
+				if(opt == 'D' || opt == 'B'){
 					cur_proxy_ptr->type = PROXY_DYNAMIC;
 				}
 
 				cur_proxy_ptr->remote = 0;
-				if(opt == 'R' || opt == 'E'){
+				if(opt == 'R' || opt == 'B'){
 					cur_proxy_ptr->remote = 1;
 				}
 				break;

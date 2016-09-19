@@ -140,6 +140,9 @@ struct connection_node {
 	unsigned long io_read;
 	unsigned long io_written;
 
+	// Used with file transfers along with io_read/io_written to show percent complete.
+	unsigned long file_size;
+
 	// This will allow for write queues.
 	//  Note, no write_tail element. Iterate through every time you want to add an element, thus calculating the message depth dynamically.
 	//  If MAX_MESSAGE_DEPTH is hit, tell the remote node to stop listening its associated fd.
@@ -184,7 +187,11 @@ struct io_helper {
 	// Useful in the keepalive case.
 	int interactive;
 
-	// Stores tty state info.
+	// Save the original tty settings here for inspection during runtime and later restoration.
+  struct termios *saved_termios_attrs;
+  struct termios *revsh_termios_attrs;
+
+	// Stores transient tty state info.
 	struct winsize *tty_winsize;
 
 	// If no logging setup, this will remain NULL.
@@ -217,6 +224,33 @@ struct io_helper {
 
 	const EVP_MD *fingerprint_type;
 #endif /* OPENSSL */
+
+	/****************************************************************************/
+	// Variables used in escape sequence sub-shell command processing.
+
+	// buff will be null unless the user is in the sub-shell.
+	// Upon entry calloc() is called. 
+	// Upon exit, free() is called.
+	// Total size is ESC_COMMAND_MAX. (Prolly 1024.) We will reserve the final
+  // index for a null char in case we wish to use string processing.
+	char *command_buff;
+
+	// The nunmber of characters read. As a result it acts as an index to the
+	// first unused location in the buffer.
+	int command_len;
+
+	// This represents the index in the buffer where the cursor appears. This
+	// will be the same as command_len, unless the user is using the arrow keys
+	// or other bash style keyboard movement shortcuts.
+	int esc_shell_index;
+
+	// esc_shell_csi is a flag denoting a possible ANSI CSI terminal escape
+	// code sequence in progress. We implement this as a pointer to the element
+	// inside the buffer that is the beginning of the CSI sequence.
+	// (e.g. '\x1b'). This is null if no sequence is detected.
+	char *esc_shell_csi;
+
+	/****************************************************************************/
 
 	// Linked list of proxy listeners.
 	struct proxy_node *proxy_head;

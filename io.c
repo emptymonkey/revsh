@@ -45,13 +45,13 @@ int negotiate_protocol(){
 
 	/* Set the socket to non-blocking. */
 	if((fcntl_flags = fcntl(io->remote_fd, F_GETFL, 0)) == -1){
-		report_error("negotiate_protocol(): fcntl(%d, FGETFL, 0): %s", io->remote_fd, strerror(errno));
+		report_error("negotiate_protocol(): fcntl(%d, F_GETFL, 0): %s", io->remote_fd, strerror(errno));
 		return(-1);
 	}
 
 	fcntl_flags |= O_NONBLOCK;
 	if(fcntl(io->remote_fd, F_SETFL, fcntl_flags) == -1){
-		report_error("negotiate_protocol(): fcntl(%d, FGETFL, %d): %s", io->remote_fd, fcntl_flags, strerror(errno));
+		report_error("negotiate_protocol(): fcntl(%d, F_SETFL, %d): %s", io->remote_fd, fcntl_flags, strerror(errno));
 		return(-1);
 	}
 
