@@ -14,7 +14,7 @@
  * Purpose: This is the defining function for a target node.
  *
  **********************************************************************************************************************/
-int do_target(struct config_helper *config){
+int do_target(){
 
 	int retval;
 	int fcntl_flags;

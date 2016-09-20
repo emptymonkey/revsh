@@ -60,6 +60,7 @@ struct config_helper {
 	char *shell;
 	char *local_forward;
 	char *log_file;
+	char *ttyscripts_dir;
 
 	int keepalive;
 	int nop;

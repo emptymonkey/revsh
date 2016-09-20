@@ -32,6 +32,7 @@
 #define REVSH_DIR "~/.revsh/"
 #define RC_FILE	REVSH_DIR "rc"
 #define KEYS_DIR REVSH_DIR "keys/"
+#define	TTYSCRIPTS_DIR REVSH_DIR "ttyscripts/"
 
 /*  Cipher definitions. */
 #define ADH_CIPHER "ADH-AES256-SHA"

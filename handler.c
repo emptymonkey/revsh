@@ -73,9 +73,7 @@ int handle_local_write(){
 		tmp_message = io->tty_write_head;
 
 		retval = 0;
-		if(!io->command_buff){
-			retval = write(io->local_out_fd, tmp_message->data, tmp_message->data_len);
-		}
+		retval = write(io->local_out_fd, tmp_message->data, tmp_message->data_len);
 
 		if(retval == -1){
 			if(errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK){

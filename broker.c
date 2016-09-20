@@ -14,7 +14,7 @@ extern sig_atomic_t sig_found;
  * Purpose: Broker data between the terminal / connections and the network socket. 
  *
  **********************************************************************************************************************/
-int broker(struct config_helper *config){
+int broker(){
 
 	int retval = -1;
 	int found;

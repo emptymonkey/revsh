@@ -367,7 +367,7 @@ int remote_write_encrypted(void *buff, size_t count){
  * Purpose: To initialize the control's network io interface.
  *
  **********************************************************************************************************************/
-int init_io_control(struct config_helper *config){
+int init_io_control(){
 
 	int i;
 	int retval;
@@ -807,7 +807,7 @@ int init_io_control(struct config_helper *config){
  * Purpose: To initialize a target's network io interface.
  *
  **********************************************************************************************************************/
-int init_io_target(struct config_helper *config){
+int init_io_target(){
 
 	int i;
 	int retval;

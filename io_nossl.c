@@ -144,7 +144,7 @@ int remote_write_plaintext(void *buff, size_t count){
  * Purpose: To initialize the control nodes network io layer.
  *
  **********************************************************************************************************************/
-int init_io_control(struct config_helper *config){
+int init_io_control(){
 
 	int tmp_sock;
 
@@ -292,7 +292,7 @@ int init_io_control(struct config_helper *config){
  * Purpose: To initialize a target's network io layer.
  *
  **********************************************************************************************************************/
-int init_io_target(struct config_helper *config){
+int init_io_target(){
 
 	int retval;
 

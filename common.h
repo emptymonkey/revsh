@@ -14,6 +14,7 @@
  ******************************************************************************/
 
 #include <ctype.h>
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <getopt.h>
@@ -64,6 +65,15 @@
 # include <linux/if.h>
 # include <linux/if_tun.h>
 
+#endif
+
+
+/******************************************************************************
+ * linenoise library header
+ ******************************************************************************/
+
+#ifdef LINENOISE
+# include "linenoise.h"
 #endif
 
 
@@ -153,7 +163,10 @@ struct message_helper *message;
 	 I decided to just make it a global. It's being used globally, no need to pretend it's something other than what it is.
  */
 struct io_helper *io;
-
+/*
+	Same with config. However, this one is a more reasonable global. Once you leave main, it is intended to be read-only.
+ */
+struct config_helper *config;
 
 /******************************************************************************
  * function definitions
@@ -161,11 +174,11 @@ struct io_helper *io;
  ******************************************************************************/
 
 /* broker.c */
-int broker(struct config_helper *config);
+int broker();
 void signal_handler(int signal);
 
 /* control.c */
-int do_control(struct config_helper *config);
+int do_control();
 
 /* escape.c */
 int escape_check();
@@ -185,7 +198,11 @@ int esc_shell_stop();
 #ifdef LINENOISE
 int esc_shell_loop();
 void esc_shell_help(char **command_vec);
-char **completion_strings_initialize();
+const struct esc_shell_command *find_in_menu(char **command_vec);
+void expand_tab(const char *buf, linenoiseCompletions *lc);
+int command_validate(char **command_vec);
+char **vector_push(char **vector, char *string);
+char **suggest_files(char *string);
 #endif
 
 /* handler.c */
@@ -233,8 +250,8 @@ int dummy_verify_callback(int preverify_ok, X509_STORE_CTX* ctx);
 #endif /* OPENSSL */
 
 /* io_nossl.c & io_ssl.c */
-int init_io_control(struct config_helper *config);
-int init_io_target(struct config_helper *config);
+int init_io_control();
+int init_io_target();
 
 /* message.c */
 int message_pull();
@@ -262,10 +279,7 @@ int report_log(char *fmt, ...);
 int report_log_string(char *error_string);
 
 /* revsh.c */
-// void usage(int ret_code);
-// void examples(int ret_code);
-// int main(int argc, char **argv);
-void clean_io(struct config_helper *config);
+void clean_io();
 #ifndef FREEBSD
 int posix_openpt(int flags);
 #endif 
@@ -275,6 +289,6 @@ char **string_to_vector(char *command_string);
 void free_vector(char **vector);
 
 /* target.c */
-int do_target(struct config_helper *config);
+int do_target();
 int remote_printf(char *fmt, ...);
 

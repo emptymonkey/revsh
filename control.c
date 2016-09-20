@@ -12,7 +12,7 @@
  * Purpose: This is the defining function for a control node.
  *
  **********************************************************************************************************************/
-int do_control(struct config_helper *config){
+int do_control(){
 
 	int i;
 	int retval;
