@@ -209,6 +209,7 @@ char **suggest_files(char *string);
 int handle_signal_sigwinch();
 int handle_local_write();
 int handle_local_read();
+int handle_command_shell_read();
 int handle_message_dt_tty();
 int handle_message_dt_winresize();
 int handle_message_dt_proxy_ht_destroy();

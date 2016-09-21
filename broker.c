@@ -44,8 +44,6 @@ int broker(){
 			if((cur_proxy_node = proxy_node_new(config->socks, PROXY_DYNAMIC)) == NULL){
 				report_error("do_control(): proxy_node_new(%s, %d): %s", config->socks, PROXY_DYNAMIC, strerror(errno));
 			}
-			io->proxy_head = cur_proxy_node;
-			io->proxy_tail = cur_proxy_node;
 		}
 
 		/* Set up proxies requested during launch. */
@@ -151,6 +149,8 @@ int broker(){
 			}
 		}else{
 			// Put esc_shell child proc shared pipe fd in here.
+			FD_SET(io->command_fd[0], &read_fds);
+			fd_max = io->command_fd[0] > fd_max ? io->command_fd[0] : fd_max;
 		}
 
 		FD_SET(io->remote_fd, &read_fds);
@@ -251,20 +251,30 @@ int broker(){
 			continue;
 		}
 
-		if(FD_ISSET(io->local_in_fd, &read_fds)){
+		if(!io->command_buff){
 
-			retval = handle_local_read();
+			if(FD_ISSET(io->local_in_fd, &read_fds)){
+				retval = handle_local_read();
+				if(retval < 0){
+					if(retval == -1){
+						report_error("broker(): handle_local_read(): %s", strerror(errno));
+					}else{
+						retval = 0;
+					}
+					goto RETURN;
+				}	
+				continue;
+			}
 
-			if(retval < 0){
-				if(retval == -1){
-					report_error("broker(): handle_local_read(): %s", strerror(errno));
-				}else{
-					retval = 0;
+		}else{
+
+			if(FD_ISSET(io->command_fd[0], &read_fds)){
+				if(handle_command_shell_read() == -1){
+					report_error("broker(): handle_command_shell_read(): %s", strerror(errno));
+					goto RETURN;
 				}
-				goto RETURN;
-			}	
-
-			continue;
+				continue;
+			}
 		}
 
 		if(FD_ISSET(io->remote_fd, &read_fds)){

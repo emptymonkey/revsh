@@ -12,6 +12,13 @@
 
 #include "common.h"
 
+#ifdef LINENOISE
+extern const struct esc_shell_command null_sub_commands;
+extern const struct esc_shell_command device_sub_commands;
+extern const struct esc_shell_command file_sub_commands;
+extern const struct esc_shell_command proxy_sub_commands;
+extern const struct esc_shell_command menu;
+#endif
 
 /******************************************************************************
  *
@@ -72,7 +79,6 @@ int handle_local_write(){
 
 		tmp_message = io->tty_write_head;
 
-		retval = 0;
 		retval = write(io->local_out_fd, tmp_message->data, tmp_message->data_len);
 
 		if(retval == -1){
@@ -152,6 +158,178 @@ int handle_local_read(){
 
 	return(0);
 }
+
+
+// XXX
+int handle_command_shell_read(){
+
+	int retval;
+	char **command_vec;
+	const struct esc_shell_command *command_node;
+	char *tmp_ptr;
+	unsigned short tmp_origin, tmp_id;
+
+	struct proxy_node *tmp_proxy_node;
+	struct connection_node *tmp_connection_node;
+
+	int return_code = 0;
+
+
+	if((retval = read(io->command_fd[0], io->command_buff, ESC_COMMAND_MAX)) == -1){
+		report_error("handle_command_shell_read(): read(%d, %lx, %d): %s", io->command_fd[0], (unsigned long) io->command_buff, ESC_COMMAND_MAX, strerror(errno));
+		return(-1);
+	}
+
+	if(!retval){
+		return(0);
+	}
+
+	if(io->command_buff[retval - 1] != '\0'){
+		report_error("handle_command_shell_read(): read(%d, %lx, %d): Incomplete command string. Ignoring.", io->command_fd[1], (unsigned long) io->command_buff, ESC_COMMAND_MAX);
+		return(-1);
+	}
+
+//	fprintf(stderr, "\r\nDEBUG: handle_command_shell_read(): io->command_buff: %s\r\n", io->command_buff);
+
+	if((command_vec = string_to_vector(io->command_buff)) == NULL){
+		report_error("handle_command_shell_read(): string_to_vector(%lx): %s", io->command_buff, strerror(errno));
+		return(-1);
+	}
+
+	if((command_node = find_in_menu(command_vec)) == NULL){
+		fprintf(stderr, "\r\nCommand shell error: Unknown command: \"%s\"\n\r", io->command_buff);
+		return_code = -2;
+		goto CLEANUP;
+	}
+
+	// XXX
+//	fprintf(stderr, "\r\nDEBUG: command_node->completion_string: %s\n", command_node->completion_string);
+
+	if(!strcmp(command_node->completion_string, "list")){
+		list_all();
+
+	}else if(!strcmp(command_node->completion_string, "kill")){
+
+		tmp_origin = (unsigned short) strtol(command_vec[1], &tmp_ptr, 10);
+		tmp_id = (unsigned short) strtol(tmp_ptr + 1, NULL, 10);
+
+		if((tmp_origin == io->target) && (tmp_id == io->remote_fd)){
+			fprintf(stderr, "\r\nCommand shell error: Attempting to kill the revsh connection is not allowed. Please exit the process normally.\n\r");
+			return_code = -2;
+			goto CLEANUP;
+		}
+
+		if((tmp_proxy_node = proxy_node_find(tmp_origin, tmp_id))){
+			if(handle_send_dt_proxy_ht_destroy(tmp_origin, tmp_id, 0) == -1){
+				report_error("handle_command_shell_read(): handle_send_dt_proxy_ht_destroy(%d, %d, 0): %s", tmp_origin, tmp_id, strerror(errno));
+				return_code = -1;
+				goto CLEANUP;
+			}
+			proxy_node_delete(tmp_proxy_node);
+
+		}else if((tmp_connection_node = connection_node_find(tmp_origin, tmp_id))){
+			if(handle_send_dt_connection_ht_destroy(tmp_origin, tmp_id, 0) == -1){
+				report_error("handle_command_shell_read(): handle_send_dt_connection_ht_destroy(%d, %d, 0): %s", tmp_origin, tmp_id, strerror(errno));
+				return_code = -1;
+				goto CLEANUP;
+			}
+			connection_node_delete(tmp_connection_node);
+
+		}else{
+			fprintf(stderr, "\r\nCommand shell error: Attempting to kill CID \"%s\": No such connection found. Ignoring.\n\r", command_vec[1]);
+			return_code = -2;
+		}
+
+	}else if(!strcmp(command_node->completion_string, "proxy local")){
+
+		if(proxy_node_new(command_vec[2], PROXY_STATIC) == NULL){
+			if(errno){
+				report_error("handle_command_shell_read(): proxy_node_new(%lx, PROXY_STATIC): %s", (unsigned long) command_vec[2], strerror(errno));
+				return_code = -1;
+				goto CLEANUP;
+			}
+			fprintf(stderr, "\r\nCommand shell error: Unable to create local proxy \"%s\": Illegal string?\n\r", command_vec[1]);
+			return_code = -2;
+			goto CLEANUP;
+		}
+
+	}else if(!strcmp(command_node->completion_string, "proxy dynamic")){
+
+		if(proxy_node_new(command_vec[2], PROXY_DYNAMIC) == NULL){
+			if(errno){
+				report_error("handle_command_shell_read(): proxy_node_new(%lx, PROXY_DYNAMIC): %s", (unsigned long) command_vec[2], strerror(errno));
+				return_code = -1;
+				goto CLEANUP;
+			}
+			fprintf(stderr, "\r\nCommand shell error: Unable to create local proxy \"%s\": Illegal string?\n\r", command_vec[1]);
+			return_code = -2;
+			goto CLEANUP;
+		}
+
+	}else if(!strcmp(command_node->completion_string, "proxy remote")){
+
+		if(handle_send_dt_proxy_ht_create(command_vec[2], PROXY_STATIC) < 0){
+			report_error("handle_command_shell_read(): handle_send_dt_proxy_ht_create(%lx, PROXY_STATIC): %s", (unsigned long) command_vec[2], strerror(errno));
+			if(retval == -1){
+				return_code = -1;
+			}
+			return_code = -2;
+			goto CLEANUP;
+		}
+
+	}else if(!strcmp(command_node->completion_string, "proxy bypass")){
+		if(handle_send_dt_proxy_ht_create(command_vec[2], PROXY_DYNAMIC) < 0){
+			report_error("handle_command_shell_read(): handle_send_dt_proxy_ht_create(%lx, PROXY_DYNAMIC): %s", (unsigned long) command_vec[2], strerror(errno));
+			if(retval == -1){
+				return_code = -1;
+			}
+			return_code = -2;
+			goto CLEANUP;
+		}
+
+#ifndef FREEBSD
+	}else if(!strcmp(command_node->completion_string, "device tun")){
+
+		if((tmp_connection_node = handle_tun_tap_init(IFF_TUN)) == NULL){
+			report_error("handle_command_shell_read(): handle_tun_tap_init(IFF_TUN): %s", strerror(errno));
+			return_code = -2;
+		}else{
+			if(handle_send_dt_connection_ht_create(tmp_connection_node) == -1){
+				report_error("handle_command_shell_read(): handle_send_dt_connection_ht_create(%lx): %s", (unsigned long) tmp_connection_node, strerror(errno));
+				return(-1);
+				goto CLEANUP;
+			}
+		}
+
+	}else if(!strcmp(command_node->completion_string, "device tap")){
+
+		if((tmp_connection_node = handle_tun_tap_init(IFF_TAP)) == NULL){
+			report_error("handle_command_shell_read(): handle_tun_tap_init(IFF_TAP): %s", strerror(errno));
+			return_code = -2;
+		}else{
+			if(handle_send_dt_connection_ht_create(tmp_connection_node) == -1){
+				report_error("handle_command_shell_read(): handle_send_dt_connection_ht_create(%lx): %s", (unsigned long) tmp_connection_node, strerror(errno));
+				return(-1);
+				goto CLEANUP;
+			}
+		}
+
+#endif
+
+		/*
+			 }else if(!strcmp(command_node->completion_string, "")){
+			 }else if(!strcmp(command_node->completion_string, "")){
+		 */
+}else{
+	fprintf(stderr, "\r\nCommand shell error: \"%s\": Command not implemented. Ignoring.\n\r", command_node->completion_string);
+	return_code = -2;
+}
+
+CLEANUP:
+free_vector(command_vec);
+return(return_code);
+}
+// XXX
 
 
 /******************************************************************************

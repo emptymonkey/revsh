@@ -13,17 +13,13 @@ int esc_shell_start(){
 #else
 
 	int child_pid;
-
-
   int fcntl_flags;
 
-//    fprintf(stderr, "\rDEBUG: esc_command_start()\n");
 
   if(tcsetattr(io->local_in_fd, TCSANOW, io->saved_termios_attrs) == -1){
     report_error("do_control(): tcsetattr(%d, TCSANOW, %lx): %s", io->local_in_fd, (unsigned long) io->saved_termios_attrs, strerror(errno));
     return(-1);
   }
-
 
   /* Set the socket to blocking for the duration of the escape command shell. */
   if((fcntl_flags = fcntl(io->local_in_fd, F_GETFL, 0)) == -1){
@@ -58,7 +54,12 @@ int esc_shell_start(){
   if(message->data_len){
     message->data_len = 0;
   }
+	
 
+	if(pipe(io->command_fd) == -1){
+		report_error("esc_shell_start(): pipe(%lx): %s", (unsigned long) io->command_fd, strerror(errno));
+		return(-1);
+	}
 	
 	child_pid = fork();
 
@@ -69,6 +70,8 @@ int esc_shell_start(){
 
 	if(!child_pid){
 
+		close(io->command_fd[0]);
+
 		if(esc_shell_loop() == -1){
 			fprintf(stderr, "\r\nesc_shell_start(): %s", strerror(errno));
 			exit(-1);
@@ -77,6 +80,7 @@ int esc_shell_start(){
 		exit(0);
 	}
 
+	close(io->command_fd[1]);
 
 #endif 
 
@@ -91,13 +95,11 @@ int esc_shell_stop(){
 
   int fcntl_flags;
 
-//	fprintf(stderr, "\r\nDEBUG: esc_shell_stop(): start.\n");
 
   if(tcsetattr(io->local_in_fd, TCSANOW, io->revsh_termios_attrs) == -1){
     report_error("do_control(): tcsetattr(%d, TCSANOW, %lx): %s", io->local_in_fd, (unsigned long) io->revsh_termios_attrs, strerror(errno));
     return(-1);
   }
-
 
   /* Set the socket to blocking for the duration of the escape command shell. */
   if((fcntl_flags = fcntl(io->local_in_fd, F_GETFL, 0)) == -1){
@@ -122,6 +124,7 @@ int esc_shell_stop(){
     return(-1);
   }
 
+	close(io->command_fd[0]);
 	free(io->command_buff);
 	io->command_buff = NULL;
 	io->command_len = 0;
@@ -138,9 +141,8 @@ int esc_shell_loop(){
 	int i;
 	int tmp_len;
 	int count;
-//	int command_count;
 	char **command_vec;
-	char *command_string = NULL;
+	char command_string[ESC_COMMAND_MAX];
 
 
 	linenoiseSetCompletionCallback(expand_tab);
@@ -149,19 +151,11 @@ int esc_shell_loop(){
 	printf("\nThe revsh command shell uses the linenoise library:\nCopyright (c) 2010-2014, Salvatore Sanfilippo <antirez at gmail dot com>\nCopyright (c) 2010-2013, Pieter Noordhuis <pcnoordhuis at gmail dot com>\nhttps://github.com/antirez/linenoise\n\n");
 
 	while((input = linenoise("revsh> "))){
-//		printf("DEBUG: *input: %s\n", input);
 
 		if((command_vec = string_to_vector(input)) == NULL){
 			fprintf(stderr, "\r\nesc_shell_loop(): string_to_vector(%lx): %s\n", (unsigned long) input, strerror(errno));
 			return(-1);
 		}
-
-//		command_count = 0;
-//		while(command_vec[command_count]){
-//			printf("DEBUG: command_vec[%d]: %s\n", command_count, command_vec[command_count]);
-//			command_count++;
-//		}
-//		printf("DEBUG: command_count: %d\n", command_count);
 
 		if(command_vec[0]){
 
@@ -169,16 +163,16 @@ int esc_shell_loop(){
 				goto EXIT;
 			}else if(!(strcmp(command_vec[0], "help") && strcmp(command_vec[0], "?"))){
 				esc_shell_help(command_vec);
+
+			// command_validate() just looks at simple things.
+			// Will it fit in the buffer? Do we recognize it as a supported command / subcommand?
+			// Does it have the correct number of arguments?
+			// No actual validation of files existing or having permission to access occurs here.
 			}else if((count = command_validate(command_vec)) > 0){
 
 				// Send command_string back to the main process.
-				if((command_string = (char *) calloc(count + 1, sizeof(char))) == NULL){
-					fprintf(stderr, "\r\nesc_shell_loop(): calloc(%d, %d): %s\n", count + 1, (int) sizeof(char), strerror(errno));
-					goto EXIT;
-				}
 
 				i = 0;
-				tmp_len = 0;
 				count = 0;
 				while(command_vec[i]){
 					if(i){
@@ -192,8 +186,10 @@ int esc_shell_loop(){
 					
 					i++;
 				}
+				*(command_string + count++) = '\0';
 			
-				printf("DEBUG: command_string: %s\n", command_string);	
+//				printf("DEBUG: esc_shell_loop(): command_string: %s\n", command_string);	
+				write(io->command_fd[1], command_string, count);
 
 			}else{
 				if(!count){
@@ -210,15 +206,10 @@ int esc_shell_loop(){
 			}
 		}
 
-
 		linenoiseHistoryAdd(input);
 		linenoiseHistorySetMaxLen(50);
 		linenoiseFree(input);
 
-		if(command_string){
-			free(command_string);
-			command_string = NULL;
-		}
 		free_vector(command_vec);
 	}
 
@@ -232,6 +223,7 @@ void esc_shell_help(char **command_vec){
 
 	const struct esc_shell_command *command_ptr;
 	int i, j;
+
 
 	if(!command_vec[1]){
 		printf("\n");
@@ -277,13 +269,15 @@ void esc_shell_help(char **command_vec){
 
 }
 
+
 const struct esc_shell_command *find_in_menu(char **command_vec){
 
 	int i, j;
 
+
 	i = 0;
 	while(menu[i].command){
-		if(!strcmp(command_vec[0], menu[i].command)){
+		if(command_vec[0] && !strcmp(command_vec[0], menu[i].command)){
 			if(menu[i].sub_commands[0].command && command_vec[1]){
 				j = 0;
 				while(menu[i].sub_commands[j].command){
@@ -302,6 +296,7 @@ const struct esc_shell_command *find_in_menu(char **command_vec){
 	return(NULL);	
 }
 
+
 void expand_tab(const char *buf, linenoiseCompletions *lc){
 
 	int i, j, k;
@@ -310,22 +305,33 @@ void expand_tab(const char *buf, linenoiseCompletions *lc){
 	char *string_ptr;
 	int buf_count;
 	int tmp_int;
-
 	char scratch[ESC_COMMAND_MAX];
 
+
+	if(!buf){
+		return;
+	}
 
 	if((buf_vec = string_to_vector((char *) buf)) == NULL){
 		fprintf(stderr, "\r\nexpand_tab(): string_to_vector(%lx): %s\n", (unsigned long) buf, strerror(errno));
 		return;
-	}	
+	}
 
 	buf_count = 0;
 	while(buf_vec[buf_count]){
-		//		printf("\rDEBUG: buf_vec[%d]: %s\n", buf_count, buf_vec[buf_count]);
 		buf_count++;
 	}
 
-	//	printf("\rDEBUG: buf_count: %d\n", buf_count);
+	// Nothing is really there. (Might have been whitespace which we stripped.)
+	// Offer up the main menu commands.
+	if(!buf_count){
+		i = 0;
+		while(menu[i].command){
+			linenoiseAddCompletion(lc, menu[i].command);
+			i++;
+		}
+		return;
+	}
 
 	// loop once through the main menu. If we find a match, loop through submenu and do the needful...
 	// Return if we find something. Don't forget to free_vector() the buf_vec.
@@ -333,7 +339,6 @@ void expand_tab(const char *buf, linenoiseCompletions *lc){
 	while(menu[i].command){
 
 		if(!strcmp(buf_vec[0], menu[i].command)){
-			//			printf("\rDEBUG: menu exact match: %s\n", menu[i].command);
 
 			if(buf_count > 1){
 				// same tactic here. Loop through sub commands looking for exact matches.
@@ -341,12 +346,11 @@ void expand_tab(const char *buf, linenoiseCompletions *lc){
 					j = 0;
 					while(menu[i].sub_commands[j].command){
 						if(!strcmp(buf_vec[1], menu[i].sub_commands[j].command)){
-							//							printf("\rDEBUG: submenu exact match: %s\n", menu[i].sub_commands[j].command);
+
+							// Tried to keep this all as modular as possible.
+							// Unfortuantely, there are *some* special cases we have to just deal with.
 
 							// Handle tab expansion of "file upload / download" files.
-							//							printf("\r\nDEBUG: buf_count: %d\n", buf_count);
-							//							printf("\r\nDEBUG: buf_vec[0]: %s\n", buf_vec[0]);
-							//							printf("\r\nDEBUG: buf_vec[1]: %s\n", buf_vec[1]);
 							if(!strcmp(buf_vec[0], "file")){
 								if(!strcmp(buf_vec[1], "upload") && (buf_count == 2 || buf_count == 3)){
 
@@ -355,7 +359,6 @@ void expand_tab(const char *buf, linenoiseCompletions *lc){
 										string_ptr = buf_vec[2];
 									}
 									if((suggestion_vec = suggest_files(string_ptr)) == NULL){
-										fprintf(stderr, "\r\nexpand_tab(): suggest_files(%lx): %s\n", (unsigned long) string_ptr, strerror(errno));
 										return;
 									}
 
@@ -373,7 +376,6 @@ void expand_tab(const char *buf, linenoiseCompletions *lc){
 										string_ptr = buf_vec[3];
 									}
 									if((suggestion_vec = suggest_files(string_ptr)) == NULL){
-										fprintf(stderr, "\r\nexpand_tab(): suggest_files(%lx): %s\n", (unsigned long) string_ptr, strerror(errno));
 										return;
 									}
 
@@ -394,11 +396,12 @@ void expand_tab(const char *buf, linenoiseCompletions *lc){
 					}
 				}
 
+/*
+				// Another special case.
 				if(!strcmp(buf_vec[0], "ttyscript") && buf_count == 2){
 
 					string_ptr = buf_vec[1];
 					if((suggestion_vec = suggest_files(string_ptr)) == NULL){
-						fprintf(stderr, "\r\nexpand_tab(): suggest_files(%lx): %s\n", (unsigned long) string_ptr, strerror(errno));
 						return;
 					}
 
@@ -409,6 +412,7 @@ void expand_tab(const char *buf, linenoiseCompletions *lc){
 						k++;
 					}
 				}	
+*/
 
 			}else{
 				// case where the first command matches, but no additional commands have been entered yet. suggest all submenu items.
@@ -417,11 +421,11 @@ void expand_tab(const char *buf, linenoiseCompletions *lc){
 				j = 0;
 				while(menu[i].sub_commands[j].command){
 					// case where we match menu and sub menu. If there are files to suggest or otherwise, do that here.
-					//					printf("\rDEBUG: submenu suggestion: %s\n", menu[i].sub_commands[j].command);
 					linenoiseAddCompletion(lc, menu[i].sub_commands[j].completion_string);
 					j++;
 				}
 
+/*
 				if(!strcmp(buf_vec[0], "ttyscript")){
 
 					string_ptr = config->ttyscripts_dir;
@@ -437,7 +441,7 @@ void expand_tab(const char *buf, linenoiseCompletions *lc){
 						k++;
 					}
 				}	
-
+*/
 				free_vector(buf_vec);
 				return;
 			}
@@ -449,7 +453,6 @@ void expand_tab(const char *buf, linenoiseCompletions *lc){
 				// case where we match menu and sub menu. If there are files to suggest or otherwise, do that here.
 				if(!strncmp(buf_vec[1], menu[i].sub_commands[j].command, tmp_int)){
 					linenoiseAddCompletion(lc, menu[i].sub_commands[j].completion_string);
-					//					printf("\rDEBUG: submenu suggestion: %s\n", menu[i].sub_commands[j].command);
 				}
 				j++;
 			}
@@ -466,15 +469,14 @@ void expand_tab(const char *buf, linenoiseCompletions *lc){
 	i = 0;
 	while(menu[i].command){
 		if(!strncmp(buf_vec[0], menu[i].command, tmp_int)){
-			//			printf("\rDEBUG: menu suggestion: %s\n", menu[i].command);
 			linenoiseAddCompletion(lc, menu[i].completion_string);
 		}
 		i++;
 	}
 
-
 	free_vector(buf_vec);
 }
+
 
 int command_validate(char **command_vec){
 
@@ -482,12 +484,12 @@ int command_validate(char **command_vec){
 	const struct esc_shell_command *command_ptr = NULL;
 	int arg_count;
 
+
 	arg_count = 0;
 	while(command_vec[arg_count]){
 		tmp_string_len += strlen(command_vec[arg_count]);
 		arg_count++;
 	}
-	arg_count--;
 	tmp_string_len += arg_count;
 
 	if((tmp_string_len + 1) > ESC_COMMAND_MAX){
@@ -495,11 +497,7 @@ int command_validate(char **command_vec){
 		return(-1);
 	}
 
-//	printf("\r\nDEBUG: arg_count: %d\n", arg_count);
 	if((command_ptr = find_in_menu(command_vec))){
-//		printf("\r\nDEBUG: command_ptr->min_args: %d\n", command_ptr->min_args);
-//		printf("\r\nDEBUG: command_ptr->max_args: %d\n", command_ptr->max_args);
-
 		if((arg_count >= command_ptr->min_args) && (arg_count <= command_ptr->max_args)){
 			return(tmp_string_len);
 		}
@@ -508,6 +506,7 @@ int command_validate(char **command_vec){
 	return(0);
 }
 
+
 // original vector is destroyed. NULL on error.
 char **vector_push(char **vector, char *string){
 
@@ -515,7 +514,6 @@ char **vector_push(char **vector, char *string){
 	int count;
 	int i;
 
-	//	printf("DEBUG: vector_push(): start\n");
 
 	count = 0;
 	if(vector){
@@ -560,7 +558,6 @@ char **vector_push(char **vector, char *string){
 }
 
 
-// NULL on errors. Pointer to vec with only the NULL element on success with no matches.
 char **suggest_files(char *string){
 
 	char scratch[ESC_COMMAND_MAX];
@@ -569,7 +566,6 @@ char **suggest_files(char *string){
 	char **temp_vec = NULL;
 	char *tmp_ptr;
 	char *fragment_ptr;
-	int fragment_len;
 	int tmp_len;
 	int retval;
 
@@ -579,7 +575,6 @@ char **suggest_files(char *string){
 	DIR *query_dir;
 	struct dirent *query_dirent;
 
-//	printf("\r\nDEBUG: string: %s\n", string);
 
 	if((retval = wordexp(string, &file_exp, 0))){
 
@@ -612,53 +607,72 @@ char **suggest_files(char *string){
 
 	file_exp_matches = file_exp.we_wordv;
 	for(i = 0; i < file_exp.we_wordc; i++){
-//		printf("\r\nDEBUG: file_exp_matches[%d]: %s\n", i, file_exp_matches[i]);
 
-		// for each match, go through and examine it. If a stat() shows it exists, offer it up as a suggestion.
-		if(!stat(file_exp_matches[i], &file_stat) && !S_ISDIR(file_stat.st_mode)){
-			//			printf("DEBUG: stat successful\n");
-			if((temp_vec = vector_push(temp_vec, file_exp_matches[i])) == NULL){
-				fprintf(stderr, "\r\nsuggest_files(): vector_push(%lx, %lx): %s\n", (unsigned long) temp_vec, (unsigned long) file_exp_matches[i], strerror(errno));
-				return(NULL);
-			}
-		}else{
-			// if it doesn't exist, try to figure out if some part of it is a dir, then opendir() readdir() and suggest files that match.
+		if(!stat(file_exp_matches[i], &file_stat)){
 
-
-			tmp_len = strlen(file_exp_matches[i]);
-			if(!(tmp_len > ESC_COMMAND_MAX)){
-				strcpy(scratch, file_exp_matches[i]);
-
-				fragment_ptr = NULL;
-				fragment_len = 0;
-
-				tmp_ptr = strrchr(scratch, '/');
-				if(tmp_ptr && *(tmp_ptr + 1)){
-					*tmp_ptr = '\0';
-					fragment_ptr = tmp_ptr + 1;
-					fragment_len = strlen(fragment_ptr);
-				}else{
-					tmp_ptr = scratch + tmp_len;
+			// Case 1: file. Offer it as a solution.
+			if(!S_ISDIR(file_stat.st_mode)){
+				if((temp_vec = vector_push(temp_vec, file_exp_matches[i])) == NULL){
+					fprintf(stderr, "\r\nsuggest_files(): vector_push(%lx, %lx): %s\n", (unsigned long) temp_vec, (unsigned long) file_exp_matches[i], strerror(errno));
+					return(NULL);
 				}
 
+				// Case 2: directory.  Recurse through it. and offer files as solutions.
+			}else{
 
-				if(!stat(scratch, &file_stat) && S_ISDIR(file_stat.st_mode) && (query_dir = opendir(scratch))){
-
+				if((query_dir = opendir(file_exp_matches[i]))){
 					while((query_dirent = readdir(query_dir))){ 
-//						printf("\r\nDEBUG: query_dirent->d_name: %s\n", query_dirent->d_name);
+
 						if(strcmp(query_dirent->d_name, ".") && strcmp(query_dirent->d_name, "..")){
+							tmp_len = strlen(file_exp_matches[i]);
+							tmp_len += strlen(query_dirent->d_name) + 1;
 
-							if(!fragment_ptr || !strncmp(fragment_ptr, query_dirent->d_name, fragment_len)){
-
-								tmp_len += strlen(query_dirent->d_name) + 1;
-								if(!((tmp_len + 1) > ESC_COMMAND_MAX)){
-									sprintf(tmp_ptr, "%s", query_dirent->d_name);
-									temp_vec = vector_push(temp_vec, scratch);
-								}
+							if(!((tmp_len + 1) > ESC_COMMAND_MAX)){
+								tmp_len = sprintf(scratch, "%s", file_exp_matches[i]);
+								if(tmp_len && *(scratch + tmp_len - 1) != '/')
+									sprintf(scratch + tmp_len++, "%s", "/");
 							}
+							sprintf(scratch + tmp_len, "%s", query_dirent->d_name);
+							temp_vec = vector_push(temp_vec, scratch);
 						}
 					}
-					closedir(query_dir);
+				}
+			}
+
+			// Case 3: partial name. 
+			//					a: find the fragment at the end.
+			//					b: decide upon a directory at the begining.
+			//					c: loop through the directory looking for a partial string match. offer it as a solution.
+		}else{
+
+			tmp_len = strlen(file_exp_matches[i]);
+			tmp_ptr = strrchr(file_exp_matches[i], '/');
+			fragment_ptr = file_exp_matches[i];
+
+			if(!tmp_ptr){
+				tmp_len = sprintf(scratch, "%s", ".");
+				tmp_ptr = scratch + tmp_len;	
+
+			}else if(!((tmp_len + 1) > ESC_COMMAND_MAX)){
+				fragment_ptr = tmp_ptr + 1;
+				sprintf(scratch, "%s", file_exp_matches[i]);
+				tmp_ptr = strrchr(scratch, '/');
+				*tmp_ptr = '\0';
+			}
+
+			if((query_dir = opendir(scratch))){
+				while((query_dirent = readdir(query_dir))){ 
+
+					tmp_len = strlen(fragment_ptr);
+					if(tmp_len && !strncmp(fragment_ptr, query_dirent->d_name, tmp_len)){
+						tmp_len = strlen(scratch);
+						tmp_len += strlen(query_dirent->d_name) + 1;
+
+						if(!((tmp_len + 1) > ESC_COMMAND_MAX)){
+							sprintf(tmp_ptr, "/%s", query_dirent->d_name);
+							temp_vec = vector_push(temp_vec, scratch);
+						}
+					}
 				}
 			}
 		}

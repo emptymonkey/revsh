@@ -133,7 +133,7 @@ void usage(int ret_code){
 #else
 	fprintf(out_stream, "\t-F LOG_FILE\tLog general use and errors to LOG_FILE.\t\t(No default set.)\n");
 #endif
-	fprintf(out_stream, "\t-T TTYSCRIPTS_DIR\tLook for ttyscripts in the TTYSCRIPTS_DIR directory.\t\t(Default is \"%s\".)\n", TTYSCRIPTS_DIR);
+//	fprintf(out_stream, "\t-T TTYSCRIPTS_DIR\tLook for ttyscripts in the TTYSCRIPTS_DIR directory.\t\t(Default is \"%s\".)\n", TTYSCRIPTS_DIR);
 
 	fprintf(out_stream, "\nTARGET_OPTIONS:\n");
 	fprintf(out_stream, "\t-t SEC\t\tSet the connection timeout to SEC seconds.\t(Default is \"%d\".)\n", TIMEOUT);
@@ -284,7 +284,7 @@ int main(int argc, char **argv){
 	config->timeout = TIMEOUT;
 	config->keepalive = 0;
 	config->nop = 0;
-	config->ttyscripts_dir = TTYSCRIPTS_DIR;
+//	config->ttyscripts_dir = TTYSCRIPTS_DIR;
 
 	config->tun = 1;
 	config->tap = 1;
@@ -320,7 +320,8 @@ int main(int argc, char **argv){
 	}
 
 	/* Grab the configuration from the command line. */
-	while((opt = getopt(argc, argv, "hepbkalcxT:s:d:f:L:R:D:B:r:F:t:nv")) != -1){
+//	while((opt = getopt(argc, argv, "hepbkalcxT:s:d:f:L:R:D:B:r:F:t:nv")) != -1){
+	while((opt = getopt(argc, argv, "hepbkalcxs:d:f:L:R:D:B:r:F:t:nv")) != -1){
 		switch(opt){
 
 			case 'h':
@@ -367,10 +368,11 @@ int main(int argc, char **argv){
 				config->tap = 0;
 				config->socks = NULL;
 				break;
-
+/*
 			case 'T':
 				config->ttyscripts_dir = optarg;
 				break;
+*/
 
 			case 's':
 				config->shell = optarg;

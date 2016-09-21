@@ -65,7 +65,7 @@ OBJS = string_to_vector.o io.o report.o control.o target.o handler.o broker.o me
 all: revsh
 
 revsh: revsh.c helper_objects.h common.h config.h $(KEY_OF_C) $(KEYS_DIR) $(OBJS) $(LINENOISE_OBJS)
-	$(CC) $(CFLAGS) $(LINENOISE_IFLAGS) $(OBJS) $(LINENOISE_OBJS) -o revsh revsh.c $(LIBS)
+	$(CC) $(CFLAGS) $(OBJS) $(LINENOISE_OBJS) -o revsh revsh.c $(LIBS)
 	$(STRIP) ./revsh
 
 keys:
@@ -108,7 +108,7 @@ target.o: target.c common.h config.h helper_objects.h
 	$(CC) $(CFLAGS) -c -o target.o target.c
 
 handler.o: handler.c common.h config.h helper_objects.h
-	$(CC) $(CFLAGS) -c -o handler.o handler.c
+	$(CC) $(CFLAGS) $(LINENOISE_CFLAGS) $(LINENOISE_IFLAGS)  -c -o handler.o handler.c
 
 broker.o: broker.c common.h config.h helper_objects.h
 	$(CC) $(CFLAGS) -c -o broker.o broker.c

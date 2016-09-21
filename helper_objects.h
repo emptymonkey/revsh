@@ -60,7 +60,7 @@ struct config_helper {
 	char *shell;
 	char *local_forward;
 	char *log_file;
-	char *ttyscripts_dir;
+//	char *ttyscripts_dir;
 
 	int keepalive;
 	int nop;
@@ -240,16 +240,8 @@ struct io_helper {
 	// first unused location in the buffer.
 	int command_len;
 
-	// This represents the index in the buffer where the cursor appears. This
-	// will be the same as command_len, unless the user is using the arrow keys
-	// or other bash style keyboard movement shortcuts.
-	int esc_shell_index;
-
-	// esc_shell_csi is a flag denoting a possible ANSI CSI terminal escape
-	// code sequence in progress. We implement this as a pointer to the element
-	// inside the buffer that is the beginning of the CSI sequence.
-	// (e.g. '\x1b'). This is null if no sequence is detected.
-	char *esc_shell_csi;
+	// IPC. Traditional half-duplex pipes work fine here.
+	int command_fd[2];
 
 	/****************************************************************************/
 
@@ -269,3 +261,18 @@ struct io_helper {
 	unsigned int escape_depth;
 
 };
+
+struct esc_shell_command {
+  char *command;
+  char *completion_string;
+
+  // total elements present in the final invocation, including the commands themselves.
+  // Commands that have subcommands will have these set to 0, as they are not valid
+  // without a subcommand.
+  int min_args;
+  int max_args;
+
+  const char *help_message;
+  const struct esc_shell_command *sub_commands;
+};
+
