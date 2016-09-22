@@ -66,14 +66,11 @@ const char download_help[] = \
 "Use tar to pack multiple files / directories for transfer.\n" \
 "\nUsage:\n\tfile download SOURCE [DEST]\n";
 
-/*
-const char ttyscript_help[] = \
-"Forward the contents of a ttyscript file to the remote tty as though they were\n" \
-"commands you had typed at the keyboard.\n" \
-"\nDefault will be to look for the script in the TTYSCRIPTS_DIR directory if not\n" \
-"otherwise specified.\n" \
-"\nUsage:\n\tttyscript FILE\n";
-*/
+const char lars_help[] = \
+"Load And Run Script. Open a script on the control node, execute it's\n" \
+"interpreter on the target node, and feed the script across the network.\n" \
+"The script shouldn't ever hit disk (excluding possible memory paging events).\n" \
+"\nUsage:\n\tlars SCRIPT [OUTPUT]\n";
 
 const char help_help[] = \
 "Explain any of the commands or subcommands further.\n" \
@@ -112,8 +109,8 @@ const struct esc_shell_command menu[] = {
 	{"kill", "kill", 2, 2, kill_help, null_sub_commands}, 
 	{"proxy", "proxy", 0, 0, proxy_help, proxy_sub_commands}, 
 	{"device", "device", 0, 0, device_help, device_sub_commands}, 
-//	{"ttyscript", "ttyscript", 2, 2, NULL, ttyscript_help, null_sub_commands}, 
 	{"file", "file", 0, 0, file_help, file_sub_commands}, 
+	{"lars", "lars", 2, 3, lars_help, null_sub_commands}, 
 	{"help", "help", 1, 3, help_help, null_sub_commands}, 
 	{"exit", "exit", 1, 1, exit_help, null_sub_commands}, 
 	{NULL, NULL, 0, 0, NULL, null_sub_commands}

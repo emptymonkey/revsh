@@ -235,6 +235,7 @@ int do_control(){
 
 		close(rc_fd);
 	}
+	wordfree(&rc_file_exp);
 
 	/* Set the tty to non-blocking. */
   if((fcntl_flags = fcntl(io->local_in_fd, F_GETFL, 0)) == -1){

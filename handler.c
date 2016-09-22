@@ -163,14 +163,23 @@ int handle_local_read(){
 // XXX
 int handle_command_shell_read(){
 
+	unsigned short count;
+
 	int retval;
 	char **command_vec;
+	int command_count;
 	const struct esc_shell_command *command_node;
 	char *tmp_ptr;
+	int tmp_int;
 	unsigned short tmp_origin, tmp_id;
+	char *tmp_source, *tmp_dest;
+	char **file_list = NULL;
+	char **tmp_vec = NULL;
+	int tmp_fd;
+	int i;
 
-	struct proxy_node *tmp_proxy_node;
-	struct connection_node *tmp_connection_node;
+	struct proxy_node *tmp_proxy_node = NULL;
+	struct connection_node *tmp_connection_node = NULL;
 
 	int return_code = 0;
 
@@ -184,16 +193,35 @@ int handle_command_shell_read(){
 		return(0);
 	}
 
-	if(io->command_buff[retval - 1] != '\0'){
+	if(retval < (int) sizeof(unsigned short)){
+		report_error("handle_command_shell_read(): read(%d, %lx, %d): Incomplete command string. Ignoring.", io->command_fd[1], (unsigned long) io->command_buff, ESC_COMMAND_MAX);
+		return(-1);
+	}
+
+	memcpy(&count, io->command_buff, sizeof(unsigned short));
+	count = ntohs(count);
+/*
+	fprintf(stderr, "\r\nDEBUG: handle_command_shell_read(): count: %d\n", count);
+	fprintf(stderr, "\r\nDEBUG: handle_command_shell_read(): sizeof(unsigned short): %d\n", sizeof(unsigned short));
+	fprintf(stderr, "\r\nDEBUG: handle_command_shell_read(): retval: %d\n", retval);
+*/
+
+
+	if(retval != count){
 		report_error("handle_command_shell_read(): read(%d, %lx, %d): Incomplete command string. Ignoring.", io->command_fd[1], (unsigned long) io->command_buff, ESC_COMMAND_MAX);
 		return(-1);
 	}
 
 //	fprintf(stderr, "\r\nDEBUG: handle_command_shell_read(): io->command_buff: %s\r\n", io->command_buff);
 
-	if((command_vec = string_to_vector(io->command_buff)) == NULL){
+	if((command_vec = unpack_vector(io->command_buff)) == NULL){
 		report_error("handle_command_shell_read(): string_to_vector(%lx): %s", io->command_buff, strerror(errno));
 		return(-1);
+	}
+
+	command_count = 0;
+	while(command_vec[command_count]){
+		command_count++;
 	}
 
 	if((command_node = find_in_menu(command_vec)) == NULL){
@@ -234,6 +262,7 @@ int handle_command_shell_read(){
 				goto CLEANUP;
 			}
 			connection_node_delete(tmp_connection_node);
+			tmp_connection_node = NULL;
 
 		}else{
 			fprintf(stderr, "\r\nCommand shell error: Attempting to kill CID \"%s\": No such connection found. Ignoring.\n\r", command_vec[1]);
@@ -296,10 +325,11 @@ int handle_command_shell_read(){
 		}else{
 			if(handle_send_dt_connection_ht_create(tmp_connection_node) == -1){
 				report_error("handle_command_shell_read(): handle_send_dt_connection_ht_create(%lx): %s", (unsigned long) tmp_connection_node, strerror(errno));
-				return(-1);
+				return_code = -1;
 				goto CLEANUP;
 			}
 		}
+		tmp_connection_node = NULL;
 
 	}else if(!strcmp(command_node->completion_string, "device tap")){
 
@@ -309,25 +339,145 @@ int handle_command_shell_read(){
 		}else{
 			if(handle_send_dt_connection_ht_create(tmp_connection_node) == -1){
 				report_error("handle_command_shell_read(): handle_send_dt_connection_ht_create(%lx): %s", (unsigned long) tmp_connection_node, strerror(errno));
-				return(-1);
+				return_code = -1;	
 				goto CLEANUP;
 			}
 		}
 
+	// Prevents an unwanted destroy in cleanup.
+		tmp_connection_node = NULL;
+
 #endif
 
+	}else if(!strcmp(command_node->completion_string, "file upload")){
+
+
+		if(command_count != 3 && command_count != 4){
+			fprintf(stderr, "\r\nCommand shell error: Command \"file upload\": Wrong number of arguments.\r\n");
+			return_code = -2;
+			goto CLEANUP;
+		}
+
+		if((file_list = suggest_files(command_vec[2])) == NULL){
+			fprintf(stderr, "\r\nCommand shell error: Command \"file upload\": No files matche source: \"%s\"\r\n", command_vec[2]);
+			return_code = -2;
+			goto CLEANUP;
+		}
+
+		tmp_int = 0;
+		while(file_list[tmp_int]){
+			tmp_int++;
+		}
+
+		if(tmp_int != 1){
+			fprintf(stderr, "\r\nCommand shell error: Command \"file upload\": Too many files match source: \"%s\".\r\n", command_vec[2]);
+			return_code = -2;
+			goto CLEANUP;
+		}
+
+		if(strlen(file_list[0]) > ESC_COMMAND_MAX){
+			fprintf(stderr, "\r\nCommand shell error: Command \"file upload\": Source file argument too long: \"%s\".\r\n", file_list[0]);
+			return_code = -2;
+			goto CLEANUP;
+		}
+
+
+		if((tmp_connection_node = connection_node_create()) == NULL){
+			report_error("handle_command_shell_read(): connection_node_create(): %s", strerror(errno));
+			return_code = -1;
+			goto CLEANUP;
+		}
+
+		if((tmp_fd = open(file_list[0], O_RDONLY, O_NONBLOCK)) == -1){
+			report_error("handle_command_shell_read(): open(%lx, O_RDONLY, O_NONBLOCK): %s", (unsigned long) file_list[0], strerror(errno));
+			return_code = -1;
+			goto CLEANUP;
+		}
+		io->fd_count++;
+
+		tmp_connection_node->origin = io->target;
+		tmp_connection_node->id = tmp_fd;
+		tmp_connection_node->fd = tmp_fd;
+		tmp_connection_node->proxy_type = PROXY_FILE_UP;
+
+		// Send over both strings in this case, as packed in pack_vector();
+		// Don't need to leak info about where it lives on control host. Pull out the name and send the file name only.
+
+		tmp_vec = NULL;
+		tmp_ptr = strrchr(file_list[0], '/');
+		if(!tmp_ptr){
+			tmp_ptr = file_list[0];
+		}
+		
+		if((tmp_vec = vector_push(NULL, tmp_ptr)) == NULL){
+			report_error("handle_command_shell_read(): calloc(%d, %d): %s", tmp_int + 1, (int) sizeof(char), strerror(errno));
+			return_code = -1;
+			goto CLEANUP;
+		}
+
+		if(command_vec[3]){
+			if((tmp_vec = vector_push(tmp_vec, command_vec[3])) == NULL){
+				report_error("handle_command_shell_read(): calloc(%d, %d): %s", tmp_int + 1, (int) sizeof(char), strerror(errno));
+				return_code = -1;
+				goto CLEANUP;
+			}
+		}
+
+
+		tmp_int = strlen(file_list[0]);
+		if((tmp_connection_node->rhost_rport = (char *) calloc(tmp_int + 1, sizeof(char))) == NULL){
+			report_error("handle_command_shell_read(): calloc(%d, %d): %s", tmp_int + 1, (int) sizeof(char), strerror(errno));
+			return_code = -1;
+			goto CLEANUP;
+		}
+		memcpy(tmp_connection_node->rhost_rport, file_list[0], tmp_int);
+
+		tmp_connection_node->state = CON_ACTIVE;
+
+		if(handle_send_dt_connection_ht_create(tmp_connection_node) == -1){
+			report_error("handle_command_shell_read(): handle_send_dt_connection_ht_create(%lx): %s", (unsigned long) tmp_connection_node, strerror(errno));
+			return_code = -1;	
+			goto CLEANUP;
+		}
+
+		// Already pointed to by the io structure. This prevents an unwanted free later on.
+		tmp_connection_node = NULL;
+
+
+	}else if(!strcmp(command_node->completion_string, "file download")){
+
+		i = 0;
+		while(command_vec[i]){
+			fprintf(stderr, "\r\nDEBUG: command_vec[%d]: %s\r\n", i, command_vec[i]);
+			i++;
+		}	
 		/*
 			 }else if(!strcmp(command_node->completion_string, "")){
-			 }else if(!strcmp(command_node->completion_string, "")){
 		 */
-}else{
-	fprintf(stderr, "\r\nCommand shell error: \"%s\": Command not implemented. Ignoring.\n\r", command_node->completion_string);
-	return_code = -2;
-}
+	}else{
+		fprintf(stderr, "\r\nCommand shell error: \"%s\": Command not implemented. Ignoring.\n\r", command_node->completion_string);
+		return_code = -2;
+	}
 
 CLEANUP:
-free_vector(command_vec);
-return(return_code);
+
+	if(tmp_connection_node){
+		connection_node_delete(tmp_connection_node);
+		tmp_connection_node = NULL;
+	}
+
+	if(tmp_vec){
+		free_vector(tmp_vec);
+		tmp_vec = NULL;
+	}
+
+	if(file_list){
+		free_vector(file_list);
+		file_list = NULL;
+	}
+
+	free_vector(command_vec);
+	return(return_code);
 }
 // XXX
 

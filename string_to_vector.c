@@ -124,6 +124,7 @@ void free_vector(char **vector){
 	char **tmp_vector;
 	char *tmp_string;
 
+
 	tmp_vector = vector;
 	tmp_string = *(tmp_vector++);
 
@@ -134,3 +135,171 @@ void free_vector(char **vector){
 
 	free(vector);
 }
+
+
+// Calls wordexp() first to handle commandline style tokenization,
+// but returns it in a vector format.
+char **cli_to_vector(char *command){
+
+	int retval;
+	wordexp_t word;
+
+	unsigned int i;
+	int tmp_len;
+	char **tmp_ptr;
+
+	tmp_len = 0;
+	if(!(retval = wordexp(command, &word, 0))){
+		tmp_len = word.we_wordc;
+	}
+
+	if((tmp_ptr = (char **) calloc(tmp_len + 1, sizeof(char *))) == NULL){
+		report_error("cli_to_vector(): calloc(%d, %d): %s", tmp_len + 1, (int) sizeof(char *), strerror(errno));
+		wordfree(&word);
+		return(NULL);
+	}
+
+	if(!retval){
+		for(i = 0; i < word.we_wordc; i++){
+			tmp_len = strlen(word.we_wordv[i]);
+			
+			if((tmp_ptr[i] = (char *) calloc(tmp_len + 1, sizeof(char))) == NULL){
+				report_error("cli_to_vector(): calloc(%d, %d): %s", tmp_len + 1, (int) sizeof(char), strerror(errno));
+			}
+			memcpy(tmp_ptr[i], word.we_wordv[i], tmp_len);
+		}
+		wordfree(&word);
+	}
+
+	return(tmp_ptr);
+}
+
+
+// First two bytes are are an unsigned short in network order determining the size of the data to follow.
+// The data are strings back to back with null termination as expected. 
+char *pack_vector(char **command_vec){
+	unsigned short count;
+	int tmp_len;
+	char *buff_ptr, *tmp_ptr;
+
+
+	count = 0;
+	tmp_len = 0;
+	while(command_vec[tmp_len]){
+		count += strlen(command_vec[tmp_len]) + 1;
+		tmp_len++;
+	}
+	count += sizeof(unsigned short);
+
+	if((buff_ptr = (char *) calloc(count, sizeof(char))) == NULL){
+		report_error("pack_vector(): calloc(%d, %d): %s", count, (int) sizeof(char), strerror(errno));
+	}
+
+	tmp_ptr = buff_ptr;
+	count = htons(count);
+	memcpy(tmp_ptr, &count, sizeof(unsigned short));
+	tmp_ptr += sizeof(unsigned short);
+
+	count = 0;
+	tmp_len = 0;
+	while(command_vec[tmp_len]){
+		count = strlen(command_vec[tmp_len]) + 1;
+		memcpy(tmp_ptr, command_vec[tmp_len], count);
+		tmp_ptr += count;
+		tmp_len++;
+	}
+
+	return(buff_ptr);
+}
+
+char **unpack_vector(char *packed_command){
+	unsigned short count;
+	char **vec_ptr;
+	char *tmp_ptr;
+	int tmp_len;
+	int i;
+
+
+	tmp_ptr = packed_command;
+	memcpy(&count, tmp_ptr, sizeof(unsigned short));
+	count = ntohs(count);
+	tmp_ptr += sizeof(unsigned short);
+
+	tmp_len = 0;
+	for(i = 0; i < (count - (int) sizeof(unsigned short)); i++){
+
+		if(tmp_ptr[i] == '\0'){
+			tmp_len++;
+		}
+	}
+
+	if((vec_ptr = (char **) calloc(tmp_len + 1, sizeof(char *))) == NULL){
+		report_error("unpack_vector(): calloc(%d, %d): %s", tmp_len + 1, (int) sizeof(char *), strerror(errno));
+		return(NULL);
+	}
+
+	count = tmp_len;
+	for(i = 0; i < count; i++){
+		tmp_len = strlen(tmp_ptr);
+		if((vec_ptr[i] = (char *) calloc(tmp_len + 1, sizeof(char))) == NULL){
+			report_error("unpack_vector(): calloc(%d, %d): %s", tmp_len + 1, (int) sizeof(char), strerror(errno));
+		}
+		memcpy(vec_ptr[i], tmp_ptr, tmp_len);
+		tmp_ptr += tmp_len + 1;
+	}
+
+	return(vec_ptr);
+}
+
+
+// original vector is destroyed. NULL on error.
+char **vector_push(char **vector, char *string){
+
+  char **tmp_vector = NULL;
+  int count;
+  int i;
+
+
+  count = 0;
+  if(vector){
+    while(vector[count]){
+      count++;
+    }
+  }
+  count++;
+
+  if((tmp_vector = (char **) calloc(count + 1, sizeof(char *))) == NULL){
+    fprintf(stderr, "\r\nvector_push(): calloc(%d, %d): %s\n", count + 1, (int) sizeof(char *), strerror(errno));
+    return(NULL);
+  }
+
+  i = 0;
+  if(vector){
+    while(vector[i]){
+
+      count = strlen(vector[i]);
+      if((tmp_vector[i] = (char *) calloc(count + 1, sizeof(char))) == NULL){
+        fprintf(stderr, "\r\nvector_push(): calloc(%d, %d): %s\n", count + 1, (int) sizeof(char), strerror(errno));
+        return(NULL);
+      }
+      memcpy(tmp_vector[i], vector[i], count);
+
+      i++;
+    }
+  }
+
+  count = strlen(string);
+  if((tmp_vector[i] = (char *) calloc(count + 1, sizeof(char))) == NULL){
+    fprintf(stderr, "\r\nvector_push(): calloc(%d, %d): %s\n", count + 1, (int) sizeof(char), strerror(errno));
+    return(NULL);
+  }
+  memcpy(tmp_vector[i], string, count);
+
+  if(vector){
+    free_vector(vector);
+  }
+
+  return(tmp_vector);
+}
+
+

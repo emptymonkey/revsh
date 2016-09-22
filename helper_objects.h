@@ -141,9 +141,6 @@ struct connection_node {
 	unsigned long io_read;
 	unsigned long io_written;
 
-	// Used with file transfers along with io_read/io_written to show percent complete.
-	unsigned long file_size;
-
 	// This will allow for write queues.
 	//  Note, no write_tail element. Iterate through every time you want to add an element, thus calculating the message depth dynamically.
 	//  If MAX_MESSAGE_DEPTH is hit, tell the remote node to stop listening its associated fd.
@@ -254,6 +251,7 @@ struct io_helper {
 	struct connection_node *connection_tail;
 
 	// Used to track number of open fds. Select can't handle more than 1024.
+	// XXX audit this. 
 	unsigned int fd_count;
 
 	// Used to handle escape character ('~') interactions.

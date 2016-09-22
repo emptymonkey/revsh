@@ -708,7 +708,7 @@ int init_io_control(){
 			allowed_cert_path_tail = index(allowed_cert_path_head, '\0');
 			*(allowed_cert_path_tail++) = '/';
 			sprintf(allowed_cert_path_tail, TARGET_CERT_FILE);
-
+			wordfree(&keys_dir_exp);
 
 			if((allowed_cert_path_head - allowed_cert_path_tail) > PATH_MAX){
 				report_error("init_io_control(): target fingerprint file: path too long!");

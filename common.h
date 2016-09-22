@@ -201,7 +201,6 @@ void esc_shell_help(char **command_vec);
 const struct esc_shell_command *find_in_menu(char **command_vec);
 void expand_tab(const char *buf, linenoiseCompletions *lc);
 int command_validate(char **command_vec);
-char **vector_push(char **vector, char *string);
 char **suggest_files(char *string);
 #endif
 
@@ -288,6 +287,10 @@ int posix_openpt(int flags);
 /* string_to_vector.c */
 char **string_to_vector(char *command_string);
 void free_vector(char **vector);
+char **cli_to_vector(char *command);
+char *pack_vector(char **command_vec);
+char **unpack_vector(char *packed_command);
+char **vector_push(char **vector, char *string);
 
 /* target.c */
 int do_target();

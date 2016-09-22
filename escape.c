@@ -295,7 +295,8 @@ void list_listeners(){
 
   struct proxy_node *cur_proxy_node;
 
-	char *proxy_type_strings[] = {PROXY_STATIC_STRING, PROXY_DYNAMIC_STRING, PROXY_TUN_STRING, PROXY_TAP_STRING, PROXY_FILE_STRING};
+	char *proxy_type_strings[] = {PROXY_STATIC_STRING, PROXY_DYNAMIC_STRING, PROXY_TUN_STRING, PROXY_TAP_STRING, \
+		PROXY_FILE_UP_STRING, PROXY_FILE_DOWN_STRING, PROXY_LARS_STRING};
 	char *target_strings[] = {"Local", "Remote"};
 
 	printf("\r################################################################################\n");
@@ -318,7 +319,8 @@ void list_connections(){
 
   struct connection_node *cur_connection_node;
 
-	char *proxy_type_strings[] = {PROXY_STATIC_STRING, PROXY_DYNAMIC_STRING, PROXY_TUN_STRING, PROXY_TAP_STRING, PROXY_FILE_STRING};
+	char *proxy_type_strings[] = {PROXY_STATIC_STRING, PROXY_DYNAMIC_STRING, PROXY_TUN_STRING, PROXY_TAP_STRING, \
+		PROXY_FILE_UP_STRING, PROXY_FILE_DOWN_STRING, PROXY_LARS_STRING};
 	char *target_strings[] = {"Local", "Remote"};
 
 	printf("\r################################################################################\n");

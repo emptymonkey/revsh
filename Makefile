@@ -92,7 +92,7 @@ keys:
 		./in_the_key_of_c -c $(KEYS_DIR)/target_cert.pem >$(KEYS_DIR)/target_cert.c ; \
 	fi
 
-string_to_vector.o:
+string_to_vector.o: string_to_vector.c
 	$(CC) $(CFLAGS) -c -o string_to_vector.o string_to_vector.c
 
 io.o: $(IO_DEP) io.c common.h config.h helper_objects.h

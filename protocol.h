@@ -171,13 +171,16 @@
 #define PROXY_DYNAMIC	1
 #define PROXY_TUN			2
 #define PROXY_TAP			3
-#define PROXY_FILE		4
+#define PROXY_FILE_UP		4
+#define PROXY_FILE_DOWN	5
+#define PROXY_LARS		6
 
 /* String representations of the proxy types above for reporting purposes. */
 #define PROXY_STATIC_STRING "Static"
 #define PROXY_DYNAMIC_STRING "Dynamic"
 #define PROXY_TUN_STRING "Tun"
 #define PROXY_TAP_STRING "Tap"
-#define PROXY_FILE_STRING "File"
-
+#define PROXY_FILE_UP_STRING "File Upload"
+#define PROXY_FILE_DOWN_STRING "File Download"
+#define PROXY_LARS_STRING "LARS"
 

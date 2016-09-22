@@ -42,25 +42,13 @@
 
 /* XXX
 
-- Add a license switch that prints license info, both mine and that of any libraries.
-
 Escape Sequence Commands:
-- Implement ~C commands. Either command name or () shortcut. Must be followed by '\r'. '~' commands should be honored. '~~' commands should be forwarded.
-	- file (f) : Copy a file.
-    -- upload (u) : upload a file. Default to "current directory" if no path or second parameter given.
-    -- download (d) : download a file. Default to "current directory" if no path or second parameter given.
-	- proxy (p) : setup a listener. 
-	  -- local (L) : Point-to-point port forwarding with a local listener.
-	  -- dynamic (D) : Dynamic Socks proxy port forwarding with a local listener.
-    -- remote (R) : Point-to-point port forwarding with a remote listener.
-	  -- bypass (B) : Dynamic Socks proxy port forwarding with a remote listener.
-	- tun (=) : Establish a tun device both locally and remotely.
-	- tap (+) : Establish a tap device both locally and remotely.
-	- list (l) : List connections. Same as ~#.
-	- kill (k) : Destroy a connection / proxy based off the X-Y cid reported in ~#.
-	- ttyscript (t) : Forward the ttyscript commands to the remote hosts tty.
-  - help (?) : Prints usage. 
-    -- When given a command above as an argument to help, additional help should be printed.
+	- file: Copy a file.
+    -- upload: upload a file. Default to "current directory" if no path or second parameter given.
+    -- download: download a file. Default to "current directory" if no path or second parameter given.
+	- lars: load and run script. 
+
+- redo string_to_vector() to handle "", "\"", etc.
 
 General Cleanup:
 - Convert tabs to spaces sanely.
@@ -68,21 +56,6 @@ General Cleanup:
 - Make a man page.
 - Use daily til Toorcon.
 
-- Future:
-- node chaining!!!  revsh sessions!!!  "~c sessions" to list sessions and "~c s1" to flip to session 1!!!.
-- add target ids to message bus.
-  -- make id's a string of chars. Each char represents depth from control. This means 255 max children. Probably another char to represent depth to target for a max 255 depth. This makes a sort of base 256 number system where the exponent represents depth. Need to add both a variable char array to the message header as well as a depth (or char count) variable.
-  -- examine routing methods.
-- add target state (listening, connected, etc.)
-- add parent concept for routing. (e.g.  i am node 2. nodes 5 and 7 are my children. Short circuit any routing requsts.)
-- add escape shell command to ascii art draw the tree.
-- extend escape commands to take node arguments. (e.g. copy file from node 5:/etc/passwd to node 7:)
-- Disable proxy, tun, tap by default. Once ~C shell commands work, user can dynamically create easily enough.
-- ~C command for printing an ascii art version of the tree.
-
-- Make new tty_node linked list.
-- redo linked lists so that ttys, proxys, and connections are all the same struct with the same create() destroy() functions.
-	-- keep them as separate heads as they are different, but unify the struct types.
 
 XXX */
 
@@ -502,6 +475,7 @@ int main(int argc, char **argv){
 				return(-1);
 			}
 		}
+		wordfree(&log_file_exp);
 	}
 
 	/* Grab some entropy and seed rand(). */

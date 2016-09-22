@@ -139,10 +139,10 @@ int esc_shell_loop(){
 
 	char *input;
 	int i;
-	int tmp_len;
-	int count;
+	int retval;
+	unsigned short count;
 	char **command_vec;
-	char command_string[ESC_COMMAND_MAX];
+	char *packed_command = NULL;
 
 
 	linenoiseSetCompletionCallback(expand_tab);
@@ -152,10 +152,13 @@ int esc_shell_loop(){
 
 	while((input = linenoise("revsh> "))){
 
-		if((command_vec = string_to_vector(input)) == NULL){
-			fprintf(stderr, "\r\nesc_shell_loop(): string_to_vector(%lx): %s\n", (unsigned long) input, strerror(errno));
+//		fprintf(stderr, "\r\nDEBUG: input: |%s|\r\n", input);
+		if((command_vec = cli_to_vector(input)) == NULL){
+			fprintf(stderr, "\r\nesc_shell_loop(): cli_to_vector(%lx): %s\n", (unsigned long) input, strerror(errno));
 			return(-1);
 		}
+
+//		fprintf(stderr, "\rDEBUG: command_vec[0]: |%s|\r\n", command_vec[0]);
 
 		if(command_vec[0]){
 
@@ -168,10 +171,11 @@ int esc_shell_loop(){
 			// Will it fit in the buffer? Do we recognize it as a supported command / subcommand?
 			// Does it have the correct number of arguments?
 			// No actual validation of files existing or having permission to access occurs here.
-			}else if((count = command_validate(command_vec)) > 0){
+			}else if((retval = command_validate(command_vec)) > 0){
 
-				// Send command_string back to the main process.
+				// Send packed_command back to the main process.
 
+/*
 				i = 0;
 				count = 0;
 				while(command_vec[i]){
@@ -189,10 +193,21 @@ int esc_shell_loop(){
 				*(command_string + count++) = '\0';
 			
 //				printf("DEBUG: esc_shell_loop(): command_string: %s\n", command_string);	
-				write(io->command_fd[1], command_string, count);
+*/
+				if((packed_command = pack_vector(command_vec)) == NULL){
+					fprintf(stderr, "\r\nesc_shell_loop(): pack_vector(%lx): %s\n", (unsigned long) command_vec, strerror(errno));
+					return(-1);
+				}
+				memcpy(&count, packed_command, sizeof(unsigned short));
+				count = ntohs(count);
+//				fprintf(stderr, "\r\nDEBUG: esc_shell_loop(): count: %d\n", count);
+
+				retval = write(io->command_fd[1], packed_command, count);
+//				fprintf(stderr, "\r\nDEBUG: esc_shell_loop(): write() retval: %d\n", retval);
+				
 
 			}else{
-				if(!count){
+				if(!retval){
 					printf("\n");
 					printf("Unknown command:");
 					i = 0;
@@ -206,6 +221,10 @@ int esc_shell_loop(){
 			}
 		}
 
+		if(packed_command){
+			free(packed_command);
+			packed_command = NULL;
+		}
 		linenoiseHistoryAdd(input);
 		linenoiseHistorySetMaxLen(50);
 		linenoiseFree(input);
@@ -305,15 +324,27 @@ void expand_tab(const char *buf, linenoiseCompletions *lc){
 	char *string_ptr;
 	int buf_count;
 	int tmp_int;
+	int buf_len;
 	char scratch[ESC_COMMAND_MAX];
 
+	int space_flag;
 
 	if(!buf){
 		return;
 	}
 
-	if((buf_vec = string_to_vector((char *) buf)) == NULL){
-		fprintf(stderr, "\r\nexpand_tab(): string_to_vector(%lx): %s\n", (unsigned long) buf, strerror(errno));
+
+	space_flag = 1;
+	buf_len = strlen(buf);
+	for(i = 0; i < buf_len; i++){
+		if(buf[i] != ' '){
+			space_flag = 0;
+			break;
+		}
+	}
+	
+	if((buf_vec = cli_to_vector((char *) buf)) == NULL){
+		fprintf(stderr, "\r\nexpand_tab(): cli_to_vector(%lx): %s\n", (unsigned long) buf, strerror(errno));
 		return;
 	}
 
@@ -321,17 +352,25 @@ void expand_tab(const char *buf, linenoiseCompletions *lc){
 	while(buf_vec[buf_count]){
 		buf_count++;
 	}
+//	fprintf(stderr, "\r\nDEBUG: expand_tab(): buf_count: %d\n", buf_count);
+//	fprintf(stderr, "\r\nDEBUG: expand_tab(): space_flag: %d\n", space_flag);
 
 	// Nothing is really there. (Might have been whitespace which we stripped.)
 	// Offer up the main menu commands.
 	if(!buf_count){
-		i = 0;
-		while(menu[i].command){
-			linenoiseAddCompletion(lc, menu[i].command);
-			i++;
+		if(space_flag){
+			i = 0;
+			while(menu[i].command){
+				linenoiseAddCompletion(lc, menu[i].command);
+				i++;
+			}
 		}
 		return;
 	}
+
+	if(buf_len && buf[buf_len - 1] == ' '){
+		space_flag = 1;
+	}	
 
 	// loop once through the main menu. If we find a match, loop through submenu and do the needful...
 	// Return if we find something. Don't forget to free_vector() the buf_vec.
@@ -396,23 +435,29 @@ void expand_tab(const char *buf, linenoiseCompletions *lc){
 					}
 				}
 
-/*
 				// Another special case.
-				if(!strcmp(buf_vec[0], "ttyscript") && buf_count == 2){
+				if(!strcmp(buf_vec[0], "lars") && (buf_count == 2 || buf_count == 3)){
 
-					string_ptr = buf_vec[1];
+					string_ptr = buf_vec[buf_count - 1];
+					if(buf_count == 2 && space_flag){
+						string_ptr = "./";					
+					}
+
 					if((suggestion_vec = suggest_files(string_ptr)) == NULL){
 						return;
 					}
 
 					k = 0;
 					while(suggestion_vec[k]){
-						snprintf(scratch, ESC_COMMAND_MAX, "%s %s", buf_vec[0], suggestion_vec[k]);
+						if(buf_count == 2 && !space_flag){
+							snprintf(scratch, ESC_COMMAND_MAX, "%s %s", buf_vec[0], suggestion_vec[k]);
+						}else{
+							snprintf(scratch, ESC_COMMAND_MAX, "%s %s %s", buf_vec[0], buf_vec[1], suggestion_vec[k]);
+						}
 						linenoiseAddCompletion(lc, scratch);
 						k++;
 					}
 				}	
-*/
 
 			}else{
 				// case where the first command matches, but no additional commands have been entered yet. suggest all submenu items.
@@ -425,12 +470,10 @@ void expand_tab(const char *buf, linenoiseCompletions *lc){
 					j++;
 				}
 
-/*
-				if(!strcmp(buf_vec[0], "ttyscript")){
+				if(!strcmp(buf_vec[0], "lars")){
 
-					string_ptr = config->ttyscripts_dir;
+					string_ptr = "./";
 					if((suggestion_vec = suggest_files(string_ptr)) == NULL){
-						fprintf(stderr, "\r\nexpand_tab(): suggest_files(%lx): %s\n", (unsigned long) string_ptr, strerror(errno));
 						return;
 					}
 
@@ -440,8 +483,7 @@ void expand_tab(const char *buf, linenoiseCompletions *lc){
 						linenoiseAddCompletion(lc, scratch);
 						k++;
 					}
-				}	
-*/
+				}
 				free_vector(buf_vec);
 				return;
 			}
@@ -504,57 +546,6 @@ int command_validate(char **command_vec){
 	}
 
 	return(0);
-}
-
-
-// original vector is destroyed. NULL on error.
-char **vector_push(char **vector, char *string){
-
-	char **tmp_vector = NULL;
-	int count;
-	int i;
-
-
-	count = 0;
-	if(vector){
-		while(vector[count]){
-			count++;
-		}
-	}
-	count++;
-
-	if((tmp_vector = (char **) calloc(count + 1, sizeof(char *))) == NULL){
-		fprintf(stderr, "\r\nvector_push(): calloc(%d, %d): %s\n", count + 1, (int) sizeof(char *), strerror(errno));
-		return(NULL);
-	}
-
-	i = 0;
-	if(vector){	
-		while(vector[i]){
-
-			count = strlen(vector[i]);
-			if((tmp_vector[i] = (char *) calloc(count + 1, sizeof(char))) == NULL){
-				fprintf(stderr, "\r\nvector_push(): calloc(%d, %d): %s\n", count + 1, (int) sizeof(char), strerror(errno));
-				return(NULL);
-			}
-			memcpy(tmp_vector[i], vector[i], count);
-
-			i++;
-		}
-	}
-
-	count = strlen(string);
-	if((tmp_vector[i] = (char *) calloc(count + 1, sizeof(char))) == NULL){
-		fprintf(stderr, "\r\nvector_push(): calloc(%d, %d): %s\n", count + 1, (int) sizeof(char), strerror(errno));
-		return(NULL);
-	}
-	memcpy(tmp_vector[i], string, count);
-
-	if(vector){
-		free_vector(vector);	
-	}
-
-	return(tmp_vector);
 }
 
 
