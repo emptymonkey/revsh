@@ -60,7 +60,6 @@ struct config_helper {
 	char *shell;
 	char *local_forward;
 	char *log_file;
-//	char *ttyscripts_dir;
 
 	int keepalive;
 	int nop;
@@ -223,25 +222,6 @@ struct io_helper {
 	const EVP_MD *fingerprint_type;
 #endif /* OPENSSL */
 
-	/****************************************************************************/
-	// Variables used in escape sequence sub-shell command processing.
-
-	// buff will be null unless the user is in the sub-shell.
-	// Upon entry calloc() is called. 
-	// Upon exit, free() is called.
-	// Total size is ESC_COMMAND_MAX. (Prolly 1024.) We will reserve the final
-  // index for a null char in case we wish to use string processing.
-	char *command_buff;
-
-	// The nunmber of characters read. As a result it acts as an index to the
-	// first unused location in the buffer.
-	int command_len;
-
-	// IPC. Traditional half-duplex pipes work fine here.
-	int command_fd[2];
-
-	/****************************************************************************/
-
 	// Linked list of proxy listeners.
 	struct proxy_node *proxy_head;
 	struct proxy_node *proxy_tail;
@@ -259,18 +239,3 @@ struct io_helper {
 	unsigned int escape_depth;
 
 };
-
-struct esc_shell_command {
-  char *command;
-  char *completion_string;
-
-  // total elements present in the final invocation, including the commands themselves.
-  // Commands that have subcommands will have these set to 0, as they are not valid
-  // without a subcommand.
-  int min_args;
-  int max_args;
-
-  const char *help_message;
-  const struct esc_shell_command *sub_commands;
-};
-

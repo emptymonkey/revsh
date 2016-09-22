@@ -42,20 +42,16 @@
 
 /* XXX
 
-Escape Sequence Commands:
-	- file: Copy a file.
-    -- upload: upload a file. Default to "current directory" if no path or second parameter given.
-    -- download: download a file. Default to "current directory" if no path or second parameter given.
-	- lars: load and run script. 
+- Add default point to point proxy.
+- ignore -v if in -n copy mode.
 
-- redo string_to_vector() to handle "", "\"", etc.
+- document code.
+- Make a man page.
 
 General Cleanup:
 - Convert tabs to spaces sanely.
 - Test all the switches.
-- Make a man page.
 - Use daily til Toorcon.
-
 
 XXX */
 
@@ -262,6 +258,7 @@ int main(int argc, char **argv){
 	config->tun = 1;
 	config->tap = 1;
 	config->socks = SOCKS_LISTENER;
+	config->local_forward = LOCAL_LISTENER;
 
 #ifdef NOP
 	config->nop = 1;
@@ -293,7 +290,6 @@ int main(int argc, char **argv){
 	}
 
 	/* Grab the configuration from the command line. */
-//	while((opt = getopt(argc, argv, "hepbkalcxT:s:d:f:L:R:D:B:r:F:t:nv")) != -1){
 	while((opt = getopt(argc, argv, "hepbkalcxs:d:f:L:R:D:B:r:F:t:nv")) != -1){
 		switch(opt){
 
@@ -305,9 +301,14 @@ int main(int argc, char **argv){
 				examples(0);
 				break;
 
-			/*  The plaintext case is a debugging feature which should be difficult to use. */
-			/*  You will need to pass the -p switch from both ends in order for it to work. */
-			/*  This is provided for debugging purposes only. */
+				/*
+					 The plaintext case is a debugging feature which should be difficult to use.
+					 You will need to pass the -p switch from both ends in order for it to work.
+					 This is provided for debugging purposes only and not advertised. Note:
+					 This still uses openssl. It just uses the BIO_ routines and has no crypto.
+					 If what you want is no openssl, you'll need to build the "compatability"
+					 version avialable through the Makefile.
+				 */
 #ifdef OPENSSL
 			case 'p':
 				config->encryption = PLAINTEXT;
@@ -340,12 +341,8 @@ int main(int argc, char **argv){
 				config->tun = 0;
 				config->tap = 0;
 				config->socks = NULL;
+				config->local_forward = NULL;
 				break;
-/*
-			case 'T':
-				config->ttyscripts_dir = optarg;
-				break;
-*/
 
 			case 's':
 				config->shell = optarg;
@@ -383,7 +380,7 @@ int main(int argc, char **argv){
 					cur_proxy_ptr->remote = 1;
 				}
 				break;
-			
+
 			case 'r':
 				retry_string = optarg;
 				break;
@@ -443,7 +440,7 @@ int main(int argc, char **argv){
 
 	// If the operator didn't add the optional port number, add it for him now.
 	if((tmp_ptr = strchr(config->ip_addr, ':')) == NULL){
-	
+
 		// +1 for ':' character.
 		tmp_size = strlen(config->ip_addr) + 1 + PORT_STRING_LEN;	
 		// free() not called. One time allocation core to the process state. No way to change after initialization.
@@ -541,7 +538,7 @@ int main(int argc, char **argv){
 		return(-1);
 	}
 
-	
+
 	/* Call the appropriate conductor. */
 	if(!io->target){
 		do{
@@ -588,7 +585,7 @@ int main(int argc, char **argv){
  **********************************************************************************************************************/
 void clean_io(){
 
-  struct message_helper *message_ptr;
+	struct message_helper *message_ptr;
 
 	io->target_proto_major = 0;
 	io->target_proto_minor = 0;

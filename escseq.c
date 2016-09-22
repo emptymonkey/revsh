@@ -1,7 +1,7 @@
 #include "common.h"
 
 #define LOCAL_BUFF_SIZE 64
-#define VALID_ESCAPE_ACTIONS ".#C?"
+#define VALID_ESCAPE_ACTIONS ".#?"
 
 /*
  * escape sequence processing strategy:
@@ -263,13 +263,6 @@ int process_escape(char c){
 			list_all();
 			break;
 
-		case 'C':
-			if(esc_shell_start() == -1){
-				report_error("process_escape(): esc_shell_start(): %s", strerror(errno));
-				return(-1);
-			}
-			break;
-
 		case '?':
 			print_valid_escapes();
 			break;
@@ -282,22 +275,15 @@ int process_escape(char c){
 	return(0);
 }
 
-
-
 void list_all(){
-	printf("\n\n");
-	list_listeners();
-	list_connections();
-}
-
-
-void list_listeners(){
 
   struct proxy_node *cur_proxy_node;
+  struct connection_node *cur_connection_node;
 
-	char *proxy_type_strings[] = {PROXY_STATIC_STRING, PROXY_DYNAMIC_STRING, PROXY_TUN_STRING, PROXY_TAP_STRING, \
-		PROXY_FILE_UP_STRING, PROXY_FILE_DOWN_STRING, PROXY_LARS_STRING};
+	char *proxy_type_strings[] = {PROXY_STATIC_STRING, PROXY_DYNAMIC_STRING, PROXY_TUN_STRING, PROXY_TAP_STRING};
 	char *target_strings[] = {"Local", "Remote"};
+
+	printf("\n\n");
 
 	printf("\r################################################################################\n");
 	printf("\r# Proxy listeners:\n");
@@ -312,16 +298,9 @@ void list_listeners(){
 
 		cur_proxy_node = cur_proxy_node->next;
 	}
+
 	printf("\r\n");
-}
 
-void list_connections(){
-
-  struct connection_node *cur_connection_node;
-
-	char *proxy_type_strings[] = {PROXY_STATIC_STRING, PROXY_DYNAMIC_STRING, PROXY_TUN_STRING, PROXY_TAP_STRING, \
-		PROXY_FILE_UP_STRING, PROXY_FILE_DOWN_STRING, PROXY_LARS_STRING};
-	char *target_strings[] = {"Local", "Remote"};
 
 	printf("\r################################################################################\n");
 	printf("\r# Active connections:\n");
@@ -341,10 +320,10 @@ void list_connections(){
 		cur_connection_node = cur_connection_node->next;
 	}
 
-
 	printf("\r\n");
 
 }
+
 
 void print_valid_escapes(){
 
@@ -353,7 +332,6 @@ void print_valid_escapes(){
 	printf("\n");
 	printf("\r~.\tExit. (Good for killing an unresponsive session.)\n");
 	printf("\r~#\tList active connections with usage statistics.\n");
-	printf("\r~C\tOpen the revsh command shell. Type \"help\" inside that shell for more information.\n");
 	printf("\r~?\tList the supported revsh escape sequences.\n");
 	printf("\r\n");
 

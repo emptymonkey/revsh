@@ -52,6 +52,7 @@
 
 #include <net/if.h>
 
+
 /******************************************************************************
  * OS specific headers
  ******************************************************************************/
@@ -65,15 +66,6 @@
 # include <linux/if.h>
 # include <linux/if_tun.h>
 
-#endif
-
-
-/******************************************************************************
- * linenoise library header
- ******************************************************************************/
-
-#ifdef LINENOISE
-# include "linenoise.h"
 #endif
 
 
@@ -136,13 +128,6 @@
 #define ESCAPE_CR 1
 #define ESCAPE_TILDE 2
 
-/* The max length of the escape sequence command input strings. Arbitrary, but probably more than long enough. */
-// MAX_INPUT and MAX_CANON both seem unusually small given that we can take two file names as arguments,
-// and each file name can be upwards of 255 characters.
-#define ESC_COMMAND_MAX 1024
-
-#define REVSH_PROMPT "revsh>"
-
 
 /******************************************************************************
  * global variables
@@ -180,7 +165,7 @@ void signal_handler(int signal);
 /* control.c */
 int do_control();
 
-/* escape.c */
+/* escseq.c */
 int escape_check();
 int send_consumed();
 int send_message(int count);
@@ -192,23 +177,10 @@ void list_listeners();
 void list_connections();
 void print_valid_escapes();
 
-/* esc_shell.c */
-int esc_shell_start();
-int esc_shell_stop();
-#ifdef LINENOISE
-int esc_shell_loop();
-void esc_shell_help(char **command_vec);
-const struct esc_shell_command *find_in_menu(char **command_vec);
-void expand_tab(const char *buf, linenoiseCompletions *lc);
-int command_validate(char **command_vec);
-char **suggest_files(char *string);
-#endif
-
 /* handler.c */
 int handle_signal_sigwinch();
 int handle_local_write();
 int handle_local_read();
-int handle_command_shell_read();
 int handle_message_dt_tty();
 int handle_message_dt_winresize();
 int handle_message_dt_proxy_ht_destroy();
@@ -287,10 +259,6 @@ int posix_openpt(int flags);
 /* string_to_vector.c */
 char **string_to_vector(char *command_string);
 void free_vector(char **vector);
-char **cli_to_vector(char *command);
-char *pack_vector(char **command_vec);
-char **unpack_vector(char *packed_command);
-char **vector_push(char **vector, char *string);
 
 /* target.c */
 int do_target();
