@@ -1,6 +1,13 @@
 
 #include "common.h"
 
+// Vector in this context means a null terminated array. Think of argv. It is a null terminated array of pointers to
+// null terminated arrays of chars. The v in argv stands for vector. Using vectors makes bounds checking much easier.
+// The other advantage to this approach is not using strtok() which is destructive. The below function malloc()s new
+// space for a non-destructive tokenization. free_vector() below is then provide to simplify cleanup.
+
+// To-Do: I've got this same routine in several of my projects. I really need to start a libmonkey project with all
+// my common function / code idioms in one place.
 
 /**********************************************************************************************************************
  *
@@ -8,7 +15,7 @@
  *
  * Input: A string of tokens, whitespace delimited, null terminated.
  * Output: An array of strings containing the tokens. The array itself is also null terminated. NULL will be returned
- *	on error.
+ * on error.
  *
  * Purpose: Tokenize a string for later consumption. 
  *

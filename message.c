@@ -15,7 +15,6 @@
 int message_push(){
 
 	unsigned short header_len;
-
 	unsigned short tmp_short;
 
 
@@ -100,7 +99,7 @@ int message_push(){
 		report_error("message_push(): remote_write(%lx, %d): %s", \
 				(unsigned long) message->data, message->data_len, strerror(errno));
 		return(-1);
-	}	
+	}
 
 	return(0);
 }
@@ -120,7 +119,6 @@ int message_push(){
 int message_pull(){
 
 	unsigned short header_len;
-
 	int retval;
 
 
@@ -223,7 +221,6 @@ int message_pull(){
 }
 
 
-
 /***********************************************************************************************************************
  *
  * message_helper_create()
@@ -242,17 +239,17 @@ struct message_helper *message_helper_create(char *data, unsigned short data_len
 	struct message_helper *new_mh;
 
 	// free() called in message_helper_destroy().
-	new_mh = (struct message_helper *) calloc(1, sizeof(struct message_helper));	
+	new_mh = (struct message_helper *) calloc(1, sizeof(struct message_helper));
 	if(!new_mh){
 		report_error("message_helper_create(): calloc(1, %d): %s", (int) sizeof(struct message_helper), strerror(errno));
 		return(NULL);
 	}
 
 	// free() called in message_helper_destroy().
-	new_mh->data = (char *) calloc(message_data_size, sizeof(char));	
+	new_mh->data = (char *) calloc(message_data_size, sizeof(char));
 	if(!new_mh->data){
 		report_error("message_helper_create(): calloc(1, %d): %s", (int) sizeof(struct message_helper), strerror(errno));
-		free(new_mh);	
+		free(new_mh);
 		return(NULL);
 	}
 

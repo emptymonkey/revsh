@@ -5,7 +5,7 @@
  *
  * do_control()
  *
- * Input: Our io and config helper objects.
+ * Input: None, but we will leverage the global io and config structs.
  *
  * Output: 0 for success, -1 on error.
  *
@@ -65,7 +65,7 @@ int do_control(){
 		return(-1);
 	}
 
-	/* Both sides must agree on interaction. If either one opts out, fall back to non-interactive data transfer. */	
+	/* Both sides must agree on interaction. If either one opts out, fall back to non-interactive data transfer. */
 	io->interactive = 1;
 	if(!(config->interactive && message->data[0])){
 		io->interactive = 0;
@@ -238,28 +238,27 @@ int do_control(){
 	wordfree(&rc_file_exp);
 
 	/* Set the tty to non-blocking. */
-  if((fcntl_flags = fcntl(io->local_in_fd, F_GETFL, 0)) == -1){
-    report_error("do_control(): fcntl(%d, F_GETFL, 0): %s", io->local_in_fd, strerror(errno));
-    return(-1);
-  }
-  
-  fcntl_flags |= O_NONBLOCK;
-  if(fcntl(io->local_in_fd, F_SETFL, fcntl_flags) == -1){
-    report_error("do_control(): fcntl(%d, F_SETFL, %d): %s", io->local_in_fd, fcntl_flags, strerror(errno));
-    return(-1);
-  }
-  
-  if((fcntl_flags = fcntl(io->local_out_fd, F_GETFL, 0)) == -1){
-    report_error("do_control(): fcntl(%d, F_GETFL, 0): %s", io->local_out_fd, strerror(errno));
-    return(-1);
-  }
+	if((fcntl_flags = fcntl(io->local_in_fd, F_GETFL, 0)) == -1){
+		report_error("do_control(): fcntl(%d, F_GETFL, 0): %s", io->local_in_fd, strerror(errno));
+		return(-1);
+	}
 
-  fcntl_flags |= O_NONBLOCK;
-  if(fcntl(io->local_out_fd, F_SETFL, fcntl_flags) == -1){
-    report_error("do_control(): fcntl(%d, F_SETFL, %d): %s", io->local_out_fd, fcntl_flags, strerror(errno));
-    return(-1);
-  }
+	fcntl_flags |= O_NONBLOCK;
+	if(fcntl(io->local_in_fd, F_SETFL, fcntl_flags) == -1){
+		report_error("do_control(): fcntl(%d, F_SETFL, %d): %s", io->local_in_fd, fcntl_flags, strerror(errno));
+		return(-1);
+	}
 
+	if((fcntl_flags = fcntl(io->local_out_fd, F_GETFL, 0)) == -1){
+		report_error("do_control(): fcntl(%d, F_GETFL, 0): %s", io->local_out_fd, strerror(errno));
+		return(-1);
+	}
+
+	fcntl_flags |= O_NONBLOCK;
+	if(fcntl(io->local_out_fd, F_SETFL, fcntl_flags) == -1){
+		report_error("do_control(): fcntl(%d, F_SETFL, %d): %s", io->local_out_fd, fcntl_flags, strerror(errno));
+		return(-1);
+	}
 
 	/*  - Enter broker() for tty brokering. */
 	err_flag = 0;

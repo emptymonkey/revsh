@@ -41,7 +41,7 @@ The broker() loop was getting cluttered and the fds were being dealt with incons
   user terminal experience.)
 
 * After all of this was designed and implemented a buddy of mine suggested adding tun/tap support. It's great! If you
-	want scalability, the use the tun/tap support and offload all those crappy decisions to the kernel which will do 
+	want scalability, the use then tun/tap support and offload all those crappy decisions to the kernel which will do 
 	it much better than we can!
 
 

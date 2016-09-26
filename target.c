@@ -1,13 +1,13 @@
 
 #include "common.h"
 
-#define LOCAL_BUFF_SIZE	128
+#define LOCAL_BUFF_SIZE 128
 
 /***********************************************************************************************************************
  *
  * do_target()
  *
- * Input: Our io and config helper objects.
+ * Input: None. We will use the global io and config structs.
  *
  * Output: 0 for success, -1 on error.
  *
@@ -398,8 +398,7 @@ int do_target(){
  *
  * remote_printf()
  *
- * Input: A pointer to our io_helper object, and the fmt specification as you would find in a normal printf
- *  statement.
+ * Input: The fmt specification as you would find in a normal printf statement. We will also use the global io struct.
  * Output: 0 on success, -1 on failure.
  *
  * Purpose: Provide a printf() style wrapper that leverages the underlying message bus. Used by the target system 

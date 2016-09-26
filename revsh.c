@@ -4,7 +4,7 @@
  * revsh
  *
  * emptymonkey's reverse shell tool with terminal support!
- *	More than just a reverse shell, now we're a reverse VPN!!!
+ *   More than just a reverse shell, now we're a reverse VPN!!!
  *
  *
  * 2013-07-17: Original release.
@@ -18,23 +18,24 @@
  *
  *
  * Features:
- *		* Reverse Shell.
- *		* Bind Shell.
- *		* Terminal support.
- *		* Unicode support.
- *		* Handle window resize events.
- *		* Circumvent utmp / wtmp. (No login recorded.)
- *		* Process rc file commands upon login.
- *		* OpenSSL encryption with key based authentication baked into the binary.
- *		* Anonymous Diffie-Hellman encryption for use without key management.
- *		* Ephemeral Diffie-Hellman encryption for use with key managment. (Now with more Perfect Forward Secrecy!)
- *		* Cert pinning for protection against sinkholes and mitm counter-intrusion.
- *		* Connection timeout for remote process self-termination.
- *		* Randomized retry timers for non-predictable auto-reconnection.
- *		* Non-interactive mode for transfering files.
- *		* Proxy support: point-to-point, socks4, socks4a, socks5
- *			(Note: Only the "TCP Connect" subset of the socks protocol is supported.)
- *		* TUN / TAP support for forwarding raw IP packets / Ethernet frames.
+ *    * Reverse Shell.
+ *    * Bind Shell.
+ *    * Terminal support.
+ *    * Unicode support.
+ *    * Handle window resize events.
+ *    * Circumvent utmp / wtmp. (No login recorded.)
+ *    * Process rc file commands upon login.
+ *    * OpenSSL encryption with key based authentication baked into the binary.
+ *    * Anonymous Diffie-Hellman encryption for use without key management.
+ *    * Ephemeral Diffie-Hellman encryption for use with key managment. (Now with more Perfect Forward Secrecy!)
+ *    * Cert pinning for protection against sinkholes and mitm counter-intrusion.
+ *    * Connection timeout for remote process self-termination.
+ *    * Randomized retry timers for non-predictable auto-reconnection.
+ *    * Non-interactive mode for transfering files.
+ *    * Proxy support: point-to-point, socks4, socks4a, socks5
+ *      (Note: Only the "TCP Connect" subset of the socks protocol is supported.)
+ *    * TUN / TAP support for forwarding raw IP packets / Ethernet frames.
+ *    * Escape sequence commands to kill non-responsive nodes, or print connection statistics.
  *
  **********************************************************************************************************************/
 
@@ -42,14 +43,10 @@
 
 /* XXX
 
-- Add default point to point proxy.
-- ignore -v if in -n copy mode.
-
-- document code.
+- Fix bug. Ignore -v if in -n copy mode.
 - Make a man page.
 
 General Cleanup:
-- Convert tabs to spaces sanely.
 - Test all the switches.
 - Use daily til Toorcon.
 
@@ -102,7 +99,6 @@ void usage(int ret_code){
 #else
 	fprintf(out_stream, "\t-F LOG_FILE\tLog general use and errors to LOG_FILE.\t\t(No default set.)\n");
 #endif
-//	fprintf(out_stream, "\t-T TTYSCRIPTS_DIR\tLook for ttyscripts in the TTYSCRIPTS_DIR directory.\t\t(Default is \"%s\".)\n", TTYSCRIPTS_DIR);
 
 	fprintf(out_stream, "\nTARGET_OPTIONS:\n");
 	fprintf(out_stream, "\t-t SEC\t\tSet the connection timeout to SEC seconds.\t(Default is \"%d\".)\n", TIMEOUT);
@@ -253,7 +249,6 @@ int main(int argc, char **argv){
 	config->timeout = TIMEOUT;
 	config->keepalive = 0;
 	config->nop = 0;
-//	config->ttyscripts_dir = TTYSCRIPTS_DIR;
 
 	config->tun = 1;
 	config->tap = 1;
@@ -302,12 +297,12 @@ int main(int argc, char **argv){
 				break;
 
 				/*
-					 The plaintext case is a debugging feature which should be difficult to use.
-					 You will need to pass the -p switch from both ends in order for it to work.
-					 This is provided for debugging purposes only and not advertised. Note:
-					 This still uses openssl. It just uses the BIO_ routines and has no crypto.
-					 If what you want is no openssl, you'll need to build the "compatability"
-					 version avialable through the Makefile.
+				 * The plaintext case is a debugging feature which should be difficult to use.
+				 * You will need to pass the -p switch from both ends in order for it to work.
+				 * This is provided for debugging purposes only and not advertised. Note:
+				 * This still uses openssl. It just uses the BIO_ routines and has no crypto.
+				 * If what you want is no openssl, you'll need to build the "compatability"
+				 * version avialable through the Makefile.
 				 */
 #ifdef OPENSSL
 			case 'p':
@@ -332,6 +327,9 @@ int main(int argc, char **argv){
 				config->keepalive = 1;
 				break;
 
+				// This flag is called "target" because it will be the target id once we implement
+				// multiple target nodes. Control will always be id 0, which from a flag perspective
+				// cleanly translates into "not a target". 
 			case 'l':
 			case 'c':
 				io->target = 0;
@@ -587,6 +585,7 @@ void clean_io(){
 
 	struct message_helper *message_ptr;
 
+
 	io->target_proto_major = 0;
 	io->target_proto_minor = 0;
 
@@ -660,6 +659,8 @@ void clean_io(){
 	}
 
 	io->fd_count = 0;
+	io->escape_state = ESCAPE_NONE;
+	io->escape_depth = 0;
 }
 
 

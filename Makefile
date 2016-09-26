@@ -45,6 +45,9 @@ IO_DEP = io_ssl.c
 #IO_DEP = io_nossl.c
 
 
+# Note: if you are building a generic build for distribution more broadly and without any cert management, you 
+# will want to add "-DGENERIC_BUILD" to the above CFLAGS entry you choose.
+
 ########################################################################################################################
 # make directives - Not intended for modification.
 ########################################################################################################################

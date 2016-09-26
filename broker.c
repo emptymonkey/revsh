@@ -3,13 +3,13 @@
 
 extern sig_atomic_t sig_found;
 
-
 /***********************************************************************************************************************
  *
  * broker()
  *
- * Input: A pointer to our io_helper object and a pointer to our config_helper object.
- * Output: 0 for EOF, -1 for errors.
+ * Input: None, but we will use the global io_helper and config_helper objects.
+ * Output: 0 for EOF, -1 for errors. (-2's returned to us are interpreted as non-fatal errors.
+ *         We will report and ignore.)
  *
  * Purpose: Broker data between the terminal / connections and the network socket. 
  *
@@ -34,10 +34,10 @@ int broker(){
 	struct proxy_request_node *cur_proxy_req_node;
 
 
-	/* Skip this stuff if we're just transfering a file... */
+	/* Skip this stuff if we're just transferring a file... */
 	if(io->interactive){
 
-		/* Set up the default proxy. */
+		/* Set up the default proxies. */
 		if(!io->target){
 
 			if(config->socks){
@@ -46,6 +46,8 @@ int broker(){
 				}
 			}
 
+			// Localhost point-to-point listeners on both ends, one each direction of communication
+			// Allows for easier in-band asynchronous file transfers.
 			if(config->local_forward){
 				if((cur_proxy_node = proxy_node_new(config->local_forward, PROXY_STATIC)) == NULL){
 					report_error("do_control(): proxy_node_new(%s, %d): %s", config->local_forward, PROXY_STATIC, strerror(errno));
@@ -61,7 +63,7 @@ int broker(){
 		}
 
 		/* Set up proxies requested during launch. */
-		cur_proxy_req_node = config->proxy_request_head;	
+		cur_proxy_req_node = config->proxy_request_head;
 		while(cur_proxy_req_node){
 
 			if(cur_proxy_req_node->remote){
@@ -72,7 +74,7 @@ int broker(){
 					}
 				}
 			}else{
-				cur_proxy_node = proxy_node_new(cur_proxy_req_node->request_string, cur_proxy_req_node->type);	
+				cur_proxy_node = proxy_node_new(cur_proxy_req_node->request_string, cur_proxy_req_node->type);
 
 				if(!cur_proxy_node){
 					report_error("do_control(): proxy_node_new(%s, %d): %s", cur_proxy_req_node->request_string, cur_proxy_req_node->type, strerror(errno));
@@ -87,7 +89,6 @@ int broker(){
 			}
 			cur_proxy_req_node = cur_proxy_req_node->next;
 		}
-
 
 		/* Prepare for broker() loop signal handling. */
 		memset(&act, 0, sizeof(act));
@@ -137,12 +138,8 @@ int broker(){
 		timeout_ptr = &timeout;
 	}
 
-	//	XXX int debug_ctr = 1000;
 	/*  Start the broker() loop. */
 	while(1){
-		//		if(!debug_ctr--){
-		//			return(-1);
-		//		}
 
 		/* Initialize fds we will want to select() on this loop. */
 		fd_max = 0;
@@ -162,7 +159,7 @@ int broker(){
 
 		io->fd_count = 2;
 
-		/* Add connecections that are active. */
+		/* Add connections that are active. */
 		cur_connection_node = io->connection_head;
 		while((io->fd_count < FD_SETSIZE) && cur_connection_node){
 
@@ -205,9 +202,7 @@ int broker(){
 			goto RETURN;
 		}
 
-
-		/* Determine which case we are in and call the appropriate handler. */
-
+		// First check if we timed out, in which case send a keepalive nop.
 		if(!retval){
 			if((retval = handle_send_dt_nop()) == -1){
 				report_error("broker(): handle_send_dt_nop(): %s", strerror(errno));
@@ -215,6 +210,7 @@ int broker(){
 			}
 		}
 
+		// Handle signals. (We've handled multiple in the past. Right now, we only watch for sigwinch.)
 		if(sig_found){
 
 			current_sig = sig_found;
@@ -222,7 +218,6 @@ int broker(){
 
 			if(io->interactive && !io->target){
 
-				/* I set this up as a switch statement because I think we will want to handle other signals down the road. */
 				switch(current_sig){
 
 					/* Gather and send the new window size. */
@@ -238,15 +233,14 @@ int broker(){
 			continue;
 		}
 
+		// Local tty / shell fd will have priority over all the other connections.
 		if(FD_ISSET(io->local_in_fd, &write_fds)){
 
 			if((retval = handle_local_write()) == -1){
 				goto RETURN;
 			}
-
 			continue;
 		}
-
 
 		if(FD_ISSET(io->local_in_fd, &read_fds)){
 			retval = handle_local_read();
@@ -257,11 +251,11 @@ int broker(){
 					retval = 0;
 				}
 				goto RETURN;
-			}	
+			}
 			continue;
 		}
 
-
+		// Next in priority comes the message bus.
 		if(FD_ISSET(io->remote_fd, &read_fds)){
 
 			if((retval = message_pull()) == -1){
@@ -273,6 +267,7 @@ int broker(){
 				goto RETURN;
 			}
 
+			// What type of message did we just get?
 			switch(message->data_type){
 
 				case DT_TTY:
@@ -354,7 +349,7 @@ int broker(){
 						}
 
 					}else{
-						// Malformed request.
+						// Unknown connection type. Report but soldier on.
 						report_error("broker(): Unknown Connection Header Type: %d: Ignoring.", message->header_type);
 					}
 					break;
@@ -372,8 +367,8 @@ int broker(){
 					break;
 
 				default:
-					// Malformed request.
-					report_error("broker(): Unknown Proxy Header Type: %d: Ignoring.", message->header_type);
+					// Unknown message type. Report but soldier on.
+					report_error("broker(): Unknown message data type: %d: Ignoring.", message->header_type);
 					break;
 			}
 
@@ -395,7 +390,7 @@ int broker(){
 				break;
 			}
 
-			cur_proxy_node = cur_proxy_node->next;		
+			cur_proxy_node = cur_proxy_node->next;
 		}
 
 		if(found){
@@ -465,7 +460,7 @@ RETURN:
  * Output: None. 
  * 
  * Purpose: To handle signals! For best effort at avoiding race conditions, we simply mark that the signal was found
- *	and return. This allows the broker() select() call to manage signal generating events.
+ *          and return. This allows the broker() select() call to manage signal generating events.
  * 
  **********************************************************************************************************************/
 void signal_handler(int signal){

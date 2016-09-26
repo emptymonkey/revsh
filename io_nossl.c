@@ -6,8 +6,8 @@
  *
  * remote_read_plaintext()
  *
- * Input: A pointer to our io_helper object, a pointer to the buffer we want to fill, and the count of characters
- *	we need to read.
+ * Input: A pointer to the buffer we want to fill, and the count of characters we need to read. 
+ *   We will also use the the global io struct.
  * Output: The count of characters succesfully read, or -1 on error.
  *
  * Purpose: Fill our buffer.
@@ -71,8 +71,8 @@ int remote_read_plaintext(void *buff, size_t count){
  *
  * remote_write_plaintext()
  *
- * Input: A pointer to our io_helper object, a pointer to the buffer we want to empty, and the count of
- *	characters we should write.
+ * Input: A pointer to the buffer we want to empty, and the count of characters we should write.
+ *   We will also use the the global io struct.
  * Output: The count of characters succesfully written, or -1 on error.
  *
  * Purpose: Empty our buffer.
@@ -138,7 +138,7 @@ int remote_write_plaintext(void *buff, size_t count){
  *
  * init_io_control()
  *
- * Input:  A pointer to our io_helper object and a pointer to our configuration_helper object.
+ * Input: None. We will use the global io and config structs.
  * Output: An int showing success (by returning the remote_fd) or failure (by returning -1).
  *
  * Purpose: To initialize the control nodes network io layer.
@@ -286,7 +286,7 @@ int init_io_control(){
  *
  * init_io_target()
  *
- * Input:  A pointer to our io_helper object and a pointer to our configuration_helper object.
+ * Input: None. We will use the global io and config structs.
  * Output: An int showing success (by returning the remote_fd) or failure (by returning -1).
  *
  * Purpose: To initialize a target's network io layer.

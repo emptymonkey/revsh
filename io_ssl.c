@@ -9,8 +9,8 @@ extern sig_atomic_t sig_found;
  *
  * remote_read_plaintext()
  *
- * Input: A pointer to our io_helper object, a pointer to the buffer we want to fill, and the count of characters
- *	we should try to read.
+ * Input: A pointer to the buffer we want to fill, and the count of characters we should try to read.
+ *   We will make use of the global io struct.
  * Output: The count of characters succesfully read, or an error code. (man BIO_read for more information.)
  *
  * Purpose: Fill our buffer, but this is the simple plaintext wrapper case. Nothing fancy here.
@@ -84,8 +84,8 @@ int remote_read_plaintext(void *buff, size_t count){
  *
  * remote_write_plaintext()
  *
- * Input: A pointer to our io_helper object, a pointer to the buffer we want to empty, and the count of
- *	characters we should try to write.
+ * Input: A pointer to the buffer we want to empty, and the count of characters we should try to write.
+ *   We will make use of the global io struct.
  * Output: The count of characters succesfully written, or an error code. (man BIO_write for more information.)
  *
  * Purpose: Empty our buffer, but this is the simple plaintext wrapper case. Nothing fancy here.
@@ -155,22 +155,22 @@ int remote_write_plaintext(void *buff, size_t count){
  *
  * remote_read_encrypted()
  *
- * Input: A pointer to our io_helper object, a pointer to the buffer we want to fill, and the count of characters
- *	we should try to read.
+ * Input: A pointer to the buffer we want to fill, and the count of characters we should try to read.
+ *   We will make use of the global io struct.
  * Output: The count of characters succesfully read, or an error code. (man BIO_read for more information.)
  *
  * Purpose: Fill our buffer. This is the SSL encrypted case.
  *
  * Note: This function won't return until it has satisfied the request to read count characters, or encountered an error
- *	trying. It assumes the socket is ready for action (either blocking, or has just passed a select() call.) If it 
- *	cannot fulfill the requested character count initially, it will call select() itself in a loop until it can.
+ *   trying. It assumes the socket is ready for action (either blocking, or has just passed a select() call.) If it 
+ *   cannot fulfill the requested character count initially, it will call select() itself in a loop until it can.
  *
  **********************************************************************************************************************/
 int remote_read_encrypted(void *buff, size_t count){
 
 	int retval;
 	fd_set fd_select;
-	int ssl_error = SSL_ERROR_NONE;	
+	int ssl_error = SSL_ERROR_NONE;
 
 	int current_sig = 0;
 
@@ -257,22 +257,22 @@ int remote_read_encrypted(void *buff, size_t count){
  *
  * remote_write_encrypted()
  *
- * Input: A pointer to our io_helper object, a pointer to the buffer we want to empty, and the count of
- *	characters we should try to write.
+ * Input: A pointer to the buffer we want to empty, and the count of characters we should try to write.
+ *   We will make use of the global io struct.
  * Output: The count of characters succesfully written, or an error code. (man BIO_write for more information.)
  *
  * Purpose: Empty our buffer, but this is the simple plaintext wrapper case. Nothing fancy here.
  *
  * Note: This function won't return until it has satisfied the request to write count characters, or encountered an
- *	error trying. It assumes the socket is ready for action (either blocking, or has just passed a select() call.) If
- *	it cannot fulfill the requested character count initially, it will call select() itself in a loop until it can.
+ *   error trying. It assumes the socket is ready for action (either blocking, or has just passed a select() call.) If
+ *   it cannot fulfill the requested character count initially, it will call select() itself in a loop until it can.
  *
  **********************************************************************************************************************/
 int remote_write_encrypted(void *buff, size_t count){
 
 	int retval;
 	fd_set fd_select;
-	int ssl_error = SSL_ERROR_NONE;	
+	int ssl_error = SSL_ERROR_NONE;
 
 	int current_sig = 0;
 
@@ -361,7 +361,7 @@ int remote_write_encrypted(void *buff, size_t count){
  *
  * init_io_control()
  *
- * Input:  A pointer to our io_helper object and a pointer to our configuration_helper object.
+ * Input: None. We will use the global io and config structs.
  * Output: An int showing success (by returning the remote_fd) or failure (by returning -1).
  *
  * Purpose: To initialize the control's network io interface.
@@ -801,7 +801,7 @@ int init_io_control(){
  *
  * init_io_target()
  *
- * Input:  A pointer to our io_helper object and a pointer to our configuration_helper object.
+ * Input: None. We will use the global io and config structs.
  * Output: An int showing success (by returning the remote_fd) or failure (by returning -1).
  *
  * Purpose: To initialize a target's network io interface.

@@ -1,7 +1,7 @@
 
 /******************************************************************************
  * struct message_helper
- *	Assists in sending and receiving messages. 
+ *   Assists in sending and receiving messages. 
  ******************************************************************************/
 struct message_helper {
 	unsigned char data_type;
@@ -28,8 +28,8 @@ struct message_helper {
 
 /******************************************************************************
  * struct proxy_request_node
- *	Assists in tracking proxies that are requested on the command line.
- *	These may or may not become real proxies later on.
+ *   Assists in tracking proxies that are requested on the command line.
+ *   These may or may not become real proxies later on.
  ******************************************************************************/
 struct proxy_request_node {
 	char *request_string;
@@ -42,7 +42,7 @@ struct proxy_request_node {
 
 /******************************************************************************
  * struct config_helper
- *	Tracks the different configuration options that were set for this run.
+ *   Tracks the different configuration options that were set for this run.
  ******************************************************************************/
 struct config_helper {
 
@@ -84,7 +84,7 @@ struct config_helper {
 
 /******************************************************************************
  * struct proxy_node
- *	Tracks the actual proxy listeners.
+ *   Tracks the actual proxy listeners.
  ******************************************************************************/
 struct proxy_node {
 
@@ -93,8 +93,8 @@ struct proxy_node {
 	unsigned short proxy_type;
 
 	// Remembers the original malloc() address. Depending on the case, this 
-  // value will end up in one of the strings below. Adding this pointer will 
-	// simplify the free() call.
+	// value will end up in one of the strings below. Adding this pointer will 
+	// simplify the free() call later.
 	char *mem_ptr;
 
 	// The strings representing this proxy may be used later on for error reporting.
@@ -114,8 +114,8 @@ struct proxy_node {
 
 /******************************************************************************
  * struct connection_node
- *	Tracks established data connections. (Can be of any of the non-tty 
- *	varieties.)
+ *   Tracks established data connections. (Can be of any of the non-tty 
+ *   varieties.)
  ******************************************************************************/
 struct connection_node {
 
@@ -152,8 +152,8 @@ struct connection_node {
 
 /******************************************************************************
  * struct io_helper
- *	Tracks the state of IO in the application.
- *	There should only ever be one of these, and it is a global.
+ *   Tracks the state of IO in the application.
+ *   There should only ever be one of these, and it is a global.
  ******************************************************************************/
 struct io_helper {
 
@@ -185,8 +185,8 @@ struct io_helper {
 	int interactive;
 
 	// Save the original tty settings here for inspection during runtime and later restoration.
-  struct termios *saved_termios_attrs;
-  struct termios *revsh_termios_attrs;
+	struct termios *saved_termios_attrs;
+	struct termios *revsh_termios_attrs;
 
 	// Stores transient tty state info.
 	struct winsize *tty_winsize;

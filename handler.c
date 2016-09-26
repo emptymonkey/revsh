@@ -12,13 +12,6 @@
 
 #include "common.h"
 
-#ifdef LINENOISE
-extern const struct esc_shell_command null_sub_commands;
-extern const struct esc_shell_command device_sub_commands;
-extern const struct esc_shell_command file_sub_commands;
-extern const struct esc_shell_command proxy_sub_commands;
-extern const struct esc_shell_command menu;
-#endif
 
 /******************************************************************************
  *
@@ -37,6 +30,7 @@ extern const struct esc_shell_command menu;
 int handle_signal_sigwinch(){
 
 	int retval;
+
 
 	if((retval = ioctl(io->local_out_fd, TIOCGWINSZ, io->tty_winsize)) == -1){
 		report_error("handle_signal_sigwinch(): ioctl(%d, TIOCGWINSZ, %lx): %s", io->local_out_fd, (unsigned long) io->tty_winsize, strerror(errno));
@@ -116,6 +110,7 @@ int handle_local_read(){
 
 	int retval;
 
+
 	message->data_type = DT_TTY;
 
 	if((retval = read(io->local_in_fd, message->data, io->message_data_size)) == -1){
@@ -135,7 +130,7 @@ int handle_local_read(){
 
 		if(message->data_len){
 
-			if(!io->target){
+			if(!io->target && config->interactive){
 				if((retval = escape_check()) < 0){
 					if(retval == -1){
 						report_error("handle_local_read(): escape_check(): %s", strerror(errno));
@@ -230,6 +225,7 @@ int handle_message_dt_winresize(){
 
 	int retval;
 
+
 	if(message->data_len != sizeof(io->tty_winsize->ws_row) + sizeof(io->tty_winsize->ws_col)){
 		report_error("handle_message_dt_winresize(): DT_WINRESIZE termios: not enough data!");
 		return(-1);
@@ -252,15 +248,31 @@ int handle_message_dt_winresize(){
 }
 
 
-// XXX
+/******************************************************************************
+ *
+ * handle_message_dt_proxy_ht_destroy()
+ *
+ * Inputs: None, but we will leverage the global io struct.
+ * Outputs: 0 for success. -1 on error.
+ *
+ * Purpose: Kill off the proxy node. 
+ * 
+ * Note: This function seems to be vestigial. It is from the era when there 
+ *       was a functioning command subshell where you could dynamically 
+ *       create and destroy listeners. I'm leaving it in for now, because I'd
+ *       like to get that funtionality back, but through a different 
+ *       interface. Also note, that "-1 on error" above also seems to be a 
+ *       vestige. This function only looks to return 0, so should probably be
+ *       made to return void at some point.
+ *
+ ******************************************************************************/
 int handle_message_dt_proxy_ht_destroy(){
 
 	struct proxy_node *cur_proxy_node;
 	unsigned short header_errno;
 
-	//	fprintf(stderr, "\rDEBUG: handle_message_dt_proxy_ht_destroy()\n");
 
-	memcpy(&header_errno, message->data, sizeof(short));	
+	memcpy(&header_errno, message->data, sizeof(short));
 	header_errno = ntohs(header_errno);
 	if((cur_proxy_node = proxy_node_find(message->header_origin, message->header_id))){
 		if(verbose && header_errno){
@@ -273,12 +285,22 @@ int handle_message_dt_proxy_ht_destroy(){
 	return(0);
 }
 
-//XXX
+
+/******************************************************************************
+ *
+ * handle_message_dt_proxy_ht_create()
+ *
+ * Inputs: None, but we will leverage the global io struct.
+ * Outputs: 0 for success. -1 on error. -2 on non-fatal error.
+ *
+ * Purpose: Our partner node has requested that we setup a new proxy listener.
+ *          After setting it up, we will report back about it if need be.
+ *
+ ******************************************************************************/
 int handle_message_dt_proxy_ht_create(){
 
 	struct proxy_node *cur_proxy_node;
 
-	//	fprintf(stderr, "\rDEBUG: handle_message_dt_proxy_ht_create()\n");
 
 	if((cur_proxy_node = proxy_node_find(message->header_origin, message->header_id))){
 		proxy_node_delete(cur_proxy_node);
@@ -300,7 +322,19 @@ int handle_message_dt_proxy_ht_create(){
 }
 
 
-// XXX
+/******************************************************************************
+ *
+ * handle_message_dt_proxy_ht_report()
+ *
+ * Inputs: None, but we will leverage the global io struct.
+ * Outputs: 0 for success. -1 on error.
+ *
+ * Purpose: While connections have nodes on both ends, proxies only have an 
+ *          active node on one end. This makes reporting on current listeners
+ *          difficult. This function is called when the target is reporting 
+ *          back to the control node that it has a new listener up and running.
+ *
+ ******************************************************************************/
 int handle_message_dt_proxy_ht_report(){
 
 	struct proxy_node *cur_proxy_node;
@@ -341,9 +375,8 @@ int handle_message_dt_connection_ht_destroy(){
 	struct connection_node *cur_connection_node;
 	unsigned short header_errno;
 
-	//	fprintf(stderr, "\rDEBUG: handle_message_dt_connection_ht_destroy()\n");
 
-	memcpy(&header_errno, message->data, sizeof(short));	
+	memcpy(&header_errno, message->data, sizeof(short));
 	header_errno = ntohs(header_errno);
 	if((cur_connection_node = connection_node_find(message->header_origin, message->header_id))){
 		if(verbose && header_errno){
@@ -373,7 +406,6 @@ int handle_message_dt_connection_ht_create(){
 	int retval;
 	struct connection_node *cur_connection_node;
 
-	//	fprintf(stderr, "\rDEBUG: handle_message_dt_connection_ht_create()\n");
 
 	if((cur_connection_node = connection_node_find(message->header_origin, message->header_id))){
 		connection_node_delete(cur_connection_node);
@@ -477,7 +509,6 @@ int handle_message_dt_connection_ht_create_tun_tap(){
 
 	struct connection_node *cur_connection_node = NULL;
 
-	//	fprintf(stderr, "\rDEBUG: handle_message_dt_connection_ht_create_tun_tap()\n");
 
 	if(message->header_proxy_type == PROXY_TUN){
 		if((cur_connection_node = handle_tun_tap_init(IFF_TUN)) == NULL){
@@ -529,7 +560,6 @@ int handle_connection_activate(struct connection_node *cur_connection_node){
 	int optval;
 	socklen_t optlen;
 
-	//	fprintf(stderr, "\rDEBUG: handle_connection_activate()\n");
 
 	optlen = sizeof(optval);
 	if(getsockopt(cur_connection_node->fd, SOL_SOCKET, SO_ERROR, &optval, &optlen) == -1){
@@ -563,10 +593,21 @@ int handle_connection_activate(struct connection_node *cur_connection_node){
 }
 
 
+/******************************************************************************
+ *
+ * handle_message_dt_connection_ht_active_dormant()
+ *
+ * Inputs: None, but we will leverage the global io struct.
+ * Outputs: 0 for success. -1 on error.
+ *
+ * Purpose: Handle both cases for toggling a connection node between active
+ *          and dormant. Used in throttling the message bus for a connection
+ *          whose write fd seems to be blocking.
+ *
+ ******************************************************************************/
 int handle_message_dt_connection_ht_active_dormant(){
 	struct connection_node *cur_connection_node;
 
-	//	fprintf(stderr, "\rDEBUG: handle_message_dt_connection_ht_active_dormant()\n");
 
 	if((cur_connection_node = connection_node_find(message->header_origin, message->header_id)) == NULL){
 
@@ -594,6 +635,7 @@ int handle_message_dt_connection_ht_active_dormant(){
 	return(-2);
 }
 
+
 /******************************************************************************
  *
  * handle_message_dt_connection()
@@ -612,7 +654,6 @@ int handle_message_dt_connection_ht_data(){
 	struct connection_node *cur_connection_node;
 	int count, errno;
 
-	//	fprintf(stderr, "\rDEBUG: handle_message_dt_connection()\n");
 
 	if((cur_connection_node = connection_node_find(message->header_origin, message->header_id)) == NULL){
 
@@ -703,7 +744,6 @@ int handle_proxy_read(struct proxy_node *cur_proxy_node){
 	int count;
 	struct connection_node *cur_connection_node;
 
-	//	fprintf(stderr, "\rDEBUG: handle_proxy_read()\n");
 
 	/* Create a new connection object. */
 	if((cur_connection_node = connection_node_create()) == NULL){
@@ -775,8 +815,6 @@ int handle_connection_write(struct connection_node *cur_connection_node){
 	int retval;
 	struct message_helper *tmp_message;
 
-	//	fprintf(stderr, "\rDEBUG: handle_connection_write()\n");
-
 
 	while(cur_connection_node->write_head){
 
@@ -841,7 +879,6 @@ int handle_connection_read(struct connection_node *cur_connection_node){
 
 	int retval;
 
-	//	fprintf(stderr, "\rDEBUG: handle_connection_read()\n");
 
 	message->data_type = DT_CONNECTION;
 	message->header_type = DT_CONNECTION_HT_DATA;
@@ -896,8 +933,6 @@ int handle_connection_socks_init(struct connection_node *cur_connection_node){
 	char *reply_buff = NULL;
 	int reply_buff_len = 0;
 	int new_state;
-
-	//	fprintf(stderr, "\rDEBUG: handle_connection_socks_init()\n");
 
 
 	if((retval = read(cur_connection_node->fd, cur_connection_node->buffer_tail, cur_connection_node->buffer_size - (cur_connection_node->buffer_tail - cur_connection_node->buffer_head) - 1)) < 1){
@@ -1022,11 +1057,24 @@ int handle_connection_socks_init(struct connection_node *cur_connection_node){
 	return(0);
 }
 
-// XXX
+
+/******************************************************************************
+ *
+ * handle_send_dt_proxy_ht_destroy()
+ *
+ * Inputs: The identification of the proxy to destroy and an error number if 
+ *         there is one.
+ * Outputs: 0 for success. -1 on error.
+ *
+ * Purpose: As mentioned above in the matching message handler, this funtion
+ *          is a vestige in its current state. It will be used again once 
+ *          the command subshell UI problem is solved, so leaving it in.
+ *
+ ******************************************************************************/
 int handle_send_dt_proxy_ht_destroy(unsigned short origin, unsigned short id, unsigned short header_errno){
+
 	int retval;
 
-	//	fprintf(stderr, "\rDEBUG: handle_send_dt_proxy_ht_destroy()\n");
 
 	message->data_type = DT_PROXY;
 	message->header_type = DT_PROXY_HT_DESTROY;
@@ -1049,12 +1097,22 @@ int handle_send_dt_proxy_ht_destroy(unsigned short origin, unsigned short id, un
 	return(0);
 }
 
-// XXX
+
+/******************************************************************************
+ *
+ * handle_send_dt_proxy_ht_create()
+ *
+ * Inputs: The string describing the proxy listener, and a proxy type so we 
+ *         know how to parse the string.
+ * Outputs: 0 for success. -1 on error, -2 on non-fatal error.
+ *
+ * Purpose: Request a new proxy listener on the remote node.
+ *
+ ******************************************************************************/
 int handle_send_dt_proxy_ht_create(char *proxy_string, int proxy_type){
 
 	int count, retval;
 
-	//	fprintf(stderr, "\rDEBUG: handle_send_dt_proxy_ht_create()\n");
 
 	message->data_type = DT_PROXY;
 	message->header_type = DT_PROXY_HT_CREATE;
@@ -1080,9 +1138,25 @@ int handle_send_dt_proxy_ht_create(char *proxy_string, int proxy_type){
 	return(0);
 }
 
-// XXX
+
+/******************************************************************************
+ *
+ * handle_send_dt_proxy_ht_report()
+ *
+ * Inputs: A pointer to the current proxy node being reported on.
+ * Outputs: 0 for success. -1 on error.
+ *
+ * Purpose: While connections have nodes on both ends, proxies only have an 
+ *          active node on one end. This makes reporting on current listeners
+ *          difficult. This function is called when the target node sets up a
+ *          new listener, allowint to report the existence of this listener 
+ *          back to the control node for proper reporting.
+ *
+ ******************************************************************************/
 int handle_send_dt_proxy_ht_report(struct proxy_node *cur_proxy_node){
+
 	int retval;
+
 
 	message->data_type = DT_PROXY;
 	message->header_type = DT_PROXY_HT_REPORT;
@@ -1120,7 +1194,6 @@ int handle_send_dt_connection_ht_destroy(unsigned short origin, unsigned short i
 
 	int retval;
 
-	//	fprintf(stderr, "\rDEBUG: handle_send_dt_connection_ht_destroy()\n");
 
 	message->data_type = DT_CONNECTION;
 	message->header_type = DT_CONNECTION_HT_DESTROY;
@@ -1160,7 +1233,6 @@ int handle_send_dt_connection_ht_create(struct connection_node *cur_connection_n
 
 	int count, retval;
 
-	//	fprintf(stderr, "\rDEBUG: handle_send_dt_connection_ht_create()\n");
 
 	message->data_type = DT_CONNECTION;
 	message->header_type = DT_CONNECTION_HT_CREATE;
@@ -1237,8 +1309,6 @@ struct connection_node *handle_tun_tap_init(int ifr_flag){
 	struct connection_node *cur_connection_node;
 
 	int tmp_sock = 0;
-
-	//	fprintf(stderr, "\rDEBUG: handle_tun_tap_init()\n");
 
 
 	if(ifr_flag == IFF_TUN){

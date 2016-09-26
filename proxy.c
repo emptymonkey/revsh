@@ -3,14 +3,14 @@
 
 /******************************************************************************
  *
- *	proxy_node_new()
+ * proxy_node_new()
  *
- *	Inputs: The proxy string comming from the command line request.
- *	        The type of proxy we are setting up.
+ * Inputs: The proxy string comming from the command line request.
+ *         The type of proxy we are setting up.
  *
- *	Outputs: A pointer to a new proxy_node.
+ * Outputs: A pointer to a new proxy_node.
  *
- *	Purpose: Initialize a new proxy_node.
+ * Purpose: Initialize a new proxy_node.
  *
  ******************************************************************************/
 struct proxy_node *proxy_node_new(char *proxy_string, int proxy_type){
@@ -45,7 +45,7 @@ struct proxy_node *proxy_node_new(char *proxy_string, int proxy_type){
 		report_error("proxy_node_new(): proxy_node_create(): %s", strerror(errno));
 		return(NULL);
 	}
-	new_node->proxy_type = proxy_type;	
+	new_node->proxy_type = proxy_type;
 
 	// free() called in proxy_node_delete().
 	if((new_node->orig_request = (char *) calloc(strlen(proxy_string) + 1, sizeof(char))) == NULL){
@@ -112,7 +112,7 @@ struct proxy_node *proxy_node_new(char *proxy_string, int proxy_type){
 	return(new_node);
 
 CLEANUP:
-	free(new_node);	
+	free(new_node);
 	free(first);
 	return(NULL);
 }
@@ -123,11 +123,11 @@ CLEANUP:
  *
  * proxy_listen()
  *
- *	Inputs: A pointer to a proxy_node that we want to activate.
+ * Inputs: A pointer to a proxy_node that we want to activate.
  *
- *	Outputs: 0 on success, -1 otherwise.
+ * Outputs: 0 on success, -1 otherwise.
  *
- *	Purpose: Setup a new proxy listener.
+ * Purpose: Setup a new proxy listener.
  *
  ******************************************************************************/
 int proxy_listen(struct proxy_node *cur_proxy_node){
@@ -171,7 +171,7 @@ int proxy_listen(struct proxy_node *cur_proxy_node){
 	freeaddrinfo(ai); 
 
 	if(listen(listener, 10) == -1) {
-		report_error("proxy_listen(): listen(%d, 10): %s", listener, strerror(errno));					
+		report_error("proxy_listen(): listen(%d, 10): %s", listener, strerror(errno));
 		return(-1);
 	}
 
@@ -184,13 +184,13 @@ int proxy_listen(struct proxy_node *cur_proxy_node){
 
 /******************************************************************************
  *
- *	proxy_connect()
+ * proxy_connect()
  *
- *	Inputs: The string representing where to connect to.
+ * Inputs: The string representing where to connect to.
  *
- *	Outputs: 0 for success. -1 for fatal errors. -2 for non-fatal errors.
+ * Outputs: 0 for success. -1 for fatal errors. -2 for non-fatal errors.
  *
- *	Purpose: Complete the outbound connection of a proxy request.
+ * Purpose: Complete the outbound connection of a proxy request.
  *
  ******************************************************************************/
 int proxy_connect(char *rhost_rport){
@@ -271,13 +271,13 @@ int proxy_connect(char *rhost_rport){
 
 /******************************************************************************
  *
- *	proxy_node_create()
+ * proxy_node_create()
  *
- *	Inputs: None, though we will heavily utilize the global io struct.
+ * Inputs: None, though we will heavily utilize the global io struct.
  *
- *	Outputs: A pointer to the new proxy_node.
+ * Outputs: A pointer to the new proxy_node.
  *
- *	Purpose: Initialize a new proxy node, and put it into it's place in the linked list.
+ * Purpose: Initialize a new proxy node, and put it into it's place in the linked list.
  *
  ******************************************************************************/
 struct proxy_node *proxy_node_create(){
@@ -307,13 +307,13 @@ struct proxy_node *proxy_node_create(){
 
 /******************************************************************************
  *
- *	proxy_node_delete()
+ * proxy_node_delete()
  *
- *	Inputs: A pointer to the proxy_node we wish to destroy.
+ * Inputs: A pointer to the proxy_node we wish to destroy.
  *
- *	Outputs: None.
+ * Outputs: None.
  *
- *	Purpose: Destroy a proxy node and remove it froms the linked list.
+ * Purpose: Destroy a proxy node and remove it froms the linked list.
  *
  ******************************************************************************/
 void proxy_node_delete(struct proxy_node *cur_proxy_node){
@@ -358,13 +358,13 @@ void proxy_node_delete(struct proxy_node *cur_proxy_node){
 
 /******************************************************************************
  *
- *	proxy_node_find()
+ * proxy_node_find()
  *
- *	Inputs: The tuple of (origin, id) that represents the unique id of a proxy.
+ * Inputs: The tuple of (origin, id) that represents the unique id of a proxy.
  *
- *	Outputs: The pointer to the matching proxy_node.
+ * Outputs: The pointer to the matching proxy_node.
  *
- *	Purpose: Find the matching proxy_node.
+ * Purpose: Find the matching proxy_node.
  *
  ******************************************************************************/
 struct proxy_node *proxy_node_find(unsigned short origin, unsigned short id){
@@ -383,13 +383,13 @@ struct proxy_node *proxy_node_find(unsigned short origin, unsigned short id){
 
 /******************************************************************************
  *
- *	connection_node_create()
+ * connection_node_create()
  *
- *	Inputs: None, though we will heavily utilize the global io struct.
+ * Inputs: None, though we will heavily utilize the global io struct.
  *
- *	Outputs: A pointer to the new connection_node.
+ * Outputs: A pointer to the new connection_node.
  *
- *	Purpose: Initialize a new connection node, and put it into it's place in the linked list.
+ * Purpose: Initialize a new connection node, and put it into it's place in the linked list.
  *
  ******************************************************************************/
 struct connection_node *connection_node_create(){
@@ -419,13 +419,13 @@ struct connection_node *connection_node_create(){
 
 /******************************************************************************
  *
- *	connection_node_delete()
+ * connection_node_delete()
  *
- *	Inputs: A pointer to the connection_node we wish to destroy.
+ * Inputs: A pointer to the connection_node we wish to destroy.
  *
- *	Outputs: None.
+ * Outputs: None.
  *
- *	Purpose: Destroy a connection node and remove it froms the linked list.
+ * Purpose: Destroy a connection node and remove it froms the linked list.
  *
  ******************************************************************************/
 void connection_node_delete(struct connection_node *cur_connection_node){
@@ -462,13 +462,13 @@ void connection_node_delete(struct connection_node *cur_connection_node){
 
 /******************************************************************************
  *
- *	connection_node_find()
+ * connection_node_find()
  *
- *	Inputs: The tuple of (origin, id) that represents the unique id of a connection.
+ * Inputs: The tuple of (origin, id) that represents the unique id of a connection.
  *
- *	Outputs: The pointer to the matching connection_node.
+ * Outputs: The pointer to the matching connection_node.
  *
- *	Purpose: Find the matching connection_node.
+ * Purpose: Find the matching connection_node.
  *
  ******************************************************************************/
 struct connection_node *connection_node_find(unsigned short origin, unsigned short id){
@@ -487,14 +487,14 @@ struct connection_node *connection_node_find(unsigned short origin, unsigned sho
 
 /******************************************************************************
  *
- *	connection_node_queue()
+ * connection_node_queue()
  *
- *	Inputs: The pointer to the connection node that needs to be requeued.
+ * Inputs: The pointer to the connection node that needs to be requeued.
  *
- *	Outputs: None.
+ * Outputs: None.
  *
- *	Purpose: Simplistic round-robin scheduling for the connections.
- *	         Takes a node and moves it to the end of the list.
+ * Purpose: Simplistic round-robin scheduling for the connections.
+ *          Takes a node and moves it to the end of the list.
  *
  ******************************************************************************/
 void connection_node_queue(struct connection_node *cur_connection_node){
@@ -525,15 +525,15 @@ void connection_node_queue(struct connection_node *cur_connection_node){
 
 /******************************************************************************
  *
- *	parse_socks_request()
+ * parse_socks_request()
  *
- *	Inputs: The pointer to the connection node that represents a socks proxy
- *	        connection in its opening phase.
+ * Inputs: The pointer to the connection node that represents a socks proxy
+ *         connection in its opening phase.
  *
- *	Outputs: The current state of the socks request. -1 on error.
+ * Outputs: The current state of the socks request. -1 on error.
  *
- *	Purpose: Socks requests involve a handshake. This is the function that 
- *	         parses that handshake.
+ * Purpose: Socks requests involve a handshake. This is the function that 
+ *          parses that handshake.
  *
  ******************************************************************************/
 int parse_socks_request(struct connection_node *cur_connection_node){
@@ -563,13 +563,13 @@ int parse_socks_request(struct connection_node *cur_connection_node){
 	if(head[index] == 4){
 
 		/*
-			 +----+----+----+----+----+----+----+----+----+----+....+----+
-			 | VN | CD | DSTPORT |      DSTIP        | USERID       |NULL|
-			 +----+----+----+----+----+----+----+----+----+----+....+----+
-			 1    1    2         4                   variable       1
-
-			 1 + 1 + 2 + 4 + 1 
-			 = 9  Minimum number of bytes to ensure we have at least 1 char of USERID.
+		 * +----+----+----+----+----+----+----+----+----+----+....+----+
+		 * | VN | CD | DSTPORT |      DSTIP        | USERID       |NULL|
+		 * +----+----+----+----+----+----+----+----+----+----+....+----+
+		 *  1    1    2         4                   variable       1
+		 *
+		 *  1 + 1 + 2 + 4 + 1 
+		 *  = 9  Minimum number of bytes to ensure we have at least 1 char of USERID.
 		 */
 
 		if(size < 9){
@@ -649,7 +649,7 @@ int parse_socks_request(struct connection_node *cur_connection_node){
 	}else if(head[index] == 5){
 
 		if(cur_connection_node->state == CON_SOCKS_INIT){
-			index += 1;	
+			index += 1;
 			if(!(index < size)){
 				return(CON_SOCKS_INIT);
 			}
@@ -681,15 +681,15 @@ int parse_socks_request(struct connection_node *cur_connection_node){
 		}else if(cur_connection_node->state == CON_SOCKS_V5_AUTH){
 
 			/*
-				 +----+-----+-------+------+----------+----------+
-				 |VER | CMD |  RSV  | ATYP | DST.ADDR | DST.PORT |
-				 +----+-----+-------+------+----------+----------+
-				 | 1  |  1  | X'00' |  1   | Variable |    2     |
-				 +----+-----+-------+------+----------+----------+
-				 (First byte of "Variable" is the strlen of the string that follows in the DOMAINNAME case. No '\0' terminator.)
-
-				 1 + 1 + 1 + 1 + 1 + V + 2
-				 = 7 + V...  So 7 is the minimum number of bytes before we can do anything interesting.
+			 * +----+-----+-------+------+----------+----------+
+			 * |VER | CMD |  RSV  | ATYP | DST.ADDR | DST.PORT |
+			 * +----+-----+-------+------+----------+----------+
+			 * | 1  |  1  | X'00' |  1   | Variable |    2     |
+			 * +----+-----+-------+------+----------+----------+
+			 *  (First byte of "Variable" is the strlen of the string that follows in the DOMAINNAME case. No '\0' terminator.)
+			 *
+			 *  1 + 1 + 1 + 1 + 1 + V + 2
+			 *  = 7 + V...  So 7 is the minimum number of bytes before we can do anything interesting.
 			 */
 
 			if(size < 7){
@@ -769,20 +769,20 @@ int parse_socks_request(struct connection_node *cur_connection_node){
 
 /******************************************************************************
  *
- *	addr_to_string()
+ * addr_to_string()
  *
- *	Inputs: The type of the socks request.
- *	        The address or domain name of the socks request.
- *	        The port of the socks request.
- *	        The length of the domain name in the above address.
+ * Inputs: The type of the socks request.
+ *         The address or domain name of the socks request.
+ *         The port of the socks request.
+ *         The length of the domain name in the above address.
  *
- *	Outputs: A pointer to a string representation of the address.
+ * Outputs: A pointer to a string representation of the address.
  *
- *	Purpose: Convert the address:port information into a string.
- *	        
- * 	Note: If atype is 0x03, then len is the length of the addr string.
- *	      If atype isn't 0x03, len is ignored.
- *	        
+ * Purpose: Convert the address:port information into a string.
+ *         
+ * Note: If atype is 0x03, then len is the length of the addr string.
+ *       If atype isn't 0x03, len is ignored.
+ *         
  ******************************************************************************/
 char *addr_to_string(int atype, char *addr, char *port, int len){
 
@@ -826,5 +826,4 @@ char *addr_to_string(int atype, char *addr, char *port, int len){
 
 	return(ptr);
 }
-
 

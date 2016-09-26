@@ -7,7 +7,7 @@
  * escape sequence processing strategy:
  *
  * escape_check() drives the functions in this file.
- * We will take a consume + shift approach to handling escape sequence processing.
+ * We will consume + shift input to handle escape sequence processing.
  *
  * The process will look something like:
  *
@@ -34,26 +34,29 @@
 
 /******************************************************************************
  *
- *  ()
+ *  escape_check()
  *
- *  Inputs: 
+ *  Inputs: None. We will use the global io struct. Of particular interest to
+ *          us will be the message->data. Data there will processes with the
+ *          consume + shift methodology.
  *
- *  Outputs: 
+ *  Outputs: 0 on success. -1 on failure.
  *
- *  Purpose: 
+ *  Purpose: This function drives the escape sequence state machine.
  *
  ******************************************************************************/
-
 int escape_check(){
 
 	int i, retval;
 	char esc_char;
 
-
+	// Step through the data buffer looking for characters that change our state.
 	for(i = 0; i < message->data_len; i++){
 
+		// Base case, no sequence detected.
 		if(io->escape_state == ESCAPE_NONE){
 
+			// Find a carriage return? Next state please!
 			if(message->data[i] == '\r'){
 				if(send_message(i + 1) == -1){
 					report_error("escape_check(): send_message(%d): %s", i + 1, strerror(errno));
@@ -66,6 +69,7 @@ int escape_check(){
 
 		}else if(io->escape_state == ESCAPE_CR){
 
+			// Oh! A tilde!! Next state please! (And let's count how many from now on.)
 			if(message->data[i] == '~'){
 				io->escape_state = ESCAPE_TILDE;
 				io->escape_depth++;
@@ -74,7 +78,7 @@ int escape_check(){
 				}
 			}else{
 
-				// Check case when enter is hit multiple times.
+				// Handle case when enter is hit multiple times.
 				if(message->data[i] == '\r'){
 					if(send_message(i + 1) == -1){
 						report_error("escape_check(): send_message(%d): %s", i + 1, strerror(errno));
@@ -91,6 +95,7 @@ int escape_check(){
 
 		}else if(io->escape_state == ESCAPE_TILDE){
 
+			// Time to count tildes.
 			if(message->data[i] == '~'){
 				io->escape_depth++;
 				if(i + 1 == message->data_len){
@@ -98,8 +103,11 @@ int escape_check(){
 				}
 
 			}else{
+
+				// If the next character is valid, then process, otherwise reset and move on.
 				if(is_valid_escape(message->data[i])){
 
+					// Make sure this is a sequence we should handle, otherwise pass it on down the line.
 					if(io->escape_depth == 1){
 
 						esc_char = message->data[i];
@@ -114,6 +122,7 @@ int escape_check(){
 						io->escape_state = ESCAPE_NONE;
 						io->escape_depth = 0;
 						return(0); 
+
 					}else{
 
 						message_shift(i);
@@ -129,6 +138,7 @@ int escape_check(){
 					}
 
 				}else{
+
 					message_shift(i);
 					if(send_consumed() == -1){
 						report_error("escape_check(): send_consumed(): %s", strerror(errno));
@@ -146,8 +156,19 @@ int escape_check(){
 }
 
 
-
-
+/******************************************************************************
+ *
+ *  send_consumed()
+ *
+ *  Inputs: None. We will leverage the global io struct.
+ *
+ *  Outputs: 0 on success. -1 on error.
+ *
+ *  Purpose: When we see a valid sequence, we "consume" it. If it turns out 
+ *           not to have been a valid sequence, then we need to send those 
+ *           consumed bits on down the line.
+ *
+ ******************************************************************************/
 int send_consumed(){
 
 	unsigned int i;
@@ -162,7 +183,7 @@ int send_consumed(){
 
 	if(io->escape_depth > io->message_data_size){
 		// Did you really just try sending more than 4k of tildes?!
-		// Truncate. I don't care that you don't get them all. You're just being silly anyway. 
+		// Truncate. Not sure I care that you don't get them all.
 		io->escape_depth = io->message_data_size;
 	}
 
@@ -205,6 +226,20 @@ CLEANUP:
 }
 
 
+/******************************************************************************
+ *
+ *  send_message()
+ *
+ *  Inputs: The number of characters sitting in the message data buffer that 
+ *          you want to send right now.
+ *
+ *  Outputs: 0 on success. -1 on failure.
+ *
+ *  Purpose: As part of the consume + shift methodology, here we've decided a
+ *           subset of the data in the buffer is normal data. We send it here
+ *           but leave the remaining data to be checked for state changes.
+ *
+ ******************************************************************************/
 int send_message(int count){
 
 	int backup_data_len = message->data_len;
@@ -225,6 +260,19 @@ int send_message(int count){
 }
 
 
+/******************************************************************************
+ *
+ * message_shift()
+ *
+ *  Inputs: The number of bytes you want overwritten.
+ *
+ *  Outputs: None.
+ *
+ *  Purpose: After previous data in the buffer has been dealt with (either 
+ *           sent or consumed) then shift the remaining data to the front to 
+ *           be dealt with in the next call to escape_check().
+ *
+ ******************************************************************************/
 void message_shift(int count){
 	int i;
 
@@ -235,6 +283,18 @@ void message_shift(int count){
 }
 
 
+/******************************************************************************
+ *
+ * is_valid_escape()
+ *
+ *  Inputs: The command character we've found.
+ *
+ *  Outputs: 1 for "yes". 0 for "no". No error conditions returned.
+ *
+ *  Purpose: Check that the character found represents an escape sequence we
+ 8           support.
+ *
+ ******************************************************************************/
 int is_valid_escape(char c){
 
 	char valid_escapes[] = VALID_ESCAPE_ACTIONS;
@@ -252,10 +312,22 @@ int is_valid_escape(char c){
 }
 
 
+/******************************************************************************
+ *
+ * process_escape()
+ *
+ *  Inputs: The command character found.
+ *
+ *  Outputs: 0 on success. -1 on error. -2 on fatal success.
+ *
+ *  Purpose: 
+ *
+ ******************************************************************************/
 int process_escape(char c){
 
 	switch(c){
 
+		// We handle the ~. command as a fatal success. Technically, it isn't an error.
 		case '.':
 			return(-2);
 
@@ -275,6 +347,20 @@ int process_escape(char c){
 	return(0);
 }
 
+
+/******************************************************************************
+ *
+ * list_all()
+ *
+ *  Inputs: None. We will reference the global io struct.
+ *
+ *  Outputs: None.
+ *
+ *  Purpose: List all the active connections / listeners. Originally, these
+ *           were broken out into separate functions, but pulled together as
+ *           they are only ever called together.
+ *
+ ******************************************************************************/
 void list_all(){
 
   struct proxy_node *cur_proxy_node;
@@ -301,7 +387,6 @@ void list_all(){
 
 	printf("\r\n");
 
-
 	printf("\r################################################################################\n");
 	printf("\r# Active connections:\n");
 	printf("\r################################################################################\n");
@@ -321,10 +406,21 @@ void list_all(){
 	}
 
 	printf("\r\n");
-
 }
 
 
+/******************************************************************************
+ *
+ * print_valid_escapes()
+ *
+ *  Inputs: None.
+ *
+ *  Outputs: None.
+ *
+ *  Purpose: Inform the operator of the escape sequence commands supported in
+ *           this build.
+ *
+ ******************************************************************************/
 void print_valid_escapes(){
 
 	printf("\n\n");

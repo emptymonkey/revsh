@@ -4,10 +4,12 @@ the coder to drive the machine from moment to moment. However, I think that
 reading the code is a horrible way to understand the strategy the coder is
 taking to solve the problem overall. This document is therefore intended as
 an overview of the revsh codebase from a high level, showing how all of the
-different files and functions fit together. Ultimately, humans are prone to
-error, human language is imprecise, and sometimes you forget to update the 
-docs. As such, the code itself is ultimately authoritative, though I do hope
-this document helps you understand my intent and methods better.
+different files and functions fit together.
+
+Ultimately though, humans are unfortunately prone to error, human language
+is imprecise, and sometimes you just forget to update the docs. As such,
+the code itself is ultimately authoritative. I do hope this document helps
+you though to a better understanding of my intent and methods.
 
 tactics != strategy
 
@@ -40,7 +42,10 @@ Some design decisions should be explained:
 	  machines. However, the version differences are still a pain to deal with
 	  so we end up always building statically. I may try to switch to LibreSSL
 	  at some point. I don't rule out writing my own crypto either (though I'd
-	  prefer not to.)
+	  prefer not to.) Also, Anonymous Diffie-Hellman is useful for us here but
+	  out of favor generally. As such, OpenSSL is one of the only libraries to
+	  support it.
+
 
 
 ################################################################################
@@ -54,7 +59,9 @@ Some design decisions should be explained:
 		--- Perform basic initialization.
 		--- Calls the appropriate conductor, either do_control() or do_target() as
 		    appropriate.
-
+	-- clean_io() tries to do a proper cleanup of the io struct so we can do 
+	   another loop in keepalive mode. There is a better way to do this, but this
+	   is how legacy happens. I'll clean it up someday, but for now it works.
 
 # Conductors
 
@@ -85,7 +92,7 @@ Some design decisions should be explained:
 - broker.c
 	-- broker() runs the show.
 	-- Uses message_pull() and message_push() to read and write data.
-	-- Reads data from either the local or remote file descriptor, then writes it
+	-- Reads data from either the local or remote file descriptors, then writes it
 	   down the other.
 	-- Local data falls into three categories:
 		--- Data to/from the local stdin connection (tty / shell).
@@ -107,26 +114,7 @@ Some design decisions should be explained:
 		--- E.g. handle_message_dt_proxy_ht_create() will handle data:
 			---- Coming from the message bus.
 			---- Requesting the creation of a corresponding proxy node.
-	-- Full list of handler functions are:
-		--- handle_signal_sigwinch()
-		--- handle_local_write()
-		--- handle_local_read()
-		--- handle_message_dt_tty()
-		--- handle_message_dt_winresize()
-		--- handle_message_dt_proxy_ht_destroy()
-		--- handle_message_dt_proxy_ht_create()
-		--- handle_message_dt_proxy_ht_create_tun_tap()
-		--- handle_message_dt_proxy_ht_response()
-		--- handle_message_dt_connection()
-		--- handle_connection_activate()
-		--- handle_proxy_read()
-		--- handle_connection_write()
-		--- handle_connection_read()
-		--- handle_connection_socks_init()
-		--- handle_send_dt_proxy_ht_destroy()
-		--- handle_send_dt_proxy_ht_create()
-		--- handle_send_dt_nop()
-		--- handle_tun_tap_init()
+	-- For the full list of handler functions, see the common.h header file.
 
 
 # Messaging Layer
@@ -198,44 +186,10 @@ Note: the remote_read_*() and remote_write_*() functions are called through
 		    tty. It is semi-recursive in order to handle potential escape sequences
 		    surrounded by normal non-escape related input. It handles a chunk of
 		    data appropriately, regardless of message or escape data, then shifts
-		    the remaining message buffer, then calling itself to handle to
+		    the remaining message buffer, then calls itself to handle to
 		    remaining message data.
-	-- send_consumed()
-		--- When an escape sequence is processed, the individual characters are
-		    "consumed" (recorded in the state machine, but overwritten and ignored).
-		    If we then discover the sequence being processed isn't a valid escape
-		    sequence, then we must send the consumed characters as a message for
-		    processing. This is the function that handles that case. When it's
-		    time to handle the multiple '~' character case, we just decrement
-		    the tilde count by one, and send_consumed() to do the right thing.
-		    The command char gets shifted over to the beginning of the message
-		    and is handled when it all falls through to the normal data case.
-	-- message_send()
-		--- This does a normal message_push, but only sends the first subset of
-		    of the message, up to a spot that looks like the start of an escape
-		    sequence.
-	-- message_shift()
-		--- This function just shifts the array data in message over towards the
-		    beginning of the array. This is good for consuming escape characters
-		    seen, escape messages already processed, or non-escape characters 
-		    that we have already processed with message_send(). This ensures that
-		    when we call escape_check() recursively, it's always able to start
-		    from the beginning of the message.
-	-- is_valid_escape()
-		--- Checks if the character handed to represents a valid escape character,
-		    not including \r or ~. E.g. "\r~." would be processed by asking if
-		    '.' is_valid_escape(), which of course it is.
-	-- process_escape()
-		--- If the command is_valid_escape(), then next we process_escape(). This
-		    is just a wrapper to call the correct command function associated with
-		    that escape character.
-	-- list_valid_escapes()
-		-- The command character '?' results in printing the usage info for the
-		   valid escape commands / characters. This function processes that 
-		   command.
-	-- list_connections()
-		-- The command character '#' results in printing the connection info for
-		   the current active connections. This function processes that command.
+	-- The remaining functions either assist in the consume -> shift -> recurse
+	   model or handle the payload of a valid sequence command. 
 
 Note: I have kept the supported escape sequences to be a strict subset of the
       ssh escape sequences. These should, in theory, always interact well 
@@ -265,7 +219,7 @@ Note: I have kept the supported escape sequences to be a strict subset of the
 	   pass through. As it grew, it became much more complex and became a giant
 	   state machine. This state is kept inside the single io_helper struct and
 	   is global. I really don't like globals, but this was a case where it made
-	   sense. As an IO application, all of the code needs to know the state of
+	   sense. As an I/O application, all of the code needs to know the state of
 	   the machine at any given moment. Also, making this global greatly cleaned
 	   up the readability of the code.
 
@@ -279,5 +233,6 @@ Note: I have kept the supported escape sequences to be a strict subset of the
 	   source code representations.
 		--- This is useful for including the keypair data in the revsh source code,
 		    and baking the crypto into the binary. (This is a bad tactic for
-		    enterprise software. This is a very useful tactic for a "hostile" binary.)
+		    enterprise software. This is a very useful tactic for a "hostile"
+		    binary.)
 

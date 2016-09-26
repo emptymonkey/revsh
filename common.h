@@ -1,13 +1,17 @@
 
+/*
+ * Modern Linux works with all features.
+ * Modern FreeBSD works with all features except tun/tap support.
+ * Older versions *should* work fine, but OpenSSL versioning becomes a pain.
+ * Ancient versions probably work, but only with the compatibility build.
+ *
+ */
 
 #ifndef FREEBSD
 # define _POSIX_C_SOURCE 200112L
 # define _XOPEN_SOURCE  1
 #endif 
 
-// GENERIC_BUILD will set the binary to build with opptions geared toward a non-custom build. 
-// This option exists to ease building a community binary for inclusion in a generic toolkit / distribution.
-//#define GENERIC_BUILD
 
 /******************************************************************************
  * system headers
@@ -41,7 +45,7 @@
 #include <openssl/ssl.h>
 #else
 #include <netdb.h>
-#endif /* OPENSSL */
+#endif
 
 #include <sys/ioctl.h>
 #include <sys/select.h>
@@ -61,8 +65,9 @@
 
 # include <netinet/in.h>
 
-#else // Linux
+#else
 
+// Linux
 # include <linux/if.h>
 # include <linux/if_tun.h>
 
@@ -72,6 +77,9 @@
 /******************************************************************************
  * revsh headers
  ******************************************************************************/
+
+// This started as a much smaller project. I should go back through at some
+// point and break out this common.h header into a bunch of smaller .h files.
 
 #include "helper_objects.h"
 #include "config.h"
@@ -101,7 +109,7 @@
 #define CON_ACTIVE 3
 #define CON_DORMANT 4
 
-/* Reply strings for socks requests are static in the modern era. */
+/* Apparently reply strings for socks requests are static in the modern era. */
 #define SOCKS_V4_REPLY "\x00\x5a\x00\x00\x00\x00\x00\x00"
 #define SOCKS_V4_REPLY_LEN 8
 #define SOCKS_V5_AUTH_REPLY "\x05\x00"
@@ -111,19 +119,21 @@
 
 /* Maximum possible size of a socks request. */
 /*
-	 Max size cases:
-	 Socks 4: 9 byte header. (Our implementation ignores USERID.)  =  9
-	 Socks 4a: 9 byte header + domain name (255 max) + null byte  =  265
-	 Socks 5: 2 bytes for auth header + 255 max auth types + 6 byte header + domain name size byte + domain name (255 max)  =  519
-
-   In socks 5, the domain name is not null-terminated. Adding one to ensure we will always have a null terminating byte.
+ * Socks 5: 2 bytes for auth header + 255 max auth types + 6 byte header
+ *          + domain name size byte + domain name (255 max)  =  519
+ * In socks 5, the domain name is not null-terminated. Adding one to ensure
+ *  we will always have a null terminating byte.
  */
-#define SOCKS_REQ_MAX	520
+#define SOCKS_REQ_MAX 520
 
-/* The max number of messages we will queue for delivery before requesting the remote client to throttle the connection. */
-#define MESSAGE_DEPTH_MAX	64
+// The max number of messages we will queue for delivery before requesting the
+// remote client to throttle the connection.
+// TO-DO: Test this at different values to find an optimal value.
+#define MESSAGE_DEPTH_MAX 64
 
 /* States possible in the escape sequence processing state machine. */
+// Once a valid sequence is found, it is processed and the state machine
+// immediately reset to ESCAPE_NONE. No need for an ESCAPE_FOUND state.
 #define ESCAPE_NONE 0
 #define ESCAPE_CR 1
 #define ESCAPE_TILDE 2
@@ -133,25 +143,26 @@
  * global variables
  ******************************************************************************/
 
-/* We will set this up ourselves for portability. */
+// Started out using the GNU_SOURCE. Abandoned that for portability. Kept this
+// naming convention as it was already in use throughout the code, but now we
+// set this up ourselves.
 char *program_invocation_short_name;
 
-/* These variables are global because they won't change (once initialized) */
-/* and any given part of the code may need to reference them. */
+// These variables are global because they won't change (once initialized)
+// and any given part of the code may need to reference them.
 int pagesize;
 int verbose;
 struct message_helper *message;
 
+// Same with config. Once we leave main(), it is intended as a read-only resource.
+struct config_helper *config;
+
 /*
-	 This struct represents the overall state of the I/O. It was being passed around as a function argument, but it was getting passed everywhere... 
-	 Once I cleaned up error reporting it was obvious that all code needed access to this struct in order to do the right thing.
-	 I decided to just make it a global. It's being used globally, no need to pretend it's something other than what it is.
+ * This struct represents the overall state of the I/O. This state machine
+ * needs to be inspected and possibly changed at any moment by any part of
+ * the code.
  */
 struct io_helper *io;
-/*
-	Same with config. However, this one is a more reasonable global. Once you leave main, it is intended to be read-only.
- */
-struct config_helper *config;
 
 /******************************************************************************
  * function definitions
@@ -173,8 +184,6 @@ void message_shift(int count);
 int is_valid_escape(char c);
 int process_escape(char c);
 void list_all();
-void list_listeners();
-void list_connections();
 void print_valid_escapes();
 
 /* handler.c */
@@ -251,6 +260,7 @@ int report_log(char *fmt, ...);
 int report_log_string(char *error_string);
 
 /* revsh.c */
+// Also main() and usage() are here.
 void clean_io();
 #ifndef FREEBSD
 int posix_openpt(int flags);

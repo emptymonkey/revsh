@@ -2,21 +2,17 @@
 /* The ssl and non-ssl portions of this file have been split out into their own separate files. */
 
 #ifdef OPENSSL
-
-#include "io_ssl.c"
-
+# include "io_ssl.c"
 #else
-
-#include "io_nossl.c"
-
-#endif /* OPENSSL */
+# include "io_nossl.c"
+#endif
 
 
 /***********************************************************************************************************************
  *
  * negotiate_protocol()
  *
- * Input: An io object.
+ * Input: None. We leveage the global io struct.
  *
  * Output: 0 on success, -1 on error.
  *
@@ -56,7 +52,7 @@ int negotiate_protocol(){
 	}
 
 	/* Send and receive protocol major and minor numbers. */
-	// This information isn't used outside of reporting yet. 
+	// This information isn't used outside of reporting yet, but should be useful someday. 
 	tmp_ushort = htons(io->control_proto_major);
 	if(io->remote_write(&tmp_ushort, sizeof(tmp_ushort)) == -1){
 		report_error("negotiate_protocol(): io->remote_write(%lx, %d): %s", \
