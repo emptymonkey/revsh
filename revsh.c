@@ -45,6 +45,7 @@
 
 - Fix bug. Ignore -v if in -n copy mode.
 - Make a man page.
+- Update Readme.md.
 
 General Cleanup:
 - Test all the switches.
