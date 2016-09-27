@@ -33,24 +33,330 @@
 .\" DEALINGS IN THE SOFTWARE.
 .\"
 .\"*********************************************************
+
 .Dd September 25, 2016
 .Dt REVSH 1
 .Os Linux/FreeBSD
+
 .\"*********************************************************
 .Sh NAME
 .Nm revsh
-.Nd A reverse shell security tool for remote access and
-data tunneling.
+.Nd A reverse shell and data tunnelling tool for pentesters.
+
 .\"*********************************************************
 .Sh SYNOPSIS
+.Nm 
+.Op [ Fl c Ar CONTROL_OPTIONS ] | [ Ar TARGET_OPTIONS ]
+.Op Ar MUTUAL_OPTIONS
+.Op Ar ADDRESS Ns Op : Ns Ar PORT
+
+.\"*********************************************************
 .Sh DESCRIPTION
+.Nm
+is a connect-back remote access tool with advanced data 
+tunnelling capabilities designed for pentesters and other 
+security professionals. Among it's notable high level 
+features are:
+.Pp
+.Bl -bullet -compact
+.It
+Full terminal support.
+.It
+In-band asynchronous tunnelling of abstract data.
+.It
+Full tunnel encryption (with Perfect Forward Secrecy 
+available for custom builds.)
+.It
+SOCKS proxy support.
+.It
+Tun / Tap support, allowing for a full reverse VPN onto the
+target network.
+.El
+.Pp
+The
+.Nm
+binary operates in one of two modes: control or target. When
+run in control mode
+.Nm
+will act as the command and control node and issue 
+commands to any target node that it connects with. (In the
+traditional case of a reverse shell the control node is the
+listener and the target host is performing the connect 
+back.) The same binary is used for both control and target
+operations, allowing for rapid movement and binary reuse in
+reasonably homogeneous target environments.
+
+.Ss CONTROL_OPTIONS
+.Bl -tag -width Ds -compact
+.It Fl c 
+Run in "command and control" mode. -l will also function as 
+expected.
+.It Fl a
+Enable Anonymous Diffie-Hellman mode. (In the GENERIC_BUILD,
+this will be the only option available. For access to
+Ephemeral Diffie-Hellman mode you will need to build from
+source and manage your own certs.)
+.It Fl d Ar KEYS_DIR
+Reference the keys / certificates in an alternate directory. 
+(Default is "~/.revsh/keys/".)
+.It Fl f Ar RC_FILE
+Reference an alternate rc file.  (Default is "~/.revsh/rc".)
+.It Fl s Ar SHELL
+Invoke SHELL as the remote shell.  (Default is "/bin/bash".)
+.It Fl F Ar LOG_FILE
+Log general use and errors to LOG_FILE.
+.El
+
+.Ss TARGET_OPTIONS
+.Bl -tag -width Ds -compact
+.It Fl t Ar SEC
+Set the connection timeout to SEC seconds.  (Default is
+"3600".)
+.It Fl r Ar SEC1 Ns Op , Ns Ar SEC2
+Set the retry time to be SEC1 seconds, or to be random in
+the range from SEC1 to SEC2.  (Default is "600,1200".)
+.El
+
+.Ss MUTUAL_OPTIONS
+.Bl -tag -width Ds -compact
+.It Ar ADDRESS
+The address of the control listener. (Default is "0.0.0.0".)
+.It Ar PORT
+The port of the control listener. (Default is "2200".)
+.It Fl k
+Run in keep-alive mode. Node will neither exit normally,
+nor seppuku from timeout.
+.It Fl L Oo Ar LHOST: Oc Ns Ar LPORT:RHOST:RPORT
+Static socket forwarding with a local listener at
+LHOST:LPORT forwarding to RHOST:RPORT.
+.It Fl R Oo Ar RHOST: Oc Ns Ar RPORT:LHOST:LPORT
+Static socket forwarding with a remote listener at
+RHOST:RPORT forwarding to LHOST:LPORT.
+.It Fl D Oo Ar LHOST: Oc Ns Ar LPORT
+Dynamic socket forwarding with a local listener at
+LHOST:LPORT. (Socks 4, 4a, and 5. TCP connect only.)
+.It Fl B Oo Ar RHOST: Oc Ar RPORT
+Dynamic socket forwarding with a remote listener at
+LHOST:LPORT. (Socks 4, 4a, and 5. TCP connect only.)
+.It Fl x
+Disable automatic setup of proxies. (Defaults: Proxy D2280
+and tun/tap devices.)
+.It Fl b
+Start in bind shell mode. (Default is reverse shell mode.)
+Note: The -b flag must be invoked on both ends or the 
+binary must be named "bindsh".
+.It Fl n
+Non-interactive data broker. No tty. Useful for copying
+files. (Default is interactive w/remote tty.)
+.It Fl v
+Verbose. -vv and -vvv increase verbosity.
+.It Fl h
+Print the help.
+.It Fl e
+Print out some usage examples.
+.El
+
+.Ss Escape Sequences
+.Nm
+supports several of the same '~' escape sequences as SSH.
+These tilde escapes must be preceded by a newline in order
+to be recognized. These sequences can also be sent down
+multiple connected hops by using an additional '~' for
+each hop. Because 
+.Nm
+uses the same notation as SSH, these multi-hop sequences
+can be used even when SSH and
+.Nm
+connections are intermingled in the same command chain.
+The escape sequences supported by
+.Nm
+are as follows:
+.Pp
+.Bl -tag -width Ds -compact
+.It Ar ~.
+Close the connection. This is particularly useful for
+killing an unresponsive connection. Note, if you are SSH'd
+into your C2 node, you launch
+.Nm
+and the target connects back, you can then kill the 
+.Nm
+connection by issuing the "~~." command, without killing 
+your SSH session.
+.It Ar ~#
+Print statistics about all active listeners and connections.
+This is generally useful to see what activity is being 
+forwarded down the tunnel. This is particularly useful
+when using a point-to-point proxy connection bound to 
+localhost for in-band asynchronous file transfer. You 
+can see when such a transfer has completed by viewing
+the total data read / written across that connection
+and terminate the transfer when the desired file size
+has been reached. (See the
+.Cm EXAMPLES
+section for more information.)
+.It Ar ~?
+List the supported escape sequences.
+.El
+
+.\"*********************************************************
 .Sh ENVIRONMENT
+The variables
+.Ar TERM
+and
+.Ar LANG
+are automatically exported to the remote session to ensure
+a reasonable terminal experience. The default rc file will
+also set 
+.Ar PS1
+and
+.Ar PATH
+to sane defaults. It will also unset
+the
+.Ar HISTFILE
+variable. You will also want to set a sane 
+.Ar HOME
+variable in your rc file or "~" won't act in a sane 
+manner.
+
+.\"*********************************************************
 .Sh FILES
+.Bl -tag -width Ds -compact
+.It Pa /usr/local/bin/revsh
+Install location for the binary.
+.It Ar ~/.revsh/
+The revsh user's directory for personal customization.
+.It Ar ~/.revsh/rc
+The user's revsh rc file, whose commands are executed
+remotely upon connection.
+.It Ar ~/.revsh/keys/
+The user's main keys directory. The certs for a particular
+build are stored here. Custom key directories set up on a
+per target basis can be separately managed and invoked with
+the -d option.
+.El
+
+.\"*********************************************************
 .Sh EXAMPLES
+XXX To Do XXX
+
+.\"*********************************************************
 .Sh DIAGNOSTICS
+
+.Nm
+exits with 0 on success and -1 on error.
+
+.\"*********************************************************
 .Sh COMPATIBILITY
+.Ss Libraries
+.Nm
+was written with portability in mind. Unfortunately there 
+are issues innate to moving a complex binary onto a target
+platform whose libraries are in an unknown state.
+The only compatabile libraries that
+.Nm
+requires on the target host are libssl and libcrypto from
+OpenSSL. OpenSSL library compatability represents the single
+greatest challenge to
+.Nm
+portability. When faced with a library incompatability (or
+total absence) your options are:
+.Pp
+.Bl -tag -width Ds -compact
+.It Sy Static Build
+A compilation option to build the libraries in statically
+exists in the Makefile. This will result in a slight
+increase in the binary size, but add great portability. If
+the host continues to present compatibility issues, it may
+be old enough that these issues are in the libc networking
+library themselves.
+.It Sy Dynamic Build to Era
+Fingerprint the target host, install a VM with that 
+version in your lab environment, and build a custom
+.Nm
+binary on it. As long as OpenSSL is present on the target
+host, this option will resolve all known library issues.
+.It Sy Compatibility Build
+The Makefile also offers a compatibility build. This build
+does 
+.Sy *NOT*
+have encryption, so there is no OpenSSL
+dependency. (Your traffic will
+.Sy *NOT*
+be encrypted!) 
+Additionally, this build uses the older suite of libc 
+networking calls and should resolve any issues with 
+targeting an older libc install.
+.El
+
+.Ss Ephemeral Diffie-Hellman
+.Nm
+is built with Anonymous Diffie-Hellman as the TLS handshake
+in the GENERIC_BUILD. While offering compatibility with 
+other
+.Nm
+binaries, the lack of authentication allows for the 
+potential of a malicious connection. Due to the timing
+aspect of a normal interaction (the operator is sitting
+at the terminal waiting for the connect back which 
+they launch manually) such a counter-hack event is
+unlikely. However, to add authentication to the TLS
+handshake, 
+.Nm
+offers Ephemeral Diffie-Hellman support with Perfect 
+Forward Secrecy. This is the default mode when the binary
+is built from source by the operator. The first step of 
+compilation is to generate the appropriate certs. The 
+second step then
+.Sy embeds the target certs in the binary!
+This is done purposefully so that a credential recovery /
+reuse isn't as simple as grabbing the certs from disk or
+pulling a password out of the binary. The challenge for 
+a counter-hack has then been upped to the level of 
+reverse-engineering. While baking crypto into a programs
+binary is very sub-optimal for the enterprise, it is useful
+in reducing exposure in a network penetration scenario. 
+This is mentioned in the COMPATIBILITY section because it
+inherently implies that a control node will be unable to
+authenticate a target node with EDH if it doesn't have 
+access to the certs from the target binaries build. (This
+is what is referred to as the "keys" directory.) If the
+build of the target and the control are different, and the
+control doesn't know the targets certs, EDH will not work
+and the binaries are incompatible. The binaries will still
+work with ADH, thus disabling the authentication piece of
+the TLS handshake entirely.
+
+
+.\"*********************************************************
 .Sh SEE ALSO
+.Xr netcat 1
+.Xr ssh 1
+
+.\"*********************************************************
 .Sh STANDARDS
+.St -p1003.1-2001
+
+.\"*********************************************************
 .Sh HISTORY
+
+.Nm
+started life as a simple reverse shell with a tty. Many
+features have been added over the last several years. I've
+done my best to keep out features that are superfluous
+while adding in ones that seem helpful. My main happiness
+is in knowing that I have deleted far more of this codebase
+than exists today.
+
+.\"*********************************************************
 .Sh AUTHORS
+
+.Bl -compact
+.It
+@emptymonkey - github.com/emptymonkey 
+.El
+
+.\"*********************************************************
 .Sh BUGS
+
+Obviously. Report them, please, and I'll try to fix them.
+
