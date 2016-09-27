@@ -98,7 +98,9 @@ Ephemeral Diffie-Hellman mode you will need to build from
 source and manage your own certs.)
 .It Fl d Ar KEYS_DIR
 Reference the keys / certificates in an alternate directory. 
-(Default is "~/.revsh/keys/".)
+The certs in this directory will be used during the 
+authentication phase of the Ephemeral Diffie-Hellman TLS
+handshake. (Default is "~/.revsh/keys/".)
 .It Fl f Ar RC_FILE
 Reference an alternate rc file.  (Default is "~/.revsh/rc".)
 .It Fl s Ar SHELL
@@ -110,11 +112,15 @@ Log general use and errors to LOG_FILE.
 .Ss TARGET_OPTIONS
 .Bl -tag -width Ds -compact
 .It Fl t Ar SEC
-Set the connection timeout to SEC seconds.  (Default is
-"3600".)
+Set the connection to timeout after SEC seconds and self 
+terminate. (Default is "3600".)
 .It Fl r Ar SEC1 Ns Op , Ns Ar SEC2
 Set the retry time to be SEC1 seconds, or to be random in
-the range from SEC1 to SEC2.  (Default is "600,1200".)
+the range from SEC1 to SEC2. The random value in this 
+range will be used as a nonperiodic retry timer for 
+connect-back. Every attempt at connect-back will cause
+the random value to be recalculated.
+(Default is "600,1200".)
 .El
 
 .Ss MUTUAL_OPTIONS
@@ -125,7 +131,7 @@ The address of the control listener. (Default is "0.0.0.0".)
 The port of the control listener. (Default is "2200".)
 .It Fl k
 Run in keep-alive mode. Node will neither exit normally,
-nor seppuku from timeout.
+nor self-terminate from timeout.
 .It Fl L Oo Ar LHOST: Oc Ns Ar LPORT:RHOST:RPORT
 Static socket forwarding with a local listener at
 LHOST:LPORT forwarding to RHOST:RPORT.
@@ -139,8 +145,9 @@ LHOST:LPORT. (Socks 4, 4a, and 5. TCP connect only.)
 Dynamic socket forwarding with a remote listener at
 LHOST:LPORT. (Socks 4, 4a, and 5. TCP connect only.)
 .It Fl x
-Disable automatic setup of proxies. (Defaults: Proxy D2280
-and tun/tap devices.)
+Disable automatic setup of proxies. (Defaults: Proxy D2280,
+L2290:127.0.0.1:2291, R2290:127.0.0.1:2291, and tun/tap
+devices.)
 .It Fl b
 Start in bind shell mode. (Default is reverse shell mode.)
 Note: The -b flag must be invoked on both ends or the 
@@ -326,6 +333,17 @@ and the binaries are incompatible. The binaries will still
 work with ADH, thus disabling the authentication piece of
 the TLS handshake entirely.
 
+.Ss SOCKS
+.Nm
+supports SOCKS 4, 4a, and 5 TCP Connect calls. Neither TCP
+Bind calls, nor UDP calls are supported. Adding such
+capabilities would have significantly increased the 
+complexity and size of the program without any real gain 
+in modern functionality. SOCKS is powerful and easy to use,
+but I would suggest using the reverse VPN feature of 
+.Nm
+to bridge networks if a more complex network interaction is
+required.
 
 .\"*********************************************************
 .Sh SEE ALSO
