@@ -205,6 +205,81 @@ section for more information.)
 List the supported escape sequences.
 .El
 
+.Ss Tun / Tap Support
+.Nm
+has built in support for tun / tap devices. Tun / tap 
+devices are virtual ethernet cards. They are capable of
+sending and receiving raw IP packets / ethernet frames. 
+The packets / frames received by a tun / tap device will be
+handed by the kernel to the listening application, which in
+this case is
+.Nm
+\&.
+.Nm
+then forwards these packets / frames down its encrypted
+tunnel. On the remote node, 
+.Nm
+takes the newly received packets / frames and hands them to
+the tun / tap device on it's end. This turns them over
+to the remote kernel to handle and route appropriately.
+This means that with either an Iptables NAT rule or by
+bridging a remote network card you can turn
+.Nm
+into a full Reverse VPN. This method will give you a 
+fully routable IP address on the target network.
+
+.Ss Proxy Support
+.Nm
+has built in support for SOCKS proxy tunnels. By default 
+.Nm
+will run a local listener for a dynamic SOCKS proxy on 
+port 2280.
+.Nm
+will understand requests for the following proxy types:
+.Pp
+.Bl -tag -compact
+.It Local
+A point-to-point socket forwarding proxy with a listener on
+the local control node.
+.It Remote
+A point-to-point socket forwarding proxy with a listener on
+the remote target node.
+.It Dynamic
+A dynamic SOCKS proxy with a listener on the local control
+node.
+.It Bypass
+A dynamic SOCKS proxy with a listener on the remote target
+node.
+.El
+.Pp
+The supported SOCKS protocol versions are 4, 4a, and 5. 
+However, it should be noted that only a subset of the full
+SOCKS command set has been implemented. In each case, only
+simple TCP connect requests are supported. 
+
+.Ss File Transfers
+.Nm
+supports in-band asynchronous arbitrary data transfers. 
+This means that you can copy any kind of file, using the
+the same crypto tunnel as your terminal, without it 
+blocking the terminal, the vpn, the socks proxies, or
+any other active connection. When approaching the problem
+of file transfer, the decision was made to keep the 
+interface simple. As such, by default, both the control
+node and the target node will setup a point-to-point
+socket forwarder bound to localhost. This will have 
+localhost port 2290 as an input socket on both ends,
+and 2291 as an output socket on both ends. With this
+default setup you can quickly and easily move files
+either using netcat or 
+.Nm
+to send the data on one end and another netcat or
+.Nm
+to receive the data on the other. When combined with
+the "~#" escape sequence for stats on active connections
+you will be able to see when the file transfer is 
+complete and close the connection.
+
 .\"*********************************************************
 .Sh ENVIRONMENT
 The variables
