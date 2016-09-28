@@ -41,18 +41,6 @@
 
 
 
-/* XXX
-
-- Fix bug. Ignore -v if in -n copy mode.
-- Make a man page.
-- Update Readme.md.
-
-General Cleanup:
-- Test all the switches.
-- Use daily til Toorcon.
-
-XXX */
-
 #include "common.h"
 
 
@@ -406,6 +394,11 @@ int main(int argc, char **argv){
 		}
 	}
 
+	// I don't care what you asked for, suppress all output. 
+	// To-Do: Clean up the output. Support a proper stderr. Don't mix the streams.
+	if(!config->interactive){
+		verbose = 0;
+	}
 
 	/* Check for bindshell mode from name. */
 	tmp_ptr = strrchr(argv[0], '/');	
