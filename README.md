@@ -22,7 +22,7 @@ There are [many techniques](http://pentestmonkey.net/cheat-sheet/shells/reverse-
  * [job control](http://en.wikipedia.org/wiki/Job_control)
  * [control character processing](http://en.wikipedia.org/wiki/Control_character) (e.g [Ctrl-C](http://en.wikipedia.org/wiki/Control-C))
  * [auto-completion](http://en.wikipedia.org/wiki/Auto-completion)
- * support for programs requiring a [controlling tty](https://github.com/emptymonkey/ctty) (e.g. [sudo](http://en.wikipedia.org/wiki/Sudo))
+ * support for programs requiring a [controlling tty](https://github.com/emptymonkey/ctty) (e.g. vi)
  * [processing of window re-size events](http://linux.die.net/man/4/tty_ioctl)
 
 In addition, _revsh_ also offers the following features:

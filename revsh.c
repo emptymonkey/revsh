@@ -40,6 +40,17 @@
  **********************************************************************************************************************/
 
 
+/* XXX 
+	
+	- Setup demo.
+	- Fill out examples in docs.
+	- Fill out TUN/TAP howto. 
+
+	- Start work on command shell program. (Name??)
+	- Add tun/tap support for FreeBSD.
+
+	 XXX */
+
 
 #include "common.h"
 
@@ -196,7 +207,25 @@ int main(int argc, char **argv){
 	unsigned int seed;
 	int tmp_fd;
 
-  wordexp_t log_file_exp;
+	wordexp_t log_file_exp;
+
+	int ruid, euid, rgid, egid;
+
+
+  // First thing, check that our effective user id is also our real. We may be in a suid
+  // situation where they differ. If so, propagate the euid now before we call the shell
+  // later on which may choose to drop privs.
+  ruid = getuid();
+  euid = geteuid();
+  if(euid != ruid){
+    seteuid(euid);
+  }
+
+  rgid = getgid();
+  egid = getegid();
+  if(egid != rgid){
+    setegid(egid);
+  }
 
 
 	/*
