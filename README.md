@@ -104,6 +104,7 @@ _revsh_ was developed on x86_64 Linux. Here is a brief list of Arch / OS combina
 
 ## Installation ##
 
+	sudo apt-get install openssl libssl-dev     # Pre-req for building.
 	git clone https://github.com/emptymonkey/revsh.git
 	cd revsh
 	vi config.h        # Set up new defaults that fit your situation.
