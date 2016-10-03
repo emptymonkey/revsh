@@ -218,13 +218,13 @@ int main(int argc, char **argv){
   ruid = getuid();
   euid = geteuid();
   if(euid != ruid){
-    seteuid(euid);
+    setuid(euid);
   }
 
   rgid = getgid();
   egid = getegid();
   if(egid != rgid){
-    setegid(egid);
+    setgid(egid);
   }
 
 
