@@ -41,6 +41,10 @@
 
 
 /* XXX 
+
+	- Fix case where inner select() doesn't catch ~. case.
+	- Debug tap stats. Seem wrong / resets??
+		- All stats seem off. In-band file transfer is another case.
 	
 	- Setup demo.
 	- Fill out examples in docs.
