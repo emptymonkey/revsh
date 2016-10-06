@@ -113,10 +113,10 @@ int escape_check(){
 						esc_char = message->data[i];
 						message_shift(i + 1);
 						if((retval = process_escape(esc_char)) < 0){
-							report_error("escape_check(): process_escape('%c'): %s", message->data[i], strerror(errno));
 							if(retval == -1){
-								return(retval);
+								report_error("escape_check(): process_escape('%c'): %s", message->data[i], strerror(errno));
 							}
+							return(retval);
 						}
 
 						io->escape_state = ESCAPE_NONE;
@@ -204,6 +204,7 @@ int send_consumed(){
 
 	message->data_type = DT_TTY;
 	message->data_len = io->escape_depth;
+	io->tty_io_written += message->data_len;
 	for(i = 0; i < io->escape_depth; i++){
 		message->data[i] = '~';
 	}
@@ -250,6 +251,7 @@ int send_message(int count){
 
 	message->data_type = DT_TTY;
 	message->data_len = count;
+  io->tty_io_written += message->data_len;
 	if(message_push() == -1){
 		report_error("send_message(): message_push(): %s", strerror(errno));
 		return(-1);

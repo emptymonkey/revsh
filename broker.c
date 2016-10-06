@@ -252,6 +252,10 @@ int broker(){
 				}
 				goto RETURN;
 			}
+			if(io->eof){
+				retval = 0;
+				goto RETURN;
+			}
 			continue;
 		}
 

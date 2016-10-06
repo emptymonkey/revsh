@@ -112,8 +112,7 @@ struct proxy_node *proxy_node_new(char *proxy_string, int proxy_type){
 	return(new_node);
 
 CLEANUP:
-	free(new_node);
-	free(first);
+	proxy_node_delete(new_node);
 	return(NULL);
 }
 

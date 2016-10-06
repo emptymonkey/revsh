@@ -125,12 +125,15 @@ int handle_local_read(){
 
 	}else{
 
-		io->tty_io_written += retval;
-		message->data_len = retval;
+	if(!retval){
+		io->eof = 1;
+		return(0);
+	}
 
+		message->data_len = retval;
 		if(message->data_len){
 
-			if(!io->target && config->interactive){
+			if(!io->target && io->interactive){
 				if((retval = escape_check()) < 0){
 					if(retval == -1){
 						report_error("handle_local_read(): escape_check(): %s", strerror(errno));
@@ -141,6 +144,7 @@ int handle_local_read(){
 
 			// Check again for data_len, because we may have consumed the characters in the buffer during the escape_check().
 			if(message->data_len){
+				io->tty_io_written += message->data_len;
 				if((retval = message_push()) == -1){
 					report_error("handle_local_read(): message_push(): %s", strerror(errno));
 					return(-1);
@@ -170,6 +174,8 @@ int handle_message_dt_tty(){
 	struct message_helper *new_message, *tmp_message;
 
 
+	io->tty_io_read += message->data_len;
+
 	if(io->tty_write_head){
 		retval = 0;
 	} else {
@@ -182,8 +188,6 @@ int handle_message_dt_tty(){
 			return(-1);
 		}
 	}
-
-	io->tty_io_read += retval;
 
 	if(retval != message->data_len){
 		new_message = message_helper_create(message->data + retval, message->data_len - retval, io->message_data_size);
@@ -339,6 +343,7 @@ int handle_message_dt_proxy_ht_report(){
 
 	struct proxy_node *cur_proxy_node;
 
+
 	if((cur_proxy_node = proxy_node_create()) == NULL){
 		report_error("proxy_node_new(): proxy_node_create(): %s", strerror(errno));
 		return(-1);
@@ -410,7 +415,6 @@ int handle_message_dt_connection_ht_create(){
 	if((cur_connection_node = connection_node_find(message->header_origin, message->header_id))){
 		connection_node_delete(cur_connection_node);
 	}
-
 
 	// Handle TUN / TAP case first.
 	if(message->header_proxy_type == PROXY_TUN || message->header_proxy_type == PROXY_TAP){
@@ -499,6 +503,7 @@ int handle_message_dt_connection_ht_create_tun_tap(){
 
 	unsigned short origin = message->header_origin;
 	unsigned short id = message->header_id;
+
 
 #ifdef FREEBSD
 	// ENOSYS : It's not clear to me if ENOSYS is reserved for the OS or if this is a reasonable use case. 
@@ -638,7 +643,7 @@ int handle_message_dt_connection_ht_active_dormant(){
 
 /******************************************************************************
  *
- * handle_message_dt_connection()
+ * handle_message_dt_connection_ht_data()
  *
  * Inputs: None, but we will leverage the global io struct.
  * Outputs: 0 for success. -1 on fatal error. -2 on non-fatal error.
@@ -664,6 +669,8 @@ int handle_message_dt_connection_ht_data(){
 		return(-2);
 	}
 
+	cur_connection_node->io_read += message->data_len;
+
 	if(cur_connection_node->write_head){
 		retval = 0;
 	} else {
@@ -684,8 +691,6 @@ int handle_message_dt_connection_ht_data(){
 		}
 		retval = 0;
 	}
-
-	cur_connection_node->io_read = retval;
 
 	if(retval != message->data_len){
 		new_message = message_helper_create(message->data + retval, message->data_len - retval, io->message_data_size);
@@ -900,8 +905,8 @@ int handle_connection_read(struct connection_node *cur_connection_node){
 
 	}
 
-	cur_connection_node->io_written = retval;
 	message->data_len = retval;
+	cur_connection_node->io_written += message->data_len;
 
 	if((retval = message_push()) == -1){
 		report_error("handle_connection_read(): message_push(): %s", strerror(errno));
@@ -1045,13 +1050,12 @@ int handle_connection_socks_init(struct connection_node *cur_connection_node){
 			memcpy(message->data, cur_connection_node->buffer_ptr, cur_connection_node->buffer_tail - cur_connection_node->buffer_ptr);
 			message->data_len = cur_connection_node->buffer_tail - cur_connection_node->buffer_ptr;
 
+			cur_connection_node->io_written += message->data_len;
 			if((retval = message_push()) == -1){
 				report_error("handle_connection_socks_init(): message_push(): %s", strerror(errno));
 				return(-1);
 			}
 		}
-
-		cur_connection_node->io_written = retval;
 	}
 
 	return(0);
@@ -1272,6 +1276,7 @@ int handle_send_dt_connection_ht_create(struct connection_node *cur_connection_n
  *
  ******************************************************************************/
 int handle_send_dt_nop(){
+
 
 	message->data_type = DT_NOP;
 	message->data_len = 0;
