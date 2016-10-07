@@ -42,13 +42,14 @@
 
 /* XXX 
 
-	- Fix case where inner select() doesn't catch ~. case.
+	- Redo tty main tty io. Implement as a separate process. Use this for escape sequences.
+		This will fix the case where the inner select() (inside io->remote_read() and
+		io->remote_write()) doesn't catch escape sequences appropriately.
+		This also dovetails nicely into abstracting the operator's main tty out of the
+		flow, so it can be replaced with a more full featured implementation.
 	
-	- Setup demo.
 	- Fill out examples in docs.
 	- Fill out TUN/TAP howto. 
-
-	- Start work on command shell program. (Name??)
 	- Add tun/tap support for FreeBSD.
 
 	 XXX */
