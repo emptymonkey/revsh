@@ -59,6 +59,6 @@ Control:
 
 ## Further Reading
 
-[Arch Linux: Network Bridge](https://wiki.archlinux.org/index.php/Network_bridge)
-[Arch Linux: Internet Sharing](https://wiki.archlinux.org/index.php/Internet_sharing)
+- [Arch Linux: Network Bridge](https://wiki.archlinux.org/index.php/Network_bridge)
+- [Arch Linux: Internet Sharing](https://wiki.archlinux.org/index.php/Internet_sharing)
 
