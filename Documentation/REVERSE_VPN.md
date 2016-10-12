@@ -7,27 +7,6 @@
 
 ## Examples
 
-### Setting up a Tap bridge.
-
-Target:
-
-	export BRIDGE_IF="br0"
-	export TAP_IF="tap0"
-	export ETH_IF="ens37"
-
-	ip link add $BRIDGE_IF type bridge
-	ip link set $BRIDGE_IF up
-	ip link set $TAP_IF up
-	ip link set $TAP_IF master $BRIDGE_IF
-	ip link set $ETH_IF up
-	ip link set $ETH_IF master $BRIDGE_IF
-
-Control:
-
-	export TAP_IF="tap0"
-
-	dhclient $TAP_IF
-
 ### Setting up a Tun route.
 
 Target:
@@ -56,6 +35,27 @@ Control:
 	ip addr add $TUN_LOCAL_IP dev $TUN_IF peer $TUN_REMOTE_IP
 	ip link set $TUN_IF up
 	ip route add $ETH_NET via $TUN_LOCAL_IP
+
+### Setting up a Tap bridge.
+
+Target:
+
+	export BRIDGE_IF="br0"
+	export TAP_IF="tap0"
+	export ETH_IF="ens37"
+
+	ip link add $BRIDGE_IF type bridge
+	ip link set $BRIDGE_IF up
+	ip link set $TAP_IF up
+	ip link set $TAP_IF master $BRIDGE_IF
+	ip link set $ETH_IF up
+	ip link set $ETH_IF master $BRIDGE_IF
+
+Control:
+
+	export TAP_IF="tap0"
+
+	dhclient $TAP_IF
 
 ## Further Reading
 
