@@ -38,8 +38,8 @@ Target:
 	export TUN_NET="192.168.50.0/24"
 	export ETH_NET="10.5.120.0/24"
 	export ETH_IF="ens33"
-	echo 1 >/proc/sys/net/ipv4/ip_forward
 
+	echo 1 >/proc/sys/net/ipv4/ip_forward
 	iptables -t nat -A POSTROUTING -s $TUN_NET -o $ETH_IF -j MASQUERADE
 	ip addr add $TUN_REMOTE_IP dev $TUN_IF peer $TUN_LOCAL_IP
 	ip link set $TUN_IF up
