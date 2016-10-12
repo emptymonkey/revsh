@@ -57,3 +57,8 @@ Control:
 	ip link set $TUN_IF up
 	ip route add $ETH_NET via $TUN_LOCAL_IP
 
+## Further Reading
+
+[Arch Linux: Network Bridge](https://wiki.archlinux.org/index.php/Network_bridge)
+[Arch Linux: Internet Sharing](https://wiki.archlinux.org/index.php/Internet_sharing)
+
