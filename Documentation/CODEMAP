@@ -1,18 +1,10 @@
 
 I believe reading the code is the best way to understand the tactics used by
 the coder to drive the machine from moment to moment. However, I think that
-reading the code is a horrible way to understand the strategy the coder is
-taking to solve the problem overall. This document is therefore intended as
+this is insufficient for understanding the overall strategy implemented by 
+the coder to approach the problem. This document is therefore intended as
 an overview of the revsh codebase from a high level, showing how all of the
 different files and functions fit together.
-
-Ultimately though, humans are unfortunately prone to error, human language
-is imprecise, and sometimes you just forget to update the docs. As such,
-the code itself is ultimately authoritative. I do hope this document helps
-you though to a better understanding of my intent and methods.
-
-tactics != strategy
-
 
 ################################################################################
 # Basic Strategy

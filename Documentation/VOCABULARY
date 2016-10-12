@@ -11,7 +11,7 @@ reverse shell it still fits reasonably well in the traditional client server
 networking model. 
 
 In revsh, I use the terms "control" and "target" instead. The control node will
-be the system that the operator is working from. It is named as in reference to
+be the system that the operator is working from. It is named in reference to
 its role as a command and control "C2" host. The "target" host is, obviously,
 the target of the operation. It is important to avoid the client / server idea
 because the target can be set in a reverse shell or bind shell mode. Additionally,
