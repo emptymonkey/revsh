@@ -11,7 +11,7 @@ By default _revsh_ will attempt to open a tun and a tap device on both ends and 
 
 ### What are Tun / Tap devices?
 
-[Tun / Tap](https://en.wikipedia.org/wiki/TUN/TAP) devices are virtual network cards. They are fully featured and supported kernel network devices that aren't attached to a physical card. Rather, when the kernel decides to route a packet / frame down a tun / tap device, it comes out of the application end of the driver and is delivered to the attached application. In this case the attached application is _revsh_. Tun devices handle forwarding of raw IP packets. Tap devices handle forwarding of raw Ethernet frames. 
+[Tun / Tap](https://en.wikipedia.org/wiki/TUN/TAP) devices are virtual network cards. They are fully featured kernel network devices that aren't attached to a physical card. Rather, when the kernel decides to route a packet / frame down a tun / tap device, it comes out of the application end of the driver and is delivered to the attached application. In this case the attached application is _revsh_. Tun devices handle forwarding of raw IP packets. Tap devices handle forwarding of raw Ethernet frames. 
 
 In addition to _revsh_, both [ssh](https://www.openssh.com/) and [openvpn](https://openvpn.net/) offer up tun / tap support. All operators should learn to leverage this feature across each of these tools to ensure maximum flexibility.
 
@@ -24,7 +24,7 @@ In addition to _revsh_, both [ssh](https://www.openssh.com/) and [openvpn](https
 
 ## Examples
 
-The below examples are broken up into command segments outlining the commands needed to be run on the target and control hosts. The order they appear below are the order they need to be entered to the appropriate hosts. Further, the command segments have been separated into two sections of "variables that define the environment" and "commands". You should only need to update the variables to suit your needs before copy/pasting the command segments below into your respective terminals.
+The below examples are broken up into command segments outlining the commands needed to be run on the target and control hosts. Further, the command segments have been separated into two sections of "variables that define the environment" and "commands". You should only need to update the variables to suit your needs before copy/pasting the command segments below into the respective terminals.
 
 ### Setting up a Tun route.
 
