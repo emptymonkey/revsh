@@ -1,0 +1,24 @@
+
+# Pre-req for building.
+sudo apt-get install openssl libssl-dev
+
+# Grab the source.
+git clone https://github.com/emptymonkey/revsh.git
+cd revsh
+
+# Set up new defaults that fit your situation. (Optional.)
+vi config.h
+
+# Set install directories and pick build type. (Optional.)
+vi Makefile
+
+# This *can* take a very long time, though it usually doesn't.
+make
+make install
+
+# Add your favorite startup commands to really customize the feel of your remote shell. (Optional.)
+cd ~/.revsh
+vi rc
+
+# Ready to go!
+revsh -h

@@ -117,7 +117,7 @@ void usage(int ret_code){
 	fprintf(out_stream, "\t-D [LHOST:]LPORT\n");
 	fprintf(out_stream, "\t\t\tDynamic socket forwarding with a local listener\n\t\t\tat LHOST:LPORT.\t\t\t\t\t(Socks 4, 4a, and 5. TCP connect only.)\n");
 	fprintf(out_stream, "\t-B [RHOST:]RPORT\n");
-	fprintf(out_stream, "\t\t\tDynamic socket forwarding with a remote listener\n\t\t\tat LHOST:LPORT.\t\t\t\t\t(Socks 4, 4a, and 5. TCP connect only.)\n");
+	fprintf(out_stream, "\t\t\tDynamic socket forwarding with a remote\n\t\t\tlistener at LHOST:LPORT.\t\t\t(Socks 4, 4a, and 5. TCP connect only.)\n");
 	fprintf(out_stream, "\t-x\t\tDisable automatic setup of proxies.\t\t(Defaults: Proxy D%s and tun/tap devices.)\n", SOCKS_LISTENER);
 	fprintf(out_stream, "\t-b\t\tStart in bind shell mode.\t\t\t(Default is reverse shell mode.)\n");
 	fprintf(out_stream, "\t\t\tThe -b flag must be invoked on both ends.\n");
