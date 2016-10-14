@@ -7,6 +7,8 @@ A [VPN](https://en.wikipedia.org/wiki/Virtual_private_network) is a mechanism th
 
 _revsh_ is a network tool that allows for a reverse connection back to the user followed by arbitrary data tunneling. By leveraging tun/tap devices native to Linux and FreeBSD, it is able to forward raw IP packets / Ethernet frames across its tunnel. This allows for the experience of a VPN.
 
+By default _revsh_ will attempt to open a tun and a tap device on both ends and attach to it. This feature requires root privileges to be successful.
+
 ### What are Tun / Tap devices?
 
 [Tun / Tap](https://en.wikipedia.org/wiki/TUN/TAP) devices are virtual network cards. They are fully featured and supported kernel network devices that aren't attached to a physical card. Rather, when the kernel decides to route a packet / frame down a tun / tap device, it comes out of the application end of the driver and is delivered to the attached application. In this case the attached application is _revsh_. Tun devices handle forwarding of raw IP packets. Tap devices handle forwarding of raw Ethernet frames. 
