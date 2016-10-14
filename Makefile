@@ -123,10 +123,6 @@ escape.o: escseq.c common.h config.h helper_objects.h
 
 in_the_key_of_c: in_the_key_of_c.c
 	@/bin/echo
-ifeq (static,$(findstring static,$(CFLAGS)))
-	@/bin/echo "Static build detected. Expect compiler warnings to follow. This is normal."
-	@/bin/echo
-endif
 	$(CC) $(CFLAGS) -o in_the_key_of_c in_the_key_of_c.c $(LIBS)
 
 install:
