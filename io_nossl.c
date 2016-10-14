@@ -215,6 +215,7 @@ int init_io_control(){
 	}
 
 	/* Seppuku if left alone too long. */
+	memset(&act, 0, sizeof(act));
 	act.sa_handler = seppuku;
 
 	if(sigaction(SIGALRM, &act, NULL) == -1){
@@ -355,6 +356,7 @@ int init_io_target(){
 	}
 
 	/* Sepuku if left alone too long. */
+	memset(&act, 0, sizeof(act));
 	act.sa_handler = seppuku;
 
 	if(sigaction(SIGALRM, &act, NULL) == -1){

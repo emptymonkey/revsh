@@ -33,23 +33,19 @@
 .\" DEALINGS IN THE SOFTWARE.
 .\"
 .\"*********************************************************
-
 .Dd September 25, 2016
 .Dt REVSH 1
 .Os Linux/FreeBSD
-
 .\"*********************************************************
 .Sh NAME
 .Nm revsh
 .Nd A reverse shell and data tunnelling tool for pentesters.
-
 .\"*********************************************************
 .Sh SYNOPSIS
 .Nm 
 .Op [ Fl c Ar CONTROL_OPTIONS ] | [ Ar TARGET_OPTIONS ]
 .Op Ar MUTUAL_OPTIONS
 .Op Ar ADDRESS Ns Op : Ns Ar PORT
-
 .\"*********************************************************
 .Sh DESCRIPTION
 .Nm
@@ -58,7 +54,7 @@ tunnelling capabilities designed for pentesters and other
 security professionals. Among it's notable high level 
 features are:
 .Pp
-.Bl -bullet -compact
+.Bl -bullet 
 .It
 Full terminal support.
 .It
@@ -85,9 +81,8 @@ listener and the target host is performing the connect
 back.) The same binary is used for both control and target
 operations, allowing for rapid movement and binary reuse in
 reasonably homogeneous target environments.
-
 .Ss CONTROL_OPTIONS
-.Bl -tag -width Ds -compact
+.Bl -tag -width Ds 
 .It Fl c 
 Run in "command and control" mode. -l will also function as 
 expected.
@@ -108,9 +103,8 @@ Invoke SHELL as the remote shell.  (Default is "/bin/bash".)
 .It Fl F Ar LOG_FILE
 Log general use and errors to LOG_FILE.
 .El
-
 .Ss TARGET_OPTIONS
-.Bl -tag -width Ds -compact
+.Bl -tag -width Ds 
 .It Fl t Ar SEC
 Set the connection to timeout after SEC seconds and self 
 terminate. (Default is "3600".)
@@ -122,9 +116,8 @@ connect-back. Every attempt at connect-back will cause
 the random value to be recalculated.
 (Default is "600,1200".)
 .El
-
 .Ss MUTUAL_OPTIONS
-.Bl -tag -width Ds -compact
+.Bl -tag -width Ds 
 .It Ar ADDRESS
 The address of the control listener. (Default is "0.0.0.0".)
 .It Ar PORT
@@ -164,7 +157,6 @@ Print the help.
 .It Fl e
 Print out some usage examples.
 .El
-
 .Ss Escape Sequences
 .Nm
 supports several of the same '~' escape sequences as SSH.
@@ -181,7 +173,7 @@ The escape sequences supported by
 .Nm
 are as follows:
 .Pp
-.Bl -tag -width Ds -compact
+.Bl -tag -width Ds 
 .It Ar ~.
 Close the connection. This is particularly useful for
 killing an unresponsive connection. Note, if you are SSH'd
@@ -206,7 +198,6 @@ section for more information.)
 .It Ar ~?
 List the supported escape sequences.
 .El
-
 .Ss Tun / Tap Support
 .Nm
 has built in support for tun / tap devices. Tun / tap 
@@ -229,7 +220,6 @@ bridging a remote network card you can turn
 .Nm
 into a full Reverse VPN. This method will give you a 
 fully routable IP address on the target network.
-
 .Ss Proxy Support
 .Nm
 has built in support for SOCKS proxy tunnels. By default 
@@ -239,7 +229,7 @@ port 2280.
 .Nm
 will understand requests for the following proxy types:
 .Pp
-.Bl -tag -compact
+.Bl -tag 
 .It Local
 A point-to-point socket forwarding proxy with a listener on
 the local control node.
@@ -258,7 +248,6 @@ The supported SOCKS protocol versions are 4, 4a, and 5.
 However, it should be noted that only a subset of the full
 SOCKS command set has been implemented. In each case, only
 simple TCP connect requests are supported. 
-
 .Ss File Transfers
 .Nm
 supports in-band asynchronous arbitrary data transfers. 
@@ -281,7 +270,6 @@ to receive the data on the other. When combined with
 the "~#" escape sequence for stats on active connections
 you will be able to see when the file transfer is 
 complete and close the connection.
-
 .\"*********************************************************
 .Sh ENVIRONMENT
 The variables
@@ -301,10 +289,9 @@ variable. You will also want to set a sane
 .Ar HOME
 variable in your rc file or "~" won't act in a sane 
 manner.
-
 .\"*********************************************************
 .Sh FILES
-.Bl -tag -width Ds -compact
+.Bl -tag -width Ds 
 .It Pa /usr/local/bin/revsh
 Install location for the binary.
 .It Ar ~/.revsh/
@@ -318,19 +305,14 @@ build are stored here. Custom key directories set up on a
 per target basis can be separately managed and invoked with
 the -d option.
 .El
-
 .\"*********************************************************
 .Sh EXAMPLES
-
 .Nm
 -e
-
 .\"*********************************************************
 .Sh DIAGNOSTICS
-
 .Nm
 exits with 0 on success and -1 on error.
-
 .\"*********************************************************
 .Sh COMPATIBILITY
 .Ss Libraries
@@ -347,7 +329,7 @@ greatest challenge to
 portability. When faced with a library incompatability (or
 total absence) your options are:
 .Pp
-.Bl -tag -width Ds -compact
+.Bl -tag -width Ds 
 .It Sy Static Build
 A compilation option to build the libraries in statically
 exists in the Makefile. This will result in a slight
@@ -373,7 +355,6 @@ Additionally, this build uses the older suite of libc
 networking calls and should resolve any issues with 
 targeting an older libc install.
 .El
-
 .Ss Ephemeral Diffie-Hellman
 .Nm
 is built with Anonymous Diffie-Hellman as the TLS handshake
@@ -411,7 +392,6 @@ control doesn't know the targets certs, EDH will not work
 and the binaries are incompatible. The binaries will still
 work with ADH, thus disabling the authentication piece of
 the TLS handshake entirely.
-
 .Ss SOCKS
 .Nm
 supports SOCKS 4, 4a, and 5 TCP Connect calls. Neither TCP
@@ -423,19 +403,15 @@ but I would suggest using the reverse VPN feature of
 .Nm
 to bridge networks if a more complex network interaction is
 required.
-
 .\"*********************************************************
 .Sh SEE ALSO
 .Xr netcat 1
 .Xr ssh 1
-
 .\"*********************************************************
 .Sh STANDARDS
 .St -p1003.1-2001
-
 .\"*********************************************************
 .Sh HISTORY
-
 .Nm
 started life as a simple reverse shell with a tty. Many
 features have been added over the last several years. I've
@@ -443,17 +419,12 @@ done my best to keep out features that are superfluous
 while adding in ones that seem helpful. My main happiness
 is in knowing that I have deleted far more of this codebase
 than exists today.
-
 .\"*********************************************************
 .Sh AUTHORS
-
-.Bl -compact
+.Bl 
 .It
 @emptymonkey - github.com/emptymonkey 
 .El
-
 .\"*********************************************************
 .Sh BUGS
-
 Obviously. Report them, please, and I'll try to fix them.
-
