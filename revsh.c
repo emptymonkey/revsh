@@ -193,8 +193,8 @@ void examples(int ret_code){
 void print_versions(){
 
 	printf("%s Versions\n", program_invocation_short_name);
-	printf("  Program  - %s\n", REVSH_VERSION);
-	printf("  Protocol - %d.%d\n", PROTOCOL_MAJOR_VERSION, PROTOCOL_MINOR_VERSION);
+	printf("  Program  - v%s\n", REVSH_VERSION);
+	printf("  Protocol - v%d.%d\n", PROTOCOL_MAJOR_VERSION, PROTOCOL_MINOR_VERSION);
 
 	exit(0);
 }
