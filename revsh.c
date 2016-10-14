@@ -48,8 +48,6 @@
 		This also dovetails nicely into abstracting the operator's main tty out of the
 		flow, so it can be replaced with a more full featured implementation.
 	
-	- Fill out examples in docs.
-	- Fill out TUN/TAP howto. 
 	- Add tun/tap support for FreeBSD.
 
 	 XXX */
@@ -125,6 +123,7 @@ void usage(int ret_code){
 	fprintf(out_stream, "\t\t\tThe -b flag must be invoked on both ends.\n");
 	fprintf(out_stream, "\t-n\t\tNon-interactive netcat style data broker.\t(Default is interactive w/remote tty.)\n\t\t\tNo tty. Useful for copying files.\n");
 	fprintf(out_stream, "\t-v\t\tVerbose. -vv and -vvv increase verbosity.\n");
+	fprintf(out_stream, "\t-V\t\tPrint the program and protocol versions.\n");
 	fprintf(out_stream, "\t-h\t\tPrint this help.\n");
 	fprintf(out_stream, "\t-e\t\tPrint out some usage examples.\n");
 
@@ -189,6 +188,15 @@ void examples(int ret_code){
 	fprintf(out_stream, "\n\n");
 
 	exit(ret_code);
+}
+
+void print_versions(){
+
+	printf("%s Versions\n", program_invocation_short_name);
+	printf("  Program  - %s\n", REVSH_VERSION);
+	printf("  Protocol - %d.%d\n", PROTOCOL_MAJOR_VERSION, PROTOCOL_MINOR_VERSION);
+
+	exit(0);
 }
 
 
@@ -313,7 +321,7 @@ int main(int argc, char **argv){
 	}
 
 	/* Grab the configuration from the command line. */
-	while((opt = getopt(argc, argv, "hepbkalcxs:d:f:L:R:D:B:r:F:t:nv")) != -1){
+	while((opt = getopt(argc, argv, "hepbkalcxs:d:f:L:R:D:B:r:F:t:nvV")) != -1){
 		switch(opt){
 
 			case 'h':
@@ -426,6 +434,10 @@ int main(int argc, char **argv){
 
 			case 'v':
 				verbose++;
+				break;
+
+			case 'V':
+				print_versions();
 				break;
 
 			default:
