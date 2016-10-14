@@ -172,7 +172,7 @@ Note: the remote_read_*() and remote_write_*() functions are called through
 
 # Escape Sequence Processing
 
-- escape.c
+- escseq.c
 	-- escape_check()
 		--- This is the primary function for processing escape sequences from the
 		    tty. It is semi-recursive in order to handle potential escape sequences
