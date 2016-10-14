@@ -192,9 +192,18 @@ void examples(int ret_code){
 
 void print_versions(){
 
+	printf("\n");
 	printf("%s Versions\n", program_invocation_short_name);
 	printf("  Program  - v%s\n", REVSH_VERSION);
 	printf("  Protocol - v%d.%d\n", PROTOCOL_MAJOR_VERSION, PROTOCOL_MINOR_VERSION);
+#ifdef GENERIC_BUILD
+	printf("\n");
+	printf("\tThis is the GENERIC_BUILD of revsh, which defaults to Anonymous Diffie-Hellman encryption.\n");
+	printf("\tIn order to enable Ephemeral Diffie-Hellman (with Perfect Forward Secrecy) you will need to\n");
+	printf("\tbuild your own copy from source and manage your own keys.\n");
+	printf("\tThe source is available at: https://github.com/emptymonkey/revsh\n");
+	printf("\n");
+#endif
 
 	exit(0);
 }
