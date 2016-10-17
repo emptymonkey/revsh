@@ -79,7 +79,8 @@ int negotiate_protocol(){
 	io->target_proto_minor = ntohs(tmp_ushort);
 
 	if(io->control_proto_major != io->target_proto_major || io->control_proto_minor != io->target_proto_minor){
-		report_error("Protocol mismatch: control v%d.%d != target v%d.%d: Continuing...");
+		report_error("Protocol mismatch: control v%d.%d != target v%d.%d: Continuing...", \
+				io->control_proto_major, io->control_proto_minor, io->target_proto_major, io->target_proto_minor);
 	}
 
 	/* Send our desired message size. */
