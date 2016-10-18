@@ -25,12 +25,21 @@ MAN_DIR = /usr/local/share/man/man1/
 #KEY_OF_C = in_the_key_of_c
 #IO_DEP = io_ssl.c
 
-## Linux w/static libraries.
-CFLAGS = -static -Wall -Wextra -std=c99 -pedantic -Os -DOPENSSL
-LIBS = -lssl -lcrypto -ldl -lz
+## Linux w/OpenSSL built-in. (Partial static build.)
+# The location of the files in STATIC_LIBS by vary. Check your system.
+CFLAGS = -Wall -Wextra -std=c99 -pedantic -Os -DOPENSSL
+STATIC_LIBS = /usr/lib/x86_64-linux-gnu/libssl.a /usr/lib/x86_64-linux-gnu/libcrypto.a
+LIBS = -ldl
 KEYS_DIR = keys
 KEY_OF_C = in_the_key_of_c
 IO_DEP = io_ssl.c
+
+## Linux w/static libraries.
+#CFLAGS = -static -Wall -Wextra -std=c99 -pedantic -Os -DOPENSSL
+#LIBS = -lssl -lcrypto -ldl -lz
+#KEYS_DIR = keys
+#KEY_OF_C = in_the_key_of_c
+#IO_DEP = io_ssl.c
 
 ## Linux w/compatability mode. (No OpenSSL.)
 #CFLAGS = -Wall -Wextra -std=c99 -pedantic -Os
@@ -62,7 +71,7 @@ OBJS = string_to_vector.o io.o report.o control.o target.o handler.o broker.o me
 all: revsh
 
 revsh: revsh.c helper_objects.h common.h config.h $(KEY_OF_C) $(KEYS_DIR) $(OBJS)
-	$(CC) $(CFLAGS) $(OBJS) -o revsh revsh.c $(LIBS)
+	$(CC) $(CFLAGS) $(OBJS) -o revsh revsh.c $(STATIC_LIBS) $(LIBS)
 	$(STRIP) ./revsh
 	@/bin/echo
 	@/bin/echo "Build succesful. Enjoy!";
@@ -124,7 +133,7 @@ escape.o: escseq.c common.h config.h helper_objects.h
 
 in_the_key_of_c: in_the_key_of_c.c
 	@/bin/echo
-	$(CC) $(CFLAGS) -o in_the_key_of_c in_the_key_of_c.c $(LIBS)
+	$(CC) $(CFLAGS) -o in_the_key_of_c in_the_key_of_c.c $(STATIC_LIBS) $(LIBS)
 
 install:
 	if [ ! -e $(HOME)/.revsh ]; then \
