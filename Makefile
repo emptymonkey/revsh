@@ -11,11 +11,17 @@ CC = /usr/bin/cc
 STRIP = /usr/bin/strip
 
 BIN_DIR = /usr/local/bin
-MAN_DIR = /usr/local/share/man/man1/
+MAN_DIR = /usr/share/man/man1/
 
 
 ########################################################################################################################
 # Build specifications. Pick one and uncomment.
+#
+# Note:
+#   If you are building a generic binary for broad distribution (e.g. ships with the OS) then you will want to add 
+#   the "-DGENERIC_BUILD" flag to the CFLAGS entry you choose below. This will default the binary to an Anonymous
+#   Diffie-Hellman build.
+#
 ########################################################################################################################
 
 ## Linux
@@ -27,19 +33,19 @@ MAN_DIR = /usr/local/share/man/man1/
 
 ## Linux w/OpenSSL built-in. (Partial static build.)
 # The location of the files in STATIC_LIBS by vary. Check your system.
-CFLAGS = -Wall -Wextra -std=c99 -pedantic -Os -DOPENSSL
-STATIC_LIBS = /usr/lib/x86_64-linux-gnu/libssl.a /usr/lib/x86_64-linux-gnu/libcrypto.a
-LIBS = -ldl
-KEYS_DIR = keys
-KEY_OF_C = in_the_key_of_c
-IO_DEP = io_ssl.c
-
-## Linux w/static libraries.
-#CFLAGS = -static -Wall -Wextra -std=c99 -pedantic -Os -DOPENSSL
-#LIBS = -lssl -lcrypto -ldl -lz
+#CFLAGS = -Wall -Wextra -std=c99 -pedantic -Os -DOPENSSL
+#STATIC_LIBS = /usr/lib/x86_64-linux-gnu/libssl.a /usr/lib/x86_64-linux-gnu/libcrypto.a
+#LIBS = -ldl
 #KEYS_DIR = keys
 #KEY_OF_C = in_the_key_of_c
 #IO_DEP = io_ssl.c
+
+## Linux w/static libraries. (Full static build.)
+CFLAGS = -static -Wall -Wextra -std=c99 -pedantic -Os -DOPENSSL
+LIBS = -lssl -lcrypto -ldl -lz
+KEYS_DIR = keys
+KEY_OF_C = in_the_key_of_c
+IO_DEP = io_ssl.c
 
 ## Linux w/compatability mode. (No OpenSSL.)
 #CFLAGS = -Wall -Wextra -std=c99 -pedantic -Os
@@ -55,10 +61,6 @@ IO_DEP = io_ssl.c
 #KEYS_DIR = keys
 #KEY_OF_C = in_the_key_of_c
 #IO_DEP = io_ssl.c
-
-
-# Note: if you are building a generic build for distribution more broadly and without any cert management, you 
-# will want to add "-DGENERIC_BUILD" to the above CFLAGS entry you choose.
 
 
 ########################################################################################################################
@@ -160,10 +162,10 @@ install:
 
 # "make dirty" deletes executables and object files.
 dirty:
-	rm revsh $(OBJS) $(KEY_OF_C) 
+	rm -f revsh $(OBJS) $(KEY_OF_C) 
 
 # "make clean" calls "make dirty", then also removes the keys folder.
 clean: dirty
 	if [ -n "$(KEYS_DIR)" ] && [ -e "$(KEYS_DIR)" ]; then \
-		rm -r $(KEYS_DIR) ; \
+		rm -rf $(KEYS_DIR) ; \
 	fi

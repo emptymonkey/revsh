@@ -29,7 +29,7 @@ There are many documents online that break down a cyber attack into various stag
 6. *...wash, rinse, repeat on your way to the actual target...*
 7. Data exfiltration, modification, or destruction.
 
-These lists, while generally intended as overviews, always leave me feeling as though the structure of the process involved in "Initial Compromise" (step #3) is often taken for granted. The purpose of this document is to address that gap by codifying some structure around the process involved during initial compromise. I refer to this as the ***Beachhead Landing Process***. In this document I will outline and describe each stage of this process. While this document may be written with a Linux server in mind as the target, this process is the same for other operating systems, albeit by leveraging different tools. 
+These lists, while generally intended as overviews, always leave me feeling as though the structure of the process involved in "Initial Compromise" (step #3) is taken for granted. The purpose of this document is to address that gap by codifying some structure around the process involved during initial compromise. I refer to this as the ***Beachhead Landing Process***. In this document I will outline and describe each stage of this process. While this document may be written with a Linux server in mind as the target, this process is the same for other operating systems, albeit by leveraging different tools. 
 
 It should be noted that the stages outlined below are meant as an enumeration of all possible steps in this process. A specific engagement may not have (or need) all of these stages. For example, when faced with a web application with command injection running as root, the operator will be able to skip from stage 1 all the way to stage 6 in one maneuver. In general though, most of the stages listed below will come into play in some form.
 
@@ -69,7 +69,7 @@ It should be noted that there are many other ways to establish a reverse shell w
 *Vector: revsh*<br>
 *Privilege: Non-privileged User*
 
-The operator will now Leverage the netcat shell established in stage 3 to download and launch revsh. Beyond a basic shell, there will now be a full terminal for the operator to take advantage of. System interaction will feel more normal at this point with keybindings such as Ctrl-c doing the appropriate thing and several tty aware userland tools becoming available.
+The operator will now leverage the netcat shell established in stage 3 to download and launch revsh. Beyond a basic shell, there will now be a full terminal for the operator to take advantage of. System interaction will feel more normal at this point with keybindings such as Ctrl-c doing the appropriate thing and several tty aware userland tools becoming available.
 
 In this stage, even as a non-privileged user, revsh allows for point-to-point passthrough network proxies, as well as dynamic socks proxy tunnels. This enables the operator to perform a "behind the host firewall" style attack, run burpsuite through the socks proxy, and use most of the other system tools on Kali by way of proxychains. If privilege escalation is determined to be too risky (for reasons of either system stability or covertness of action) the operator can stop here and still have a fully functioning beachhead within the target environment.
 
