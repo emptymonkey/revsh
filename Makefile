@@ -141,11 +141,13 @@ install:
 	if [ ! -e $(HOME)/.revsh ]; then \
 		mkdir $(HOME)/.revsh ; \
 	fi
-	if [ -e $(HOME)/.revsh/$(KEYS_DIR) ]; then \
+	if [ $(KEYS_DIR) ] && [ -e $(HOME)/.revsh/$(KEYS_DIR) ]; then \
 		echo "\nERROR: $(HOME)/.revsh/$(KEYS_DIR) already exists! Move it safely out of the way then try again, please." ; \
 	else \
-		cp -r $(KEYS_DIR) $(HOME)/.revsh ; \
-		cp revsh $(HOME)/.revsh/$(KEYS_DIR) ; \
+		if [ $(KEYS_DIR) ]; then \
+			cp -r $(KEYS_DIR) $(HOME)/.revsh ; \
+			cp revsh $(HOME)/.revsh/$(KEYS_DIR) ; \
+		fi ; \
 		if [ ! -e $(BIN_DIR) ]; then \
 			echo "\nERROR: $(BIN_DIR) does not exist!" ; \
 		fi ; \
