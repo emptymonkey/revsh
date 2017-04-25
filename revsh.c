@@ -494,7 +494,9 @@ int main(int argc, char **argv){
 	if((tmp_ptr = strchr(config->ip_addr, ':')) == NULL){
 
 		// +1 for ':' character.
-		tmp_size = strlen(config->ip_addr) + 1 + PORT_STRING_LEN;	
+		// +1 for '\0' terminator.
+		tmp_size = strlen(config->ip_addr) + 1 + PORT_STRING_LEN + 1;	
+
 		// free() not called. One time allocation core to the process state. No way to change after initialization.
 		if((tmp_ptr = (char *) calloc(tmp_size + 1, sizeof(char))) == NULL){
 			report_error("main(): calloc(%d, %d): %s", tmp_size + PORT_STRING_LEN + 1, (int) sizeof(char), strerror(errno));
