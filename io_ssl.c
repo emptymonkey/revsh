@@ -923,72 +923,72 @@ int init_io_target(){
 			}
 		}
 
-		do{
+		if(verbose){
+			printf("Listening on %s...", config->ip_addr);
+			fflush(stdout);
+		}
 
-			if(verbose){
-				printf("Listening on %s...", config->ip_addr);
-				fflush(stdout);
-			}
-
-			if(accept){
-				BIO_free(accept);
-				alarm(config->timeout);
-			}
-
-			if((accept = BIO_new_accept(config->ip_addr)) == NULL){
-				report_error("init_io_target(): BIO_new_accept(%s): %s", config->ip_addr, strerror(errno));
-				if(verbose){
-					ERR_print_errors_fp(stderr);
-				}
-				return(-1);
-			}
-
-			if(BIO_set_bind_mode(accept, BIO_BIND_REUSEADDR) <= 0){
-				report_error("nit_io_target(): BIO_set_bind_mode(%lx, BIO_BIND_REUSEADDR): %s", (unsigned long) accept, strerror(errno));
-				if(verbose){
-					ERR_print_errors_fp(stderr);
-				}
-				return(-1);
-			}
-
-			if(BIO_do_accept(accept) <= 0){
-				report_error("init_io_target(): BIO_do_accept(%lx): %s", (unsigned long) accept, strerror(errno));
-				if(verbose){
-					ERR_print_errors_fp(stderr);
-				}
-				return(-1);
-			}
-
-			if(BIO_do_accept(accept) <= 0){
-				report_error("init_io_target(): BIO_do_accept(%lx): %s", (unsigned long) accept, strerror(errno));
-				if(verbose){
-					ERR_print_errors_fp(stderr);
-				}
-				return(-1);
-			}
-
-			if((io->connect = BIO_pop(accept)) == NULL){
-				report_error("init_io_target(): BIO_pop(%lx): %s", (unsigned long) accept, strerror(errno));
-				if(verbose){
-					ERR_print_errors_fp(stderr);
-				}
-				return(-1);
-			}
-
+		if(accept){
 			BIO_free(accept);
+			alarm(config->timeout);
+		}
 
-			retval = 0;
-			if(config->keepalive){
-				if((retval = fork()) == -1){
-					report_error("init_io_target(): fork(): %s", strerror(errno));
-					if(verbose){
-						ERR_print_errors_fp(stderr);
-					}
-					return(-1);
+		if((accept = BIO_new_accept(config->ip_addr)) == NULL){
+			report_error("init_io_target(): BIO_new_accept(%s): %s", config->ip_addr, strerror(errno));
+			if(verbose){
+				ERR_print_errors_fp(stderr);
+			}
+			return(-1);
+		}
+
+		if(BIO_set_bind_mode(accept, BIO_BIND_REUSEADDR) <= 0){
+			report_error("nit_io_target(): BIO_set_bind_mode(%lx, BIO_BIND_REUSEADDR): %s", (unsigned long) accept, strerror(errno));
+			if(verbose){
+				ERR_print_errors_fp(stderr);
+			}
+			return(-1);
+		}
+
+		if(BIO_do_accept(accept) <= 0){
+			report_error("init_io_target(): BIO_do_accept(%lx): %s", (unsigned long) accept, strerror(errno));
+			if(verbose){
+				ERR_print_errors_fp(stderr);
+			}
+			return(-1);
+		}
+
+		if(BIO_do_accept(accept) <= 0){
+			report_error("init_io_target(): BIO_do_accept(%lx): %s", (unsigned long) accept, strerror(errno));
+			if(verbose){
+				ERR_print_errors_fp(stderr);
+			}
+			return(-1);
+		}
+
+		if((io->connect = BIO_pop(accept)) == NULL){
+			report_error("init_io_target(): BIO_pop(%lx): %s", (unsigned long) accept, strerror(errno));
+			if(verbose){
+				ERR_print_errors_fp(stderr);
+			}
+			return(-1);
+		}
+
+		BIO_free(accept);
+
+		retval = 0;
+		if(config->keepalive){
+			if((retval = fork()) == -1){
+				report_error("init_io_target(): fork(): %s", strerror(errno));
+				if(verbose){
+					ERR_print_errors_fp(stderr);
 				}
+				return(-1);
 			}
 
-		} while(config->keepalive && retval);
+			if(retval){
+				return(-2);
+			}
+		}
 
 		if(config->keepalive){
 			if(signal(SIGCHLD, SIG_DFL) == SIG_ERR){

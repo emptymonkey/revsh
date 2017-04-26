@@ -41,9 +41,14 @@ int do_target(){
 	/* Initialize the structures we will be using. */
 
 	/* Set up the network layer. */
-	if(init_io_target(config) == -1){
+	if((retval = init_io_target(config)) == -1){
 		report_error("do_target(): init_io_connect(%lx): %s", (unsigned long) config, strerror(errno));
 		return(-1);
+	}
+
+	// retval == -2  means target in keepalive mode (bindshell?) and parent is returning to handle another connection.	
+	if(retval == -2){
+		return(-2);
 	}
 
 	/* Set up the messaging layer. */
