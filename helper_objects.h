@@ -231,14 +231,12 @@ struct io_helper {
 	struct connection_node *connection_tail;
 
 	// Used to track number of open fds. Select can't handle more than 1024.
-	// XXX audit this. 
 	unsigned int fd_count;
 
 	// Used to handle escape character ('~') interactions.
 	unsigned int escape_state;
 	unsigned int escape_depth;
-	// XXX Replace use of the message buffer with new buffer.
-	// XXX Don't forget to differentiate the cases from control and target. Only work target.
+
 	char *local_in_buffer;
 	int local_in_count;
 
