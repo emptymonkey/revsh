@@ -61,7 +61,7 @@ int remote_read_plaintext(void *buff, size_t count){
 
 		}else if(retval == -1){
 			if(!(errno == EINTR  || errno == EAGAIN)){
-				report_error("%s: %d: BIO_read(%lx, %lx, %d): %s", (unsigned long) io->connect, (unsigned long) &tmp_ptr, (int) count, strerror(errno));
+				report_error("remote_read_plaintext(): BIO_read(%lx, %lx, %d): %s", (unsigned long) io->connect, (unsigned long) &tmp_ptr, (int) count, strerror(errno));
 				return(-1);
 			}
 
@@ -618,15 +618,7 @@ int init_io_control(){
 		}
 
 		if(BIO_do_accept(accept) <= 0){
-			report_error("%s: %d: BIO_do_accept(%lx): %s", (unsigned long) accept, strerror(errno));
-			if(verbose){
-				ERR_print_errors_fp(stderr);
-			}
-			return(-1);
-		}
-
-		if(BIO_do_accept(accept) <= 0){
-			report_error("%s: %d: BIO_do_accept(%lx): %s", (unsigned long) accept, strerror(errno));
+			report_error("init_io_control(): BIO_do_accept(%lx): %s", (unsigned long) accept, strerror(errno));
 			if(verbose){
 				ERR_print_errors_fp(stderr);
 			}
@@ -647,7 +639,7 @@ int init_io_control(){
 	act.sa_handler = SIG_DFL;
 
 	if(sigaction(SIGALRM, &act, NULL) == -1){
-		report_error("%s: %d: sigaction(%d, %lx, %p): %s", SIGALRM, (unsigned long) &act, NULL, strerror(errno));
+		report_error("init_io_control(): sigaction(%d, %lx, %p): %s", SIGALRM, (unsigned long) &act, NULL, strerror(errno));
 		return(-1);
 	}
 
@@ -1072,7 +1064,7 @@ int init_io_target(){
 	if(config->encryption > PLAINTEXT){
 
 		if(!(io->ssl = SSL_new(io->ctx))){
-			report_error("%s: %d: SSL_new(%lx): %s", (unsigned long) io->ctx, strerror(errno));
+			report_error("init_io_target(): SSL_new(%lx): %s", (unsigned long) io->ctx, strerror(errno));
 			if(verbose){
 				ERR_print_errors_fp(stderr);
 			}

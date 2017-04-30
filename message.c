@@ -73,7 +73,7 @@ int message_push(){
 
 		tmp_short = htons(message->header_origin);
 		if(io->remote_write(&tmp_short, sizeof(tmp_short)) == -1){
-			report_error("%s: %d: remote_write(%lx, %d): %s", \
+			report_error("message_push(): remote_write(%lx, %d): %s", \
 					(unsigned long) &tmp_short, (int) sizeof(tmp_short), strerror(errno));
 			return(-1);
 		}
