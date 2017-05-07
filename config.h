@@ -7,7 +7,6 @@
 
 // Default address of the command and control listener. Nice to have when
 // Nice to have baked in when you can't hand args or switches to the target at launch.
-//#define CONTROL_ADDRESS "localtest.me"
 #define CONTROL_ADDRESS "0.0.0.0"
 #define CONTROL_PORT "2200"
 
