@@ -55,7 +55,8 @@ IO_DEP = io_ssl.c
 #IO_DEP = io_nossl.c
 
 ## FreeBSD
-## Don't forget to change MAN_DIR above.
+## Remember: 
+##  - You'll want to change MAN_DIR variable above.
 #CFLAGS = -Wall -Wextra -std=c99 -pedantic -Os -DFREEBSD -DOPENSSL
 #LIBS = -lssl -lcrypto
 #KEYS_DIR = keys
