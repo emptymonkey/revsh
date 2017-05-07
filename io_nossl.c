@@ -223,8 +223,6 @@ int init_io_control(){
 		return(-1);
 	}
 
-	alarm(config->timeout);
-
 	if(verbose){
 		printf("Listening on %s...", config->ip_addr);
 		fflush(stdout);
@@ -251,15 +249,6 @@ int init_io_control(){
 		report_error("init_io_control(): close(%d): %s", tmp_sock, strerror(errno));
 		return(-1);
 	}
-
-	act.sa_handler = SIG_DFL;
-
-	if(sigaction(SIGALRM, &act, NULL) == -1){
-		report_error("init_io_control(): sigaction(%d, %lx, %p): %s", SIGALRM, (unsigned long) &act, NULL, strerror(errno));
-		return(-1);
-	}
-
-	alarm(0);
 
 	len = sizeof addr;
 	if(getpeername(io->remote_fd, (struct sockaddr*) &addr, &len) == -1){
@@ -307,10 +296,6 @@ int init_io_target(){
 	int tmp_sock;
 
 	struct sigaction act;
-
-	unsigned long tmp_ulong;
-	unsigned int retry;
-	struct timespec req;
 
 
 	/* In the no ssl build, there is no difference between a target in bindshell mode, and the control node for networking. */
@@ -371,33 +356,20 @@ int init_io_target(){
 		fflush(stdout);
 	}
 
-	while((retval = connect(tmp_sock, (struct sockaddr *) &name, sizeof(name))) && config->retry_start){
+	while((retval = connect(tmp_sock, (struct sockaddr *) &name, sizeof(name)))){
 
-		if(retval == -1 && !(errno == ECONNREFUSED || errno == ETIMEDOUT)){
+		if(retval == -1){
 			report_error("init_io_target(): connect(%d, %lx, %d): %s", io->remote_fd, (unsigned long) &name, (int) sizeof(name), strerror(errno));
+			if((errno == ECONNREFUSED || errno == ETIMEDOUT)){
+				return(-2);
+			}
 			return(-1);
 		}
-
-		if(config->retry_stop){
-			tmp_ulong = rand();
-			retry = config->retry_start + (tmp_ulong % (config->retry_stop - config->retry_start));
-		}else{
-			retry = config->retry_start;
-		}
-
-		if(verbose){
-			printf("No connection.\nRetrying in %d seconds...\n", retry);
-		}
-
-		req.tv_sec = retry;
-		req.tv_nsec = 0;
-		nanosleep(&req, NULL);
 
 		if(verbose){
 			printf("Connecting to %s...", config->ip_addr);
 			fflush(stdout);
 		}
-
 	}
 
 	io->remote_fd = tmp_sock;

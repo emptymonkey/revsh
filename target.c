@@ -46,8 +46,10 @@ int do_target(){
 		return(-1);
 	}
 
-	// retval == -2  means target in keepalive mode (bindshell?) and parent is returning to handle another connection.	
+	// retval == -2  means target in keepalive mode with and we should return to handle another connection.	
+	// This can be the parent from bindshell + keepalive mode, or keepalive mode with a failed connection.
 	if(retval == -2){
+		io->init_complete = 1;
 		return(-2);
 	}
 
@@ -257,26 +259,25 @@ int do_target(){
 
 	remote_printf("################################################################################\r\n");
 
+/*
+	if(close(STDIN_FILENO) == -1){
+		report_error("do_target(): close(STDIN_FILENO): %s", strerror(errno));
+		return(-1);
+	}
 
-	if(!io->orig_fds_closed){
-		if(close(STDIN_FILENO) == -1){
-			report_error("do_target(): close(STDIN_FILENO): %s", strerror(errno));
-			return(-1);
-		}
-
+	if(!verbose){
 		if(close(STDOUT_FILENO) == -1){
 			report_error("do_target(): close(STDOUT_FILENO): %s", strerror(errno));
 			return(-1);
 		}
 
-		if(!verbose){
-			if(close(STDERR_FILENO) == -1){
-				report_error("do_target(): close(STDERR_FILENO): %s", strerror(errno));
-				return(-1);
-			}
+		if(close(STDERR_FILENO) == -1){
+			report_error("do_target(): close(STDERR_FILENO): %s", strerror(errno));
+			return(-1);
 		}
-		io->orig_fds_closed = 1;
 	}
+*/
+
 
 	/*  - Fork a child to run the shell. */
 	retval = fork();
@@ -291,6 +292,7 @@ int do_target(){
 		io->child_sid = retval;
 		if(shell){
 			free(shell);
+			shell = NULL;
 		}
 		free_vector(exec_envp);
 
@@ -341,6 +343,28 @@ int do_target(){
 		report_error("do_target(): close(%d): %s", pty_master, strerror(errno));
 		return(-1);
 	}
+
+
+	if(close(io->remote_fd) == -1){
+		report_error("do_target(): close(%d): %s", io->remote_fd, strerror(errno));
+		return(-1);
+	}
+
+	// We are trying to set up the pty_slave to be stdin, stdout, and stderr before exec()ing
+	// so everything looks normal to bash. Unfortunately, pty_slave has ended up as one of
+	// the STDIN_FILENO, STDOUT_FILENO, or STDERR_FILENO values by chance.. 
+	// Set it to STDERR_FILENO + 1 to clear the way for the following dup2()s.
+	if(pty_slave < STDERR_FILENO + 1){
+		
+		if(dup2(pty_slave, STDERR_FILENO + 1) == -1){
+			report_error("do_target(): dup2(%d, STDERR_FILENO + 1): %s", pty_slave, strerror(errno));
+			return(-1);
+		}
+
+		close(pty_slave);
+		pty_slave = STDERR_FILENO + 1;
+	}
+
 	if(dup2(pty_slave, STDIN_FILENO) == -1){
 		report_error("do_target(): dup2(%d, STDIN_FILENO): %s", pty_slave, strerror(errno));
 		return(-1);
@@ -356,15 +380,11 @@ int do_target(){
 		return(-1);
 	}
 
-	if(close(io->remote_fd) == -1){
-		report_error("do_target(): close(%d): %s", io->remote_fd, strerror(errno));
-		return(-1);
-	}
-
 	if(close(pty_slave) == -1){
 		report_error("do_target(): close(%d): %s", pty_slave, strerror(errno));
 		return(-1);
 	}
+
 
 	if(setsid() == -1){
 		report_error("do_target(): setsid(): %s", strerror(errno));

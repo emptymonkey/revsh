@@ -32,20 +32,20 @@ MAN_DIR = /usr/share/man/man1/
 #IO_DEP = io_ssl.c
 
 ## Linux w/OpenSSL built-in. (Partial static build.)
-# The location of the files in STATIC_LIBS by vary. Check your system.
-#CFLAGS = -Wall -Wextra -std=c99 -pedantic -Os -DOPENSSL
-#STATIC_LIBS = /usr/lib/x86_64-linux-gnu/libssl.a /usr/lib/x86_64-linux-gnu/libcrypto.a
-#LIBS = -ldl
-#KEYS_DIR = keys
-#KEY_OF_C = in_the_key_of_c
-#IO_DEP = io_ssl.c
-
-## Linux w/static libraries. (Full static build.)
-CFLAGS = -static -Wall -Wextra -std=c99 -pedantic -Os -DOPENSSL
-LIBS = -lssl -lcrypto -ldl -lz
+# The location of the files in STATIC_LIBS may vary. Check your system.
+CFLAGS = -Wall -Wextra -std=c99 -pedantic -Os -DOPENSSL
+STATIC_LIBS = /usr/lib/x86_64-linux-gnu/libssl.a /usr/lib/x86_64-linux-gnu/libcrypto.a
+LIBS = -ldl
 KEYS_DIR = keys
 KEY_OF_C = in_the_key_of_c
 IO_DEP = io_ssl.c
+
+## Linux w/static libraries. (Full static build.)
+#CFLAGS = -static -Wall -Wextra -std=c99 -pedantic -Os -DOPENSSL
+#LIBS = -lssl -lcrypto -ldl -lz
+#KEYS_DIR = keys
+#KEY_OF_C = in_the_key_of_c
+#IO_DEP = io_ssl.c
 
 ## Linux w/compatability mode. (No OpenSSL.)
 #CFLAGS = -Wall -Wextra -std=c99 -pedantic -Os

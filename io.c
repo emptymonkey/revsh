@@ -127,5 +127,8 @@ int negotiate_protocol(){
  * 
  **********************************************************************************************************************/
 void seppuku(int signal){
+	if(verbose){
+		report_error("sepuku(): Timeout reached. exiting.\n");
+	}
 	exit(-signal);
 }

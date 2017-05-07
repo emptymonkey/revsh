@@ -173,9 +173,6 @@ struct io_helper {
 	int (*remote_read)(void *buf, size_t count);
 	int (*remote_write)(void *buf, size_t count);
 
-	// In the keep alive model, we will want to skip the part where we close original fd that were closed last run.
-	int orig_fds_closed;
-
 	int local_in_fd;
 	int local_out_fd;
 	int remote_fd;

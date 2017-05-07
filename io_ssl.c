@@ -370,15 +370,8 @@ int remote_write_encrypted(void *buff, size_t count){
 int init_io_control(){
 
 	int i;
-	int retval;
 
 	wordexp_t keys_dir_exp;
-
-	struct sigaction act;
-
-	unsigned long tmp_ulong;
-	unsigned int retry;
-	struct timespec req;
 
 	BIO *accept = NULL;
 
@@ -530,17 +523,6 @@ int init_io_control(){
 		}
 	}
 
-	/* Seppuku if left alone too long. */
-	memset(&act, 0, sizeof(act));
-	act.sa_handler = seppuku;
-
-	if(sigaction(SIGALRM, &act, NULL) == -1){
-		report_error("init_io_control(): sigaction(%d, %lx, %p): %s", SIGALRM, (unsigned long) &act, NULL, strerror(errno));
-		return(-1);
-	}
-
-	alarm(config->timeout);
-
 	if(config->bindshell){
 
 		/*  - Open a network connection back to the target. */
@@ -558,36 +540,24 @@ int init_io_control(){
 		}
 		report_log("Controller: Connecting to %s.", config->ip_addr);
 
-		while(((retval = BIO_do_connect(io->connect)) != 1) && config->retry_start){
-
-			if(config->retry_stop){
-				tmp_ulong = rand();
-				retry = config->retry_start + (tmp_ulong % (config->retry_stop - config->retry_start));
-			}else{
-				retry = config->retry_start;
-			}
-
-			if(verbose){
-				printf("No connection.\nRetrying in %d seconds...\n", retry);
-			}
-			report_log("Controller: No connection. Retrying in %d seconds.", retry);
-
-			req.tv_sec = retry;
-			req.tv_nsec = 0;
-			nanosleep(&req, NULL);
-
-			if(verbose){
-				printf("Connecting to %s...", config->ip_addr);
-				fflush(stdout);
-			}
-			report_log("Controller: Connecting to %s.", config->ip_addr);
-		}
-
-		if(retval != 1){
+		if((BIO_do_connect(io->connect)) != 1){
 			report_error("init_io_control(): BIO_do_connect(%lx): %s", \
 					(unsigned long) io->connect, strerror(errno));
 			if(verbose){
 				ERR_print_errors_fp(stderr);
+			}
+
+			// if we are in keepalive mode, this case should not be fatal.
+			if(config->keepalive){
+				// But we do need to set remote_fd to something sane or else we leak a fd and erroniously close STDIN during cleaning.
+				if(BIO_get_fd(io->connect, &(io->remote_fd)) < 0){
+					report_error("init_io_control(): BIO_get_fd(%lx, %lx): %s", (unsigned long) io->connect, (unsigned long) &(io->remote_fd), strerror(errno));
+					if(verbose){
+						ERR_print_errors_fp(stderr);
+					}
+					return(-1);
+				}
+				return(-2);
 			}
 			return(-1);
 		}
@@ -625,6 +595,20 @@ int init_io_control(){
 			return(-1);
 		}
 
+		// I hate OpenSSL. Why do I need BIO_do_accept() twice?? Don't know. Doesn't work without it though.
+		/* Oh right, this thing:
+			 BIO_do_accept() serves two functions. When it is first called, after the accept BIO has been setup, it will attempt to
+			 create the accept socket and bind an address to it. Second and subsequent calls to BIO_do_accept() will await an incoming
+			 connection, or request a retry in non blocking mode.
+		 */
+		if(BIO_do_accept(accept) <= 0){
+			report_error("init_io_control(): BIO_do_accept(%lx): %s", (unsigned long) accept, strerror(errno));
+			if(verbose){
+				ERR_print_errors_fp(stderr);
+			}
+			return(-1);
+		}
+
 		if((io->connect = BIO_pop(accept)) == NULL){
 			report_error("init_io_control(): BIO_pop(%lx): %s", (unsigned long) accept, strerror(errno));
 			if(verbose){
@@ -635,15 +619,6 @@ int init_io_control(){
 
 		BIO_free(accept);
 	}
-
-	act.sa_handler = SIG_DFL;
-
-	if(sigaction(SIGALRM, &act, NULL) == -1){
-		report_error("init_io_control(): sigaction(%d, %lx, %p): %s", SIGALRM, (unsigned long) &act, NULL, strerror(errno));
-		return(-1);
-	}
-
-	alarm(0);
 
 	if(BIO_get_fd(io->connect, &(io->remote_fd)) < 0){
 		report_error("init_io_control(): BIO_get_fd(%lx, %lx): %s", (unsigned long) io->connect, (unsigned long) &(io->remote_fd), strerror(errno));
@@ -803,14 +778,9 @@ int init_io_control(){
 int init_io_target(){
 
 	int i;
-	int retval;
+	int child_pid = 0;
 
 	struct sigaction act;
-
-	unsigned int tmp_ulong;
-	unsigned int retry;
-	struct timespec req;
-
 
 #include "keys/target_key.c"
 	int target_key_len = sizeof(target_key);
@@ -894,6 +864,7 @@ int init_io_target(){
 		}
 	}
 
+	/* Sepuku when left alone too long. */
 	memset(&act, 0, sizeof(act));
 	act.sa_handler = seppuku;
 
@@ -908,13 +879,6 @@ int init_io_target(){
 
 		/*  - Listen for a connection. */
 
-		if(config->keepalive){
-			if(signal(SIGCHLD, SIG_IGN) == SIG_ERR){
-				report_error("init_io_target(): signal(SIGCHLD, SIG_IGN): %s", strerror(errno));
-				return(-1);
-			}
-		}
-
 		if(verbose){
 			printf("Listening on %s...", config->ip_addr);
 			fflush(stdout);
@@ -922,7 +886,6 @@ int init_io_target(){
 
 		if(accept){
 			BIO_free(accept);
-			alarm(config->timeout);
 		}
 
 		if((accept = BIO_new_accept(config->ip_addr)) == NULL){
@@ -967,26 +930,12 @@ int init_io_target(){
 
 		BIO_free(accept);
 
-		retval = 0;
-		if(config->keepalive){
-			if((retval = fork()) == -1){
-				report_error("init_io_target(): fork(): %s", strerror(errno));
-				if(verbose){
-					ERR_print_errors_fp(stderr);
-				}
-				return(-1);
+		if((child_pid = fork()) == -1){
+			report_error("init_io_target(): fork(): %s", strerror(errno));
+			if(verbose){
+				ERR_print_errors_fp(stderr);
 			}
-
-			if(retval){
-				return(-2);
-			}
-		}
-
-		if(config->keepalive){
-			if(signal(SIGCHLD, SIG_DFL) == SIG_ERR){
-				report_error("init_io_target(): signal(SIGCHLD, SIG_IGN): %s", strerror(errno));
-				return(-1);
-			}
+			return(-1);
 		}
 
 	}else{
@@ -1005,41 +954,20 @@ int init_io_target(){
 			fflush(stdout);
 		}
 
-		while(((retval = BIO_do_connect(io->connect)) != 1) && config->retry_start){
-
-			/*  Using RAND_pseudo_bytes() instead of RAND_bytes() because this is a best effort. We don't */
-			/*  actually want to die or print an error if there is a lack of entropy. */
-			if(config->retry_stop){
-				RAND_pseudo_bytes((unsigned char *) &tmp_ulong, sizeof(tmp_ulong));
-				retry = config->retry_start + (tmp_ulong % (config->retry_stop - config->retry_start));
-			}else{
-				retry = config->retry_start;
-			}
-
-			if(verbose){
-				printf("No connection.\r\nRetrying in %d seconds...\r\n", retry);
-			}
-
-			req.tv_sec = retry;
-			req.tv_nsec = 0;
-			nanosleep(&req, NULL);
-
-			if(verbose){
-				printf("Connecting to %s...", config->ip_addr);
-				fflush(stdout);
-			}
-		}
-
-		if(retval != 1){
+		if((BIO_do_connect(io->connect)) != 1){
 			report_error("init_io_target(): BIO_do_connect(%lx): %s", (unsigned long) io->connect, strerror(errno));
 			if(verbose){
 				ERR_print_errors_fp(stderr);
+			}
+
+			// if we are in keepalive mode, this case should not be fatal.
+			if(config->keepalive){
+				return(-2);
 			}
 			return(-1);
 		}
 	}
 
-	/* Sepuku when left alone too long. */
 	act.sa_handler = SIG_DFL;
 
 	if(sigaction(SIGALRM, &act, NULL) == -1){
@@ -1048,6 +976,11 @@ int init_io_target(){
 	}
 
 	alarm(0);
+
+	// I am the parent. Return non-fatally so we can listen again.
+	if(child_pid){
+		return(-2);
+	}
 
 	if(verbose){
 		printf("\tConnected!\r\n");

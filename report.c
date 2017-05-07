@@ -61,7 +61,7 @@ void report_error(char *fmt, ...){
 					return;
 				}
 			}
-		}else{
+		}else if(message->data){
 
 			message->data_type = DT_ERROR;
 

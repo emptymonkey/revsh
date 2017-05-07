@@ -7,6 +7,7 @@
 
 // Default address of the command and control listener. Nice to have when
 // Nice to have baked in when you can't hand args or switches to the target at launch.
+//#define CONTROL_ADDRESS "localtest.me"
 #define CONTROL_ADDRESS "0.0.0.0"
 #define CONTROL_PORT "2200"
 
@@ -38,6 +39,7 @@
 #define RETRY "600,1200"
 
 //  Time to wait on a new connection before dying, in seconds.
+//  Set this to 0 if you don't ever want the target to timeout and kill itself due to inactivity.
 #define TIMEOUT 3600
 
 // Default locations of important things.
