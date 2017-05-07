@@ -146,16 +146,16 @@ install:
 	else \
 		if [ $(KEYS_DIR) ]; then \
 			cp -r $(KEYS_DIR) $(HOME)/.revsh ; \
-			cp revsh $(HOME)/.revsh/$(KEYS_DIR) ; \
+			cp -f revsh $(HOME)/.revsh/$(KEYS_DIR) ; \
 		fi ; \
 		if [ ! -e $(BIN_DIR) ]; then \
 			echo "\nERROR: $(BIN_DIR) does not exist!" ; \
 		fi ; \
-		cp revsh $(BIN_DIR) ; \
+		cp -f revsh $(BIN_DIR) ; \
 		if [ ! -e $(MAN_DIR) ]; then \
 			echo "\nERROR: $(MAN_DIR) does not exist!" ; \
 		fi ; \
-		cp Documentation/revsh.1 $(MAN_DIR) ; \
+		cp -f Documentation/revsh.1 $(MAN_DIR) ; \
 		gzip $(MAN_DIR)/revsh.1 ; \
 		if [ ! -e $(HOME)/.revsh/rc ]; then \
 			cp rc $(HOME)/.revsh/ ; \
@@ -171,3 +171,18 @@ clean: dirty
 	if [ -n "$(KEYS_DIR)" ] && [ -e "$(KEYS_DIR)" ]; then \
 		rm -rf $(KEYS_DIR) ; \
 	fi
+
+uninstall:
+	if [ -e $(HOME)/.revsh ]; then \
+		rm -rf $(HOME)/.revsh; \
+	fi
+	if [ -e $(BIN_DIR)/revsh ]; then \
+		rm -rf $(BIN_DIR)/revsh; \
+	fi
+	if [ -e $(MAN_DIR)/revsh.1 ]; then \
+		rm -rf $(MAN_DIR)/revsh.1; \
+	fi 
+	if [ -e $(MAN_DIR)/revsh.1.gz ]; then \
+		rm -rf $(MAN_DIR)/revsh.1.gz; \
+	fi 
+
