@@ -421,7 +421,11 @@ int init_io_control(){
 
 	if(config->encryption){
 
+#if	OPENSSL_VERSION_NUMBER < 0x10100000
 		if((io->ctx = SSL_CTX_new(TLSv1_server_method())) == NULL){
+#else
+		if((io->ctx = SSL_CTX_new(TLS_server_method())) == NULL){
+#endif
 			report_error("init_io_control(): SSL_CTX_new(TLSv1_server_method()): %s", strerror(errno));
 			if(verbose){
 				ERR_print_errors_fp(stderr);
@@ -809,7 +813,11 @@ int init_io_target(){
 	/*  - Setup SSL. */
 	if(config->encryption){
 
+#if	OPENSSL_VERSION_NUMBER < 0x10100000
 		if((io->ctx = SSL_CTX_new(TLSv1_client_method())) == NULL){
+#else
+		if((io->ctx = SSL_CTX_new(TLS_client_method())) == NULL){
+#endif
 			report_error("init_io_target(): SSL_CTX_new(TLSv1_client_method()): %s", strerror(errno));
 			if(verbose){
 				ERR_print_errors_fp(stderr);
@@ -1023,7 +1031,11 @@ int init_io_target(){
 		}
 
 		/* Check the certs. */
+#if	OPENSSL_VERSION_NUMBER < 0x10100000
 		if(!strcmp(current_cipher->name, EDH_CIPHER)){
+#else
+		if(!strcmp(SSL_CIPHER_get_name(current_cipher), EDH_CIPHER)){
+#endif
 
 			if((remote_cert = SSL_get_peer_certificate(io->ssl)) == NULL){
 				report_error("init_io_target(): SSL_get_peer_certificate(%lx): %s", (unsigned long) io->ssl, strerror(errno));
@@ -1082,12 +1094,12 @@ int init_io_target(){
  *  any errors.
  *
  **********************************************************************************************************************/
-int dummy_verify_callback(int preverify_ok, X509_STORE_CTX* ctx) {
+int dummy_verify_callback(int preverify_ok, X509_STORE_CTX *ctx){
 
-	/*  The point of a dummy function is that it's components won't be used.  */
-	/*  We will nop reference them however to silence the noise from the compiler. */
-	preverify_ok += 0;
-	ctx += 0;
+	// If statement is just to quiet the compiler. We only return 1, as promised.
+	if(preverify_ok || ctx){
+		return(1);
+	}
 
 	return(1);
 }
