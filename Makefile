@@ -25,20 +25,20 @@ MAN_DIR = /usr/share/man/man1/
 ########################################################################################################################
 
 ## Linux
-#CFLAGS = -Wall -Wextra -std=c99 -pedantic -Os -DOPENSSL
-#LIBS = -lssl -lcrypto
-#KEYS_DIR = keys
-#KEY_OF_C = in_the_key_of_c
-#IO_DEP = io_ssl.c
-
-## Linux w/OpenSSL built-in. (Partial static build.)
-# The location of the files in STATIC_LIBS may vary. Check your system.
 CFLAGS = -Wall -Wextra -std=c99 -pedantic -Os -DOPENSSL
-STATIC_LIBS = /usr/lib/x86_64-linux-gnu/libssl.a /usr/lib/x86_64-linux-gnu/libcrypto.a
-LIBS = -ldl
+LIBS = -lssl -lcrypto
 KEYS_DIR = keys
 KEY_OF_C = in_the_key_of_c
 IO_DEP = io_ssl.c
+
+## Linux w/OpenSSL built-in. (Partial static build.)
+# The location of the files in STATIC_LIBS may vary. Check your system.
+#CFLAGS = -Wall -Wextra -std=c99 -pedantic -Os -DOPENSSL
+#STATIC_LIBS = /usr/lib/x86_64-linux-gnu/libssl.a /usr/lib/x86_64-linux-gnu/libcrypto.a
+#LIBS = -ldl
+#KEYS_DIR = keys
+#KEY_OF_C = in_the_key_of_c
+#IO_DEP = io_ssl.c
 
 ## Linux w/static libraries. (Full static build.)
 #CFLAGS = -static -Wall -Wextra -std=c99 -pedantic -Os -DOPENSSL
@@ -85,7 +85,7 @@ keys:
 		mkdir $(KEYS_DIR) ; \
 	fi
 	if [ ! -e $(KEYS_DIR)/dh_params.c ]; then \
-    $(OPENSSL) dhparam -C $(KEY_BITS) -noout >$(KEYS_DIR)/dh_params.c ; \
+    $(OPENSSL) dhparam -noout -C $(KEY_BITS) >$(KEYS_DIR)/dh_params.c ; \
 		echo "DH *(*get_dh)() = &get_dh$(KEY_BITS);" >>$(KEYS_DIR)/dh_params.c ; \
   fi
 	if [ ! -e $(KEYS_DIR)/control_key.pem ]; then \
