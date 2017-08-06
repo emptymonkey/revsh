@@ -11,7 +11,7 @@ CC = /usr/bin/cc
 STRIP = /usr/bin/strip
 
 BIN_DIR = /usr/local/bin
-MAN_DIR = /usr/share/man/man1/
+MAN_DIR = /usr/share/man/man1
 
 
 ########################################################################################################################
@@ -63,6 +63,15 @@ IO_DEP = io_ssl.c
 #KEY_OF_C = in_the_key_of_c
 #IO_DEP = io_ssl.c
 
+## macOS w/Brewed OpenSSL
+## - OpenSSL installed with "brew install openssl"
+## - No need to change MAN_DIR but need sudo in "install" & "uninstall" sections for just cp or rm in /usr/share/man/
+#CFLAGS = -Wall -Wextra -std=c99 -pedantic -Os -DFREEBSD -DOPENSSL -I/usr/local/opt/openssl/include
+#LDFLAGS= -L/usr/local/opt/openssl/lib
+#LIBS = -lssl -lcrypto
+#KEYS_DIR = keys
+#KEY_OF_C = in_the_key_of_c
+#IO_DEP = io_ssl.c
 
 ########################################################################################################################
 # make directives - Not intended for modification.
@@ -162,6 +171,9 @@ install:
 			cp rc $(HOME)/.revsh/ ; \
 		fi \
 	fi
+
+# A PHONY call to install for macOS
+.PHONY: install
 
 # "make dirty" deletes executables and object files.
 dirty:

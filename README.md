@@ -114,6 +114,10 @@ _revsh_ was developed on x86_64 Linux. Here is a brief list of Arch / OS combina
 	vi rc              # Add your favorite startup commands to really customize the feel of your remote shell.
 	revsh -h
 
+## Compatability Note! ##
+
+_revsh_ was developed with OpenSSL 1.0.2. Kali linux now ships with OpenSSL 1.1.0. There are notable changes to the API. Currently _revsh_ will not build with OpenSSL 1.1.0. (See Issue \#10.) This is being worked on, but no timeline set for a fix. I may take the opportunity to move away from OpenSSL entirely. Sorry for the inconvienience.  
+
 ## Examples ##
 
 Control host example IP: 192.168.0.42
