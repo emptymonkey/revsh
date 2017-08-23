@@ -170,45 +170,27 @@ int handle_local_read(){
  ******************************************************************************/
 int handle_message_dt_tty(){
 
-	int retval;
-	struct message_helper *new_message, *tmp_message;
+	int retval, data_len;
+	char* data;
 
-
+	data_len = message->data_len;
+	data = message->data;
 	io->tty_io_read += message->data_len;
-
-	if(io->tty_write_head){
-		retval = 0;
-	} else {
-		retval = write(io->local_out_fd, message->data, message->data_len);
-	}
-
-	if(retval == -1){
-		if(errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK){
-			report_error("handle_message_dt_tty(): write(%d, %lx, %d): %s", io->local_out_fd, (unsigned long) message->data, message->data_len, strerror(errno));
-			return(-1);
-		}
-	}
-
-	if(retval != message->data_len){
-		new_message = message_helper_create(message->data + retval, message->data_len - retval, io->message_data_size);
-
-		if(!new_message){
-			report_error("handle_message_dt_tty(): message_helper_create(%lx, %d, %d): %s\n", \
-					(unsigned long) message->data + retval, message->data_len - retval, io->message_data_size, strerror(errno));
-			return(-1);
-		}
-
-		if(!io->tty_write_head){
-			io->tty_write_head = new_message;
-		}else{
-			tmp_message = io->tty_write_head;
-			while(tmp_message->next){
-				tmp_message = tmp_message->next;
+	while (data_len > 0){
+		retval = write(io->local_out_fd, data, data_len);
+		if (retval <= 0){
+			if (errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK){
+				report_error("handle_message_dt_tty(): write(%d, %lx, %d): %s", io->local_out_fd, (unsigned long) data, data_len, strerror(errno));
+				return(-1);
 			}
-			tmp_message->next = new_message;
+			else {
+				errno = 0;
+			}
+			continue;
 		}
+		data += retval;
+		data_len -= retval;
 	}
-
 	return(0);
 }
 
