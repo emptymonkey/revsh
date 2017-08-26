@@ -197,11 +197,11 @@ int init_io_control(){
 		return(-1);
 	}
 
-	free(ip_address);
-
 	memset(&name, 0, sizeof(name));
 	name.sin_family = AF_INET;
 	name.sin_port = htons(strtol(ip_port, NULL, 10));
+
+	free(ip_address);
 
 	if((tmp_sock = socket(AF_INET, SOCK_STREAM, 0)) == -1){
 		report_error("init_io_control(): socket(AF_INET, SOCK_STREAM, 0): %s", strerror(errno));
@@ -329,11 +329,11 @@ int init_io_target(){
 		return(-1);
 	}
 
-	free(ip_address);
-
 	memset(&name, 0, sizeof(name));
 	name.sin_family = AF_INET;
 	name.sin_port = htons(strtol(ip_port, NULL, 10));
+
+	free(ip_address);
 
 	if((tmp_sock = socket(AF_INET, SOCK_STREAM, 0)) == -1){
 		report_error("init_io_target(): socket(AF_INET, SOCK_STREAM, 0): %s", strerror(errno));
