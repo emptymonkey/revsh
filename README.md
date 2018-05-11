@@ -116,7 +116,12 @@ _revsh_ was developed on x86_64 Linux. Here is a brief list of Arch / OS combina
 
 ## Compatability Note! ##
 
-_revsh_ was developed with OpenSSL 1.0.2. Kali linux now ships with OpenSSL 1.1.0. There are notable changes to the API. Currently _revsh_ will not build with OpenSSL 1.1.0. (See Issue \#10.) This is being worked on, but no timeline set for a fix. I may take the opportunity to move away from OpenSSL entirely. Sorry for the inconvienience.  
+~~_revsh_ was developed with OpenSSL 1.0.2. Kali linux now ships with OpenSSL 1.1.0. There are notable changes to the API. Currently _revsh_ will not build with OpenSSL 1.1.0. (See Issue \#10.) This is being worked on, but no timeline set for a fix. I may take the opportunity to move away from OpenSSL entirely. Sorry for the inconvienience.~~
+
+Update! OpenSSL 1.1 works now, but it needs to be built from source for the moment. This is noted, and the Makefile update, in the "devel" branch. 
+
+	git checkout devel
+  
 
 ## Examples ##
 
