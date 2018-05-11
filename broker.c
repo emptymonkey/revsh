@@ -233,7 +233,7 @@ int broker(){
 		}
 
 		// Local tty / shell fd will have priority over all the other connections.
-		if(FD_ISSET(io->local_in_fd, &write_fds)){
+		if(FD_ISSET(io->local_out_fd, &write_fds)){
 
 			if((retval = handle_local_write()) == -1){
 				goto RETURN;
