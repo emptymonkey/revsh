@@ -1,5 +1,11 @@
 # revsh #
 
+## News ##
+
+XXX 
+
+## Information ##
+
 _revsh_ is a tool for establishing [reverse shells](http://en.wikipedia.org/wiki/Reverse_shell) with [terminal](http://en.wikipedia.org/wiki/Computer_terminal) support, reverse [VPNs](https://en.wikipedia.org/wiki/Virtual_private_network) for [advanced pivoting](https://en.wikipedia.org/wiki/Exploit_(computer_security)#Pivoting), as well as arbitrary data tunneling.
 
 **What is a "reverse shell"?**
@@ -104,15 +110,26 @@ _revsh_ was developed on x86_64 Linux. Here is a brief list of Arch / OS combina
 
 ## Installation ##
 
-	sudo apt-get install openssl libssl-dev     # Pre-req for building.
+First, build OpenSSL from source. (See NOTE below.)
+
+	git clone https://github.com/openssl/openssl.git
+	cd openssl/
+	./config no-shared  # If you are building full static binary, then add the -static flag here.
+	make && make test
+	cd ..
+
+Now build revsh.
+
 	git clone https://github.com/emptymonkey/revsh.git
 	cd revsh
 	vi config.h        # Set up new defaults that fit your situation.
+	vi Makefile        # By default, we build statically linked OpenSSL, but dynamic libc. You can change that here.
 	make               # This *can* take a very long time, though it usually doesn't.
 	make install
-	cd ~/.revsh
-	vi rc              # Add your favorite startup commands to really customize the feel of your remote shell.
+	vi ~/.revsh/rc     # Add your favorite startup commands to really customize the feel of your remote shell.
 	revsh -h
+
+NOTE: With the release of OpenSSL 1.1.0, OpenSSL needs to be built from source for use in a statically linked binary. Building a statically linked binary against the OpenSSL libraries that ship with most Linux distros (including Kali) will not work. (If you get it to build at all, it will SEGFAULT.) At some point in the future, when the recent fixes to OpenSSL 1.1 filter down to the distros, this step will replaced by the appropriate 'apt-get' command.
 
 ## Examples ##
 
