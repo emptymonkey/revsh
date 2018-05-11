@@ -460,7 +460,6 @@ int init_io_control(){
 
 		if(config->encryption == EDH){
 
-			// free() called in this function.
 			if((control_cert_path_head = (char *) calloc(PATH_MAX, sizeof(char))) == NULL){
 				report_error("init_io_control(): calloc(%d, %d): %s", PATH_MAX, (int) sizeof(char), strerror(errno));
 				return(-1);
@@ -476,7 +475,6 @@ int init_io_control(){
 				return(-1);
 			}
 
-			// free() called in this function.
 			if((control_key_path_head = (char *) calloc(PATH_MAX, sizeof(char))) == NULL){
 				report_error("init_io_control(): calloc(%d, %d): %s", PATH_MAX, (int) sizeof(char), strerror(errno));
 				return(-1);
@@ -670,7 +668,6 @@ int init_io_control(){
 
 		/* Check the certs. */
 		if(config->encryption == EDH){
-			// free() called in this function.
 			if((allowed_cert_path_head = (char *) calloc(PATH_MAX, sizeof(char))) == NULL){
 				report_error("init_io_control(): calloc(%d, %d): %s", PATH_MAX, (int) sizeof(char), strerror(errno));
 				return(-1);
@@ -1055,7 +1052,6 @@ int init_io_target(){
 				return(-1);
 			}
 
-			// free() called in this function.
 			if((remote_fingerprint_str = (char *) calloc(strlen(control_cert_fingerprint) + 1, sizeof(char))) == NULL){
 				report_error("init_io_target(): calloc(%d, %d): %s", (int) strlen(control_cert_fingerprint) + 1, (int) sizeof(char), strerror(errno));
 				return(-1);

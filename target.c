@@ -124,7 +124,6 @@ int do_target(){
 
 
 	if(message->data_len){
-		// free() called in this function.
 		if((shell = (char *) calloc(message->data_len + 1, sizeof(char))) == NULL){
 			report_error("do_target(): calloc(%d, %d): %s", message->data_len + 1, (int) sizeof(char), strerror(errno));
 			return(-1);
@@ -205,7 +204,6 @@ int do_target(){
 	}
 
 	/*  - Send basic information back to the control node about the connecting host. */
-	// free() called in this function.
 	if((buff_head = (char *) calloc(LOCAL_BUFF_SIZE, sizeof(char))) == NULL){
 		report_error("do_target(): calloc(%d, %d): %s", LOCAL_BUFF_SIZE, (int) sizeof(char), strerror(errno));
 		return(-1);

@@ -176,7 +176,6 @@ int init_io_control(){
 	/* Initialize the structures we will be using. */
 
 	/* Set up our socket. */
-	// free() called in this function.
 	ip_address_len = strlen(config->ip_addr);
 	if((ip_address = calloc(ip_address_len + 1, sizeof(char))) == NULL){
 		report_error("init_io_control(): calloc(%d, %d): %s", ip_address_len, (int) sizeof(char), strerror(errno));
@@ -197,11 +196,11 @@ int init_io_control(){
 		return(-1);
 	}
 
-	free(ip_address);
-
 	memset(&name, 0, sizeof(name));
 	name.sin_family = AF_INET;
 	name.sin_port = htons(strtol(ip_port, NULL, 10));
+
+	free(ip_address);
 
 	if((tmp_sock = socket(AF_INET, SOCK_STREAM, 0)) == -1){
 		report_error("init_io_control(): socket(AF_INET, SOCK_STREAM, 0): %s", strerror(errno));
@@ -307,7 +306,6 @@ int init_io_target(){
 	/* Initialize the structures we will need. */
 
 	/* Open our socket. */
-	// free() called in this function.
 	ip_address_len = strlen(config->ip_addr);
 	if((ip_address = calloc(ip_address_len + 1, sizeof(char))) == NULL){
 		report_error("init_io_target(): calloc(%d, %d): %s", ip_address_len, (int) sizeof(char), strerror(errno));
@@ -329,11 +327,11 @@ int init_io_target(){
 		return(-1);
 	}
 
-	free(ip_address);
-
 	memset(&name, 0, sizeof(name));
 	name.sin_family = AF_INET;
 	name.sin_port = htons(strtol(ip_port, NULL, 10));
+
+	free(ip_address);
 
 	if((tmp_sock = socket(AF_INET, SOCK_STREAM, 0)) == -1){
 		report_error("init_io_target(): socket(AF_INET, SOCK_STREAM, 0): %s", strerror(errno));

@@ -191,7 +191,6 @@ int send_consumed(){
 	// We'll use the stack storage for that case and only malloc() if we really need to.
 	backup_data_len = message->data_len;
 	if(backup_data_len > LOCAL_BUFF_SIZE){
-		// free() called in this function.
 		if((backup_data = (char *) calloc(backup_data_len, sizeof(char))) == NULL){
 			report_error("send_consumed(): calloc(%d, %d): %s", backup_data_len, (int) sizeof(char), strerror(errno));
 			return_code = -1;

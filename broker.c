@@ -99,7 +99,6 @@ int broker(){
 			return(-1);
 		}
 
-		// free() called in clean_io().
 		if((io->tty_winsize = (struct winsize *) calloc(1, sizeof(struct winsize))) == NULL){
 			report_error("broker(): calloc(1, %d): %s", (int) sizeof(struct winsize), strerror(errno));
 			return(-1);
