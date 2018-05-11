@@ -50,6 +50,11 @@
 	
 	- Add tun/tap support for FreeBSD.
 
+	- Add reporting of config at launch of control.
+	- Change GENERIC_BUILD behavior. 
+	  -- look for a keys directory. If so, use it.
+	  -- If no keys dir, fall back to anon dh. Report this behavior to control *loudly*!
+
 	 XXX */
 
 
