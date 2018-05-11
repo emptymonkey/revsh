@@ -1,12 +1,12 @@
 # revsh #
 
+_revsh_ is a tool for establishing [reverse shells](http://en.wikipedia.org/wiki/Reverse_shell) with [terminal](http://en.wikipedia.org/wiki/Computer_terminal) support, reverse [VPNs](https://en.wikipedia.org/wiki/Virtual_private_network) for [advanced pivoting](https://en.wikipedia.org/wiki/Exploit_(computer_security)#Pivoting), as well as arbitrary data tunneling.
+
 ## News ##
 
 XXX 
 
-## Information ##
-
-_revsh_ is a tool for establishing [reverse shells](http://en.wikipedia.org/wiki/Reverse_shell) with [terminal](http://en.wikipedia.org/wiki/Computer_terminal) support, reverse [VPNs](https://en.wikipedia.org/wiki/Virtual_private_network) for [advanced pivoting](https://en.wikipedia.org/wiki/Exploit_(computer_security)#Pivoting), as well as arbitrary data tunneling.
+## Overview ##
 
 **What is a "reverse shell"?**
 
