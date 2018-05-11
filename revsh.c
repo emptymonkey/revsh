@@ -537,8 +537,8 @@ int main(int argc, char **argv){
 	}
 
 	/* Grab some entropy and seed rand(). */
-	if((tmp_fd = open("/dev/random", O_RDONLY)) == -1){
-		report_error("main(): open(\"/dev/random\", O_RDONLY): %s", strerror(errno));
+	if((tmp_fd = open("/dev/urandom", O_RDONLY)) == -1){
+		report_error("main(): open(\"/dev/urandom\", O_RDONLY): %s", strerror(errno));
 		return(-1);
 	}
 
