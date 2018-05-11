@@ -176,7 +176,6 @@ int init_io_control(){
 	/* Initialize the structures we will be using. */
 
 	/* Set up our socket. */
-	// free() called in this function.
 	ip_address_len = strlen(config->ip_addr);
 	if((ip_address = calloc(ip_address_len + 1, sizeof(char))) == NULL){
 		report_error("init_io_control(): calloc(%d, %d): %s", ip_address_len, (int) sizeof(char), strerror(errno));
@@ -307,7 +306,6 @@ int init_io_target(){
 	/* Initialize the structures we will need. */
 
 	/* Open our socket. */
-	// free() called in this function.
 	ip_address_len = strlen(config->ip_addr);
 	if((ip_address = calloc(ip_address_len + 1, sizeof(char))) == NULL){
 		report_error("init_io_target(): calloc(%d, %d): %s", ip_address_len, (int) sizeof(char), strerror(errno));
