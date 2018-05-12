@@ -33,7 +33,7 @@ int do_control(){
 	/* Set up the network connection. */
 	if((retval = init_io_control(config)) == -1){
 		report_error("do_control(): init_io_control(%lx): %s", (unsigned long) config, strerror(errno));
-		return(-1);
+		return(-2);
 	}
 
   // retval == -2  means control in bindshell + keepalive mode and we need to return to handle another connection.  
