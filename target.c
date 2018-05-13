@@ -392,7 +392,8 @@ int do_target(){
 	/*  - Child: Set the pty as controlling. */
 	if(ioctl(STDIN_FILENO, TIOCSCTTY, 1) == -1){
 		report_error("do_target(): ioctl(STDIN_FILENO, TIOCSCTTY, 1): %s", strerror(errno));
-		return(-1);
+//	WSL will fail on this step. Changing this to an error report only error, non-fatal.
+//		return(-1);
 	}
 
 	if(!shell){
