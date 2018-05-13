@@ -1,10 +1,13 @@
-The following people have contributed to the design of revsh through a mix of
-in-depth discussions, lively debates on architecture, and protocol design.
-Occasionally they would just come up with good ideas that I would shamelessly
-steal.
+The following people have contributed to the development of revsh through a
+mix of in-depth discussions, lively debates on architecture, protocol design,
+or the infinite magic of a humble bug fix.
 
+Design:
 github.com/bmenrigh
 github.com/eltair
 github.com/frohoff
 github.com/gebl
+
+Bug fixes:
 github.com/jacob-baines
+github.com/ahmedm
