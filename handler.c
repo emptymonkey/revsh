@@ -825,8 +825,11 @@ int handle_connection_write(struct connection_node *cur_connection_node){
 
 		if(retval == -1){
 			if(errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK){
-				report_error("handle_connection_write(): write(%d, %lx, %d): %s", \
+				
+				if (errno != EPIPE){
+					report_error("handle_connection_write(): write(%d, %lx, %d): %s", \
 						io->local_out_fd, (unsigned long) tmp_message->data, tmp_message->data_len, strerror(errno));
+				}
 
 				if(handle_send_dt_connection_ht_destroy(cur_connection_node->origin, cur_connection_node->id, 0) == -1){
 					report_error("handle_connection_write(): handle_send_dt_connection_ht_destroy(%d, %d, 0): %s", cur_connection_node->origin, cur_connection_node->id, strerror(errno));

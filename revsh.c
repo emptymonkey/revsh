@@ -619,6 +619,11 @@ int main(int argc, char **argv){
 		}
 	}
 
+	if (signal(SIGPIPE, SIG_IGN) == SIG_ERR) {
+		report_error("main(): signal(SIGPIPE, SIG_IGN): %s", strerror(errno));
+		return(-1);
+	}
+	
 	// We will occasionally fork() children in certain conditions. We will never handle them directly.
 	if(signal(SIGCHLD, SIG_IGN) == SIG_ERR){
 		report_error("main(): signal(SIGCHLD, SIG_IGN): %s", strerror(errno));
