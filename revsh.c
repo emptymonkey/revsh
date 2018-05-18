@@ -47,13 +47,22 @@
 		io->remote_write()) doesn't catch escape sequences appropriately.
 		This also dovetails nicely into abstracting the operator's main tty out of the
 		flow, so it can be replaced with a more full featured implementation.
+
+		-- This, and many other features will be better if I re-write the whole thing
+			in go with better modularity, multi-threading, better UI, division of labor, 
+			c10k viable, etc.  :(
 	
 	- Add tun/tap support for FreeBSD.
 
-	- Add reporting of config at launch of control.
-	- Change GENERIC_BUILD behavior. 
-	  -- look for a keys directory. If so, use it.
-	  -- If no keys dir, fall back to anon dh. Report this behavior to control *loudly*!
+	- Add "Certificate Knocking":
+		-- Manually perform challange response validation of target cert.
+			--- Kill "client" (target) cert verification during SSL handshake.
+			--- Change protocol to start with an HTTP request. Random string dir will be sha1sum of target cert.
+				----  e.g. "GET /a646ceed9e8b7245b616accf5e715fa15093122d HTTP 1.1\n\n"
+			--- Control sends HTTP response with challenge number encrypted with target private key.
+			--- Target responds with an HTTP request that is the random string dir and the unencrypted challenge number as a subdir.
+				----  e.g. "GET /a646ceed9e8b7245b616accf5e715fa15093122d/6222703937 HTTP 1.1\n\n"
+			--- At this point both ends drop down to the previous revsh protocol.
 
 	 XXX */
 
@@ -599,26 +608,6 @@ int main(int argc, char **argv){
 		return(-1);
 	}
 
-	// Close unnecessary file descriptors in target.
-	if(io->target){
-		if(close(STDIN_FILENO) == -1){
-			report_error("main(): close(STDIN_FILENO): %s", strerror(errno));
-			return(-1);
-		}
-
-		if(!verbose){
-			if(close(STDOUT_FILENO) == -1){
-				report_error("main(): close(STDOUT_FILENO): %s", strerror(errno));
-				return(-1);
-			}
-
-			if(close(STDERR_FILENO) == -1){
-				report_error("main(): close(STDERR_FILENO): %s", strerror(errno));
-				return(-1);
-			}
-		}
-	}
-
 	if (signal(SIGPIPE, SIG_IGN) == SIG_ERR) {
 		report_error("main(): signal(SIGPIPE, SIG_IGN): %s", strerror(errno));
 		return(-1);
@@ -847,6 +836,8 @@ void print_config(){
 
 	printf("\nLaunching with following configuration:\n\n");
 
+
+/* We don't print anything when non-interactive, so this is a nop test.
 	printf("\tInteractive:\t\t");
 	if(config->interactive){
 		printf("True");
@@ -854,6 +845,7 @@ void print_config(){
 		printf("False");
 	}
 	printf("\n");
+*/
 
 	printf("\tBindshell:\t\t");
 	if(config->bindshell){
@@ -962,11 +954,11 @@ void print_config(){
 	switch(config->encryption){
 
 		case 0:
-			printf("Plaintext");
+			printf("\033[01;31mPlaintext\033[00m");
 			break;
 
 		case 1:
-			printf("Anonymous Diffie-Hellman");
+			printf("\033[01;31mAnonymous Diffie-Hellman\033[00m");
 			break;
 
 		case 2:
@@ -989,11 +981,12 @@ void print_config(){
 
 #endif /* OPENSSL */
 
-	printf("\tProxies:\n");
+	printf("\tProxies:");
 	pr_node = config->proxy_request_head;
 	if(!pr_node){
 		printf("\t\tNone");
 	}else{
+		printf("\n");
 
 		while(pr_node){
 			printf("\t\t\t\t");
