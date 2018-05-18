@@ -632,6 +632,12 @@ int main(int argc, char **argv){
 
 	/* Call the appropriate conductor. */
 	if(!io->target){
+	
+		if(verbose){
+			print_config();
+		}
+
+	
 		do{
 			retval = do_control();
 
@@ -832,3 +838,203 @@ int posix_openpt(int flags){
 #endif /* FREEBSD */
 
 
+/* 
+	Prints the final state of the config_help object.
+*/
+void print_config(){
+
+	struct proxy_request_node *pr_node;
+
+	printf("\nLaunching with following configuration:\n\n");
+
+	printf("\tInteractive:\t\t");
+	if(config->interactive){
+		printf("True");
+	}else{
+		printf("False");
+	}
+	printf("\n");
+
+	printf("\tBindshell:\t\t");
+	if(config->bindshell){
+		printf("True");
+	}else{
+		printf("False");
+	}
+	printf("\n");
+
+	printf("\tSOCKS Port:\t\t");
+	if(config->socks){
+		printf("%s", config->socks);
+	}else{
+		printf("None");
+	}
+	printf("\n");
+	
+	printf("\tTUN:\t\t\t");
+	if(config->tun){
+		printf("True");
+	}else{
+		printf("False");
+	}
+	printf("\n");
+
+	printf("\tTAP:\t\t\t");
+	if(config->tap){
+		printf("True");
+	}else{
+		printf("False");
+	}
+	printf("\n");
+
+	printf("\tIP Address:\t\t");
+	if(config->ip_addr){
+		printf("%s", config->ip_addr);
+	}else{
+		printf("None");
+	}
+	printf("\n");
+
+	printf("\tKeys Directory:\t\t");
+	if(config->keys_dir){
+		printf("%s", config->keys_dir);
+	}else{
+		printf("None");
+	}
+	printf("\n");
+
+	printf("\tRC File:\t\t");
+	if(config->rc_file){
+		printf("%s", config->rc_file);
+	}else{
+		printf("None");
+	}
+	printf("\n");
+
+	printf("\tShell:\t\t\t");
+	if(config->shell){
+		printf("%s", config->shell);
+	}else{
+		printf("%s", DEFAULT_SHELL);
+	}
+	printf("\n");
+
+	printf("\tLocal Forwarder:\t");
+	if(config->local_forward){
+		printf("%s", config->local_forward);
+	}else{
+		printf("None");
+	}
+	printf("\n");
+
+	printf("\tLog File:\t\t");
+	if(config->log_file){
+		printf("%s", config->log_file);
+	}else{
+		printf("None");
+	}
+	printf("\n");
+
+	printf("\tKeep-alive:\t\t");
+	if(config->keepalive){
+		printf("True");
+	}else{
+		printf("False");
+	}
+	printf("\n");
+
+	printf("\tNOPs:\t\t\t");
+	if(config->nop){
+		printf("True");
+	}else{
+		printf("False");
+	}
+	printf("\n");
+
+	printf("\tRetry Timer - Min:\t%d\n", config->retry_start);
+	printf("\tRetry Timer - Max:\t%d\n", config->retry_stop);
+	printf("\tTimeout:\t\t%d\n", config->timeout);
+
+
+#ifdef OPENSSL
+
+	printf("\tEncryption:\t\t");
+	switch(config->encryption){
+
+		case 0:
+			printf("Plaintext");
+			break;
+
+		case 1:
+			printf("Anonymous Diffie-Hellman");
+			break;
+
+		case 2:
+			printf("Ephemeral Diffie-Hellman");
+			break;
+
+		default:
+			printf("Invalid!");
+			break;
+	}
+	printf("\n");
+
+	printf("\tCipher List:\t\t");
+	if(config->cipher_list){
+		printf("%s", config->cipher_list);
+	}else{
+		printf("None");
+	}
+	printf("\n");
+
+#endif /* OPENSSL */
+
+	printf("\tProxies:\n");
+	pr_node = config->proxy_request_head;
+	if(!pr_node){
+		printf("\t\tNone");
+	}else{
+
+		while(pr_node){
+			printf("\t\t\t\t");
+
+			switch(pr_node->type){
+
+				case PROXY_STATIC:
+					printf("%7s", "STATIC");
+					break;
+
+				case PROXY_DYNAMIC:
+					printf("%7s", "DYNAMIC");
+					break;
+
+				case PROXY_TUN:
+					printf("%7s", "TUN");
+					break;
+
+				case PROXY_TAP:
+					printf("%7s", "TAP");
+					break;
+
+				default:
+					printf("Invalid!");
+					break;
+			}
+			printf(", ");
+
+			if(pr_node->remote){
+				printf("%6s", "REMOTE");
+			}else{
+				printf("%6s", "LOCAL");
+			}
+			printf(", ");
+
+			printf("%s\n", pr_node->request_string);
+			pr_node = pr_node->next;
+		}
+
+	}
+
+	printf("\n\n");
+	fflush(stdout);
+}

@@ -267,6 +267,7 @@ void clean_io();
 #ifndef FREEBSD
 int posix_openpt(int flags);
 #endif 
+void print_config();
 
 /* string_to_vector.c */
 char **string_to_vector(char *command_string);
