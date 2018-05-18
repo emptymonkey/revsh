@@ -663,7 +663,7 @@ int main(int argc, char **argv){
 				nanosleep(&req, NULL);
 			}
 
-		} while(retval != -1 && config->keepalive);
+		} while((retval != -1 && config->keepalive) || retval == -3);
 
 	}else{
 
