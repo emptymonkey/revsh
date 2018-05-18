@@ -608,7 +608,7 @@ int init_io_control(){
 			if(verbose){
 				ERR_print_errors_fp(stderr);
 			}
-			return(-1);
+			return(-3);
 		}
 
 		if((io->connect = BIO_pop(accept)) == NULL){
@@ -663,7 +663,7 @@ int init_io_control(){
 			if(verbose){
 				ERR_print_errors_fp(stderr);
 			}
-			return(-1);
+			return(-3);
 		}
 
 		/* Check the certs. */
@@ -749,14 +749,14 @@ int init_io_control(){
 			}
 
 			if(allowed_fingerprint_len != remote_fingerprint_len){
-				report_error("init_io_control(): Fingerprint mistmatch. Possible mitm. Aborting!");
-				return(-1);
+				report_error("init_io_control(): Fingerprint mistmatch. Closing connection and resetting.");
+				return(-3);
 			}
 
 			for(i = 0; i < (int) allowed_fingerprint_len; i++){
 				if(allowed_fingerprint[i] != remote_fingerprint[i]){
-					report_error("init_io_control(): Fingerprint mistmatch. Possible mitm. Aborting!");
-					return(-1);
+					report_error("init_io_control(): Fingerprint mistmatch. Closing connection and resetting.");
+					return(-3);
 				}
 			}
 		}
