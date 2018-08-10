@@ -19,15 +19,6 @@ MAN_DIR = /usr/share/man/man1/
 # Build specifications. Pick one and uncomment.
 ########################################################################################################################
 
-## XXX Needs testing with new OpenSSL installation method.
-## Linux w/OpenSSL built-in. (Partial static build.)
-#CFLAGS = -Wall -Wextra -std=c99 -pedantic -Os -DOPENSSL
-#STATIC_LIBS = $(OPENSSL_DIR)/libssl.a $(OPENSSL_DIR)/libcrypto.a
-#LIBS = -ldl
-#KEYS_DIR = keys
-#KEY_OF_C = in_the_key_of_c
-#IO_DEP = io_ssl.c
-
 ## Linux w/static libraries. (Full static build.)
 CFLAGS = -static -Wall -Wextra -std=c99 -pedantic -Os -DOPENSSL -I$(OPENSSL_DIR)/include
 STATIC_LIBS = $(OPENSSL_DIR)/libssl.a $(OPENSSL_DIR)/libcrypto.a
@@ -36,33 +27,35 @@ KEYS_DIR = keys
 KEY_OF_C = in_the_key_of_c
 IO_DEP = io_ssl.c
 
-## XXX Needs testing with new OpenSSL installation method.
-## Linux w/compatability mode. (No OpenSSL.)
-#CFLAGS = -Wall -Wextra -std=c99 -pedantic -Os
-#LIBS = 
-#KEYS_DIR = 
-#KEY_OF_C = 
-#IO_DEP = io_nossl.c
-
-## XXX Needs testing with new OpenSSL installation method.
 ## FreeBSD
-## Remember: 
-##  - You'll want to change MAN_DIR variable above.
+## NOTE: 
+##	You'll want to change MAN_DIR variable above.
+##	Also, tun/tap support doesn't exist for you yet. Sorry. (But everything else should work fine.)
 #CFLAGS = -Wall -Wextra -std=c99 -pedantic -Os -DFREEBSD -DOPENSSL
 #LIBS = -lssl -lcrypto
 #KEYS_DIR = keys
 #KEY_OF_C = in_the_key_of_c
 #IO_DEP = io_ssl.c
 
-## XXX Needs testing with new OpenSSL installation method.
 ## Linux - Dynamically Linked
-## I've left this one in, but I think of it as deprecated as it tends to be fragile.
-## Building OpenSSL in statically will be much more robust.
+## NOTE:
+##	I've left this one in, but I think of it as deprecated as it tends to be fragile.
+##	Building OpenSSL in statically will be much more robust.
 #CFLAGS = -Wall -Wextra -std=c99 -pedantic -Os -DOPENSSL
 #LIBS = -lssl -lcrypto
 #KEYS_DIR = keys
 #KEY_OF_C = in_the_key_of_c
 #IO_DEP = io_ssl.c
+
+## Linux w/compatability mode. (Plain text, no SSL.)
+## NOTE:
+##	You almost certainly don't want this one. It's here mostly for research and exotic use.
+##	This version is also deprecated, but probably still works.
+#CFLAGS = -Wall -Wextra -std=c99 -pedantic -Os
+#LIBS = 
+#KEYS_DIR = 
+#KEY_OF_C = 
+#IO_DEP = io_nossl.c
 
 
 ########################################################################################################################

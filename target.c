@@ -84,20 +84,22 @@ int do_target(){
 	}else{
 
 		// Now that we know if we're interactive or not, close unecessary fds.
-		if(close(STDIN_FILENO) == -1){
-			report_error("main(): close(STDIN_FILENO): %s", strerror(errno));
-			return(-1);
-		}
-
-		if(!verbose){
-			if(close(STDOUT_FILENO) == -1){
-				report_error("main(): close(STDOUT_FILENO): %s", strerror(errno));
+		if(io->first_run){
+			if(close(STDIN_FILENO) == -1){
+				report_error("main(): close(STDIN_FILENO): %s", strerror(errno));
 				return(-1);
 			}
 
-			if(close(STDERR_FILENO) == -1){
-				report_error("main(): close(STDERR_FILENO): %s", strerror(errno));
-				return(-1);
+			if(!verbose){
+				if(close(STDOUT_FILENO) == -1){
+					report_error("main(): close(STDOUT_FILENO): %s", strerror(errno));
+					return(-1);
+				}
+
+				if(close(STDERR_FILENO) == -1){
+					report_error("main(): close(STDERR_FILENO): %s", strerror(errno));
+					return(-1);
+				}
 			}
 		}
 		io->interactive = 1;

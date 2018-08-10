@@ -785,8 +785,10 @@ char *addr_to_string(int atype, char *addr, char *port, int len){
 
 	// strlen("255.255.255.255:65535") -> 21
 	int string_len = 21;
-	// strlen(":65535") -> 6
-	int port_len = 6;
+	// ntohs returns a uint16_t. Max size of that number is 6 bytes. Plus one for the leading ':'.
+	// Note that the largest value *should* be 65535, which is 6 not 7 characters long. Doing so will make
+	// the compiler grumpy.
+	int port_len = 7;
 
 	if(atype == 0x03){
 		string_len = len;

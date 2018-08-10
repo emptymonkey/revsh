@@ -63,6 +63,7 @@
 			--- Target responds with an HTTP request that is the random string dir and the unencrypted challenge number as a subdir.
 				----  e.g. "GET /a646ceed9e8b7245b616accf5e715fa15093122d/6222703937 HTTP 1.1\n\n"
 			--- At this point both ends drop down to the previous revsh protocol.
+		-- Alternatively, do something similar (mutual challange response) involving cookies.
 
 	 XXX */
 
@@ -294,6 +295,7 @@ int main(int argc, char **argv){
 	message = &io->message;
 
 	/* Set defaults. */
+	io->first_run = 1;
 	io->control_proto_major = PROTOCOL_MAJOR_VERSION;
 	io->control_proto_minor = PROTOCOL_MINOR_VERSION;
 	io->local_in_fd = fileno(stdin);
@@ -735,6 +737,7 @@ void clean_io(){
 
 	struct message_helper *message_ptr;
 
+	io->first_run = 0;
 
 	io->target_proto_major = 0;
 	io->target_proto_minor = 0;

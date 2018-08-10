@@ -157,6 +157,9 @@ struct connection_node {
  ******************************************************************************/
 struct io_helper {
 
+	// This variable is used in the keep-alive modes, to ensure we don't try to close STDIN/STDOUT/STDERR again.
+	int first_run;
+
 	unsigned short control_proto_major;
 	unsigned short control_proto_minor;
 

@@ -4,7 +4,7 @@ _revsh_ is a tool for establishing [reverse shells](http://en.wikipedia.org/wiki
 
 ## News ##
 
-XXX 
+2018-08-09: New release. Mosly bugfixes and improved build stability. See _Installation_ below for updated build instructions for building _revsh_ with OpenSSL.
 
 ## Overview ##
 
@@ -65,56 +65,54 @@ _revsh_ was developed on x86_64 Linux. Here is a brief list of Arch / OS combina
 	Control:	revsh -c [CONTROL_OPTIONS] [MUTUAL_OPTIONS] [ADDRESS[:PORT]]
 	Target:		revsh     [TARGET_OPTIONS] [MUTUAL_OPTIONS] [ADDRESS[:PORT]]
 	
+		ADDRESS		The address of the control listener.		(Default is "0.0.0.0".)
+		PORT		The port of the control listener.		(Default is "2200".)
+	
 	CONTROL_OPTIONS:
-	  -c           Run in "command and control" mode.             (Default is target mode.)
-	  -a           Enable Anonymous Diffie-Hellman mode.          (Default is Ephemeral Diffie-Hellman.)
-	  -d KEYS_DIR  Reference the keys in an alternate directory.  (Default is "~/.revsh/keys/".)
-	  -f RC_FILE   Reference an alternate rc file.                (Default is "~/.revsh/rc".)
-	  -s SHELL     Invoke SHELL as the remote shell.              (Default is "/bin/bash".)
-	  -F LOG_FILE  Log general use and errors to LOG_FILE.        (No default set.)
+		-c		Run in "command and control" mode.		(Default is target mode.)
+		-a		Enable Anonymous Diffie-Hellman mode.		(Default is Ephemeral Diffie-Hellman.)
+		-d KEYS_DIR	Reference the keys in an alternate directory.	(Default is "~/.revsh/keys/".)
+		-f RC_FILE	Reference an alternate rc file.			(Default is "~/.revsh/rc".)
+		-s SHELL	Invoke SHELL as the remote shell.		(Default is "/bin/bash".)
+		-F LOG_FILE	Log general use and errors to LOG_FILE.		(No default set.)
 	
 	TARGET_OPTIONS:
-	  -t SEC       Set the connection timeout to SEC seconds.     (Default is "3600".)
-	  -r SEC1,SEC2 Set the retry time to be SEC1 seconds, or      (Default is "600,1200".)
-	               to be random in the range from SEC1 to SEC2.
+		-t SEC		Set the connection timeout to SEC seconds.	(Default is "3600".)
+		-r SEC1,SEC2	Set the retry time to be SEC1 seconds, or	(Default is "600,1200".)
+				to be random in the range from SEC1 to SEC2.
 	
 	MUTUAL_OPTIONS:
-	  -k           Run in keep-alive mode. Node will neither
-	               exit normally, nor seppuku from timeout.
-	  -L [LHOST:]LPORT:RHOST:RPORT
-	               Static socket forwarding with a local
-	               listener at LHOST:LPORT forwarding to
-	               RHOST:RPORT.
-	  -R [RHOST:]RPORT:LHOST:LPORT
-	               Static socket forwarding with a remote
-	               listener at RHOST:RPORT forwarding to
-	               LHOST:LPORT.
-	  -D [LHOST:]LPORT
-	               Dynamic socket forwarding with a local
-	               listener at LHOST:LPORT.                       (Socks 4, 4a, and 5. TCP connect only.)
-	  -B [RHOST:]RPORT
-	               Dynamic socket forwarding with a remote
-	               listener at LHOST:LPORT.                       (Socks 4, 4a, and 5. TCP connect only.)
-	  -x           Disable automatic setup of proxies.            (Defaults: Proxy D2280 and tun/tap devices.)
-	  -b           Start in bind shell mode.                      (Default is reverse shell mode.)
-	               The -b flag must be invoked on both ends.
-	  -n           Non-interactive netcat style data broker.      (Default is interactive w/remote tty.)
-	               No tty. Useful for copying files.
-	  -v           Verbose. -vv and -vvv increase verbosity.
-	  -h           Print this help.
-	  -e           Print out some usage examples.
-	
-	  ADDRESS      The address of the control listener.           (Default is "0.0.0.0".)
-	  PORT         The port of the control listener.              (Default is "2200".)
-
+		-k		Run in keep-alive mode.
+				Node will neither exit normally, nor timeout.
+		-L [LHOST:]LPORT:RHOST:RPORT
+				Static socket forwarding with a local listener
+				at LHOST:LPORT forwarding to RHOST:RPORT.
+		-R [RHOST:]RPORT:LHOST:LPORT
+				Static socket forwarding with a remote listener
+				at RHOST:RPORT forwarding to LHOST:LPORT.
+		-D [LHOST:]LPORT
+				Dynamic socket forwarding with a local listener
+				at LHOST:LPORT.					(Socks 4, 4a, and 5. TCP connect only.)
+		-B [RHOST:]RPORT
+				Dynamic socket forwarding with a remote
+				listener at LHOST:LPORT.			(Socks 4, 4a, and 5. TCP connect only.)
+		-x		Disable automatic setup of proxies.		(Defaults: Proxy D2280 and tun/tap devices.)
+		-b		Start in bind shell mode.			(Default is reverse shell mode.)
+				The -b flag must be invoked on both ends.
+		-n		Non-interactive netcat style data broker.	(Default is interactive w/remote tty.)
+				No tty. Useful for copying files.
+		-v		Verbose. -vv and -vvv increase verbosity.
+		-V		Print the program and protocol versions.
+		-h		Print this help.
+		-e		Print out some usage examples.
 
 ## Installation ##
 
-First, build OpenSSL from source. (See NOTE below.)
+First, you will need to build OpenSSL from source. (See NOTE below.)
 
 	git clone https://github.com/openssl/openssl.git
 	cd openssl/
-	./config no-shared  # If you are building full static binary, then add the -static flag here.
+	./config no-shared -static	# These options are needed to build static applications against OpenSSL.
 	make && make test
 	cd ..
 
@@ -123,13 +121,13 @@ Now build revsh.
 	git clone https://github.com/emptymonkey/revsh.git
 	cd revsh
 	vi config.h        # Set up new defaults that fit your situation.
-	vi Makefile        # By default, we build statically linked OpenSSL, but dynamic libc. You can change that here.
+	vi Makefile        # Check that the selected build environment is the one you want. (It probably already is by default.)
 	make               # This *can* take a very long time, though it usually doesn't.
 	make install
 	vi ~/.revsh/rc     # Add your favorite startup commands to really customize the feel of your remote shell.
 	revsh -h
 
-NOTE: With the release of OpenSSL 1.1.0, OpenSSL needs to be built from source for use in a statically linked binary. Building a statically linked binary against the OpenSSL libraries that ship with most Linux distros (including Kali) will not work. (If you get it to build at all, it will SEGFAULT.) At some point in the future, when the recent fixes to OpenSSL 1.1 filter down to the distros, this step will replaced by the appropriate 'apt-get' command.
+NOTE: With the release of OpenSSL 1.1.0, OpenSSL needs to be built from source for use in a statically linked binary. Building a statically linked binary against the OpenSSL libraries that ship with most Linux distros (including Kali) will *not* work. (If it builds at all, it will SEGFAULT.)
 
 ## Examples ##
 
