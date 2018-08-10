@@ -113,7 +113,7 @@ First, you will need to build OpenSSL from source. (See NOTE below.)
 	git clone https://github.com/openssl/openssl.git
 	cd openssl/
 	./config no-shared -static	# These options are needed to build static applications against OpenSSL.
-	make && make test
+	make && make test	# We skip "make install" so we don't conflict with your systems default OpenSSL. We will build _revsh_ against the OpenSSL we just compiled in this tree.
 	cd ..
 
 Now build revsh.
