@@ -4,7 +4,7 @@ _revsh_ is a tool for establishing [reverse shells](http://en.wikipedia.org/wiki
 
 ## News ##
 
-2018-08-09: New release. Mosly bugfixes and improved build stability. See _Installation_ below for updated build instructions for building _revsh_ with OpenSSL.
+* __2018-08-09__: New release. Mosly bugfixes and improved build stability. See the _Installation_ section below for updated build instructions.
 
 ## Overview ##
 
