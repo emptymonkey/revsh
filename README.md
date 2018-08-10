@@ -108,7 +108,7 @@ _revsh_ was developed on x86_64 Linux. Here is a brief list of Arch / OS combina
 
 ## Installation ##
 
-First, you will need to build OpenSSL from source. (See NOTE below.)
+First, you will need to build OpenSSL from source. (See __NOTE__ below.)
 
 	git clone https://github.com/openssl/openssl.git
 	cd openssl/
@@ -127,7 +127,7 @@ Now build revsh.
 	vi ~/.revsh/rc     # Add your favorite startup commands to really customize the feel of your remote shell.
 	revsh -h
 
-NOTE: With the release of OpenSSL 1.1.0, OpenSSL needs to be built from source for use in a statically linked binary. Building a statically linked binary against the OpenSSL libraries that ship with most Linux distros (including Kali) will *not* work. (If it builds at all, it will SEGFAULT.)
+__NOTE:__ With the release of OpenSSL 1.1.0, OpenSSL needs to be built from source for use in a statically linked binary. Building a statically linked binary against the OpenSSL libraries that ship with most Linux distros (including Kali) will *not* work. (If it builds at all, it will SEGFAULT.)
 
 ## Examples ##
 
