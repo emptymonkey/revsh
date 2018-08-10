@@ -47,7 +47,7 @@ In addition, _revsh_ also offers the following features:
  * Escape sequence commands to kill non-responsive nodes, or print connection statistics.
 
 
-_revsh_ is intended as a supplementary tool for a [pentester's](http://en.wikipedia.org/wiki/Pentester) toolkit that provides the full set of terminal features across an encrypted tunnel. All together in a small (~75k) easy to use binary.
+_revsh_ is intended as a supplementary tool for a [pentester's](http://en.wikipedia.org/wiki/Pentester) toolkit that provides the full set of terminal features across an encrypted tunnel.
 
 **Where can I use _revsh_?**
 
