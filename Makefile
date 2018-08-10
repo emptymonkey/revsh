@@ -5,7 +5,8 @@
 
 KEY_BITS = 2048
 
-OPENSSL = /usr/bin/openssl
+OPENSSL_DIR = ../openssl
+OPENSSL = $(OPENSSL_DIR)/apps/openssl
 
 CC = /usr/bin/cc
 STRIP = /usr/bin/strip
@@ -16,52 +17,45 @@ MAN_DIR = /usr/share/man/man1/
 
 ########################################################################################################################
 # Build specifications. Pick one and uncomment.
-#
-# Note:
-#   If you are building a generic binary for broad distribution (e.g. ships with the OS) then you will want to add 
-#   the "-DGENERIC_BUILD" flag to the CFLAGS entry you choose below. This will default the binary to an Anonymous
-#   Diffie-Hellman build.
-#
 ########################################################################################################################
 
-## Linux
+## Linux w/static libraries. (Full static build.)
+CFLAGS = -static -Wall -Wextra -std=c99 -pedantic -Os -DOPENSSL -I$(OPENSSL_DIR)/include
+STATIC_LIBS = $(OPENSSL_DIR)/libssl.a $(OPENSSL_DIR)/libcrypto.a
+LIBS = 
+KEYS_DIR = keys
+KEY_OF_C = in_the_key_of_c
+IO_DEP = io_ssl.c
+
+## FreeBSD
+## NOTE: 
+##	You'll want to change MAN_DIR variable above.
+##	Also, tun/tap support doesn't exist for you yet. Sorry. (But everything else should work fine.)
+#CFLAGS = -Wall -Wextra -std=c99 -pedantic -Os -DFREEBSD -DOPENSSL
+#LIBS = -lssl -lcrypto
+#KEYS_DIR = keys
+#KEY_OF_C = in_the_key_of_c
+#IO_DEP = io_ssl.c
+
+## Linux - Dynamically Linked
+## NOTE:
+##	I've left this one in, but I think of it as deprecated as it tends to be fragile.
+##	Building OpenSSL in statically will be much more robust.
 #CFLAGS = -Wall -Wextra -std=c99 -pedantic -Os -DOPENSSL
 #LIBS = -lssl -lcrypto
 #KEYS_DIR = keys
 #KEY_OF_C = in_the_key_of_c
 #IO_DEP = io_ssl.c
 
-## Linux w/OpenSSL built-in. (Partial static build.)
-# The location of the files in STATIC_LIBS may vary. Check your system.
-CFLAGS = -Wall -Wextra -std=c99 -pedantic -Os -DOPENSSL
-STATIC_LIBS = /usr/lib/x86_64-linux-gnu/libssl.a /usr/lib/x86_64-linux-gnu/libcrypto.a
-LIBS = -ldl
-KEYS_DIR = keys
-KEY_OF_C = in_the_key_of_c
-IO_DEP = io_ssl.c
-
-## Linux w/static libraries. (Full static build.)
-#CFLAGS = -static -Wall -Wextra -std=c99 -pedantic -Os -DOPENSSL
-#LIBS = -lssl -lcrypto -ldl -lz
-#KEYS_DIR = keys
-#KEY_OF_C = in_the_key_of_c
-#IO_DEP = io_ssl.c
-
-## Linux w/compatability mode. (No OpenSSL.)
+## Linux w/compatability mode. (Plain text, no SSL.)
+## NOTE:
+##	You almost certainly don't want this one. It's here mostly for research and exotic use.
+##	This version is also deprecated, but probably still works.
 #CFLAGS = -Wall -Wextra -std=c99 -pedantic -Os
 #LIBS = 
 #KEYS_DIR = 
 #KEY_OF_C = 
 #IO_DEP = io_nossl.c
-
-## FreeBSD
-## Remember: 
-##  - You'll want to change MAN_DIR variable above.
-#CFLAGS = -Wall -Wextra -std=c99 -pedantic -Os -DFREEBSD -DOPENSSL
-#LIBS = -lssl -lcrypto
-#KEYS_DIR = keys
-#KEY_OF_C = in_the_key_of_c
-#IO_DEP = io_ssl.c
 
 
 ########################################################################################################################
@@ -85,14 +79,14 @@ keys:
 		mkdir $(KEYS_DIR) ; \
 	fi
 	if [ ! -e $(KEYS_DIR)/dh_params.c ]; then \
-    $(OPENSSL) dhparam -C $(KEY_BITS) -noout >$(KEYS_DIR)/dh_params.c ; \
+    $(OPENSSL) dhparam -noout -C $(KEY_BITS) >$(KEYS_DIR)/dh_params.c ; \
 		echo "DH *(*get_dh)() = &get_dh$(KEY_BITS);" >>$(KEYS_DIR)/dh_params.c ; \
   fi
 	if [ ! -e $(KEYS_DIR)/control_key.pem ]; then \
-		$(OPENSSL) req -batch -newkey rsa:$(KEY_BITS) -nodes -x509 -days 36500 -keyout $(KEYS_DIR)/control_key.pem -out $(KEYS_DIR)/control_cert.pem ; \
+		$(OPENSSL) req -batch -newkey rsa:$(KEY_BITS) -nodes -x509 -days 36500 -keyout $(KEYS_DIR)/control_key.pem -out $(KEYS_DIR)/control_cert.pem -config $(OPENSSL_DIR)/apps/openssl.cnf ; \
 	fi
 	if [ ! -e $(KEYS_DIR)/target_key.pem ]; then \
-    $(OPENSSL) req -batch -newkey rsa:$(KEY_BITS) -nodes -x509 -days 36500 -keyout $(KEYS_DIR)/target_key.pem -out $(KEYS_DIR)/target_cert.pem ; \
+    $(OPENSSL) req -batch -newkey rsa:$(KEY_BITS) -nodes -x509 -days 36500 -keyout $(KEYS_DIR)/target_key.pem -out $(KEYS_DIR)/target_cert.pem -config $(OPENSSL_DIR)/apps/openssl.cnf ; \
 	fi
 	if [ ! -e $(KEYS_DIR)/control_fingerprint.c ]; then \
 		./in_the_key_of_c -c $(KEYS_DIR)/control_cert.pem -f >$(KEYS_DIR)/control_fingerprint.c ; \

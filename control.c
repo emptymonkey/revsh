@@ -31,6 +31,7 @@ int do_control(){
 
 
 	/* Set up the network connection. */
+	// -1 is the only fatal error here. -2 and -3 are also failures, but should not be fatal.
 	if((retval = init_io_control(config)) == -1){
 		report_error("do_control(): init_io_control(%lx): %s", (unsigned long) config, strerror(errno));
 		return(-1);
@@ -40,6 +41,12 @@ int do_control(){
   if(retval == -2){
     io->init_complete = 1;
     return(-2);
+  }
+
+	// retval == -3 means the SSL handshake failed for some reason. We should reset.
+  if(retval == -3){
+    io->init_complete = 0;
+    return(-3);
   }
 
 	/* Prepare the message buffer. */

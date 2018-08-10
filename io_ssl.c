@@ -421,7 +421,11 @@ int init_io_control(){
 
 	if(config->encryption){
 
+#if	OPENSSL_VERSION_NUMBER < 0x10100000
 		if((io->ctx = SSL_CTX_new(TLSv1_server_method())) == NULL){
+#else
+		if((io->ctx = SSL_CTX_new(TLS_server_method())) == NULL){
+#endif
 			report_error("init_io_control(): SSL_CTX_new(TLSv1_server_method()): %s", strerror(errno));
 			if(verbose){
 				ERR_print_errors_fp(stderr);
@@ -456,7 +460,6 @@ int init_io_control(){
 
 		if(config->encryption == EDH){
 
-			// free() called in this function.
 			if((control_cert_path_head = (char *) calloc(PATH_MAX, sizeof(char))) == NULL){
 				report_error("init_io_control(): calloc(%d, %d): %s", PATH_MAX, (int) sizeof(char), strerror(errno));
 				return(-1);
@@ -472,7 +475,6 @@ int init_io_control(){
 				return(-1);
 			}
 
-			// free() called in this function.
 			if((control_key_path_head = (char *) calloc(PATH_MAX, sizeof(char))) == NULL){
 				report_error("init_io_control(): calloc(%d, %d): %s", PATH_MAX, (int) sizeof(char), strerror(errno));
 				return(-1);
@@ -606,7 +608,7 @@ int init_io_control(){
 			if(verbose){
 				ERR_print_errors_fp(stderr);
 			}
-			return(-1);
+			return(-3);
 		}
 
 		if((io->connect = BIO_pop(accept)) == NULL){
@@ -661,12 +663,11 @@ int init_io_control(){
 			if(verbose){
 				ERR_print_errors_fp(stderr);
 			}
-			return(-1);
+			return(-3);
 		}
 
 		/* Check the certs. */
 		if(config->encryption == EDH){
-			// free() called in this function.
 			if((allowed_cert_path_head = (char *) calloc(PATH_MAX, sizeof(char))) == NULL){
 				report_error("init_io_control(): calloc(%d, %d): %s", PATH_MAX, (int) sizeof(char), strerror(errno));
 				return(-1);
@@ -748,14 +749,14 @@ int init_io_control(){
 			}
 
 			if(allowed_fingerprint_len != remote_fingerprint_len){
-				report_error("init_io_control(): Fingerprint mistmatch. Possible mitm. Aborting!");
-				return(-1);
+				report_error("init_io_control(): Fingerprint mistmatch. Closing connection and resetting.");
+				return(-3);
 			}
 
 			for(i = 0; i < (int) allowed_fingerprint_len; i++){
 				if(allowed_fingerprint[i] != remote_fingerprint[i]){
-					report_error("init_io_control(): Fingerprint mistmatch. Possible mitm. Aborting!");
-					return(-1);
+					report_error("init_io_control(): Fingerprint mistmatch. Closing connection and resetting.");
+					return(-3);
 				}
 			}
 		}
@@ -809,7 +810,11 @@ int init_io_target(){
 	/*  - Setup SSL. */
 	if(config->encryption){
 
+#if	OPENSSL_VERSION_NUMBER < 0x10100000
 		if((io->ctx = SSL_CTX_new(TLSv1_client_method())) == NULL){
+#else
+		if((io->ctx = SSL_CTX_new(TLS_client_method())) == NULL){
+#endif
 			report_error("init_io_target(): SSL_CTX_new(TLSv1_client_method()): %s", strerror(errno));
 			if(verbose){
 				ERR_print_errors_fp(stderr);
@@ -1023,7 +1028,11 @@ int init_io_target(){
 		}
 
 		/* Check the certs. */
+#if	OPENSSL_VERSION_NUMBER < 0x10100000
 		if(!strcmp(current_cipher->name, EDH_CIPHER)){
+#else
+		if(!strcmp(SSL_CIPHER_get_name(current_cipher), EDH_CIPHER)){
+#endif
 
 			if((remote_cert = SSL_get_peer_certificate(io->ssl)) == NULL){
 				report_error("init_io_target(): SSL_get_peer_certificate(%lx): %s", (unsigned long) io->ssl, strerror(errno));
@@ -1043,7 +1052,6 @@ int init_io_target(){
 				return(-1);
 			}
 
-			// free() called in this function.
 			if((remote_fingerprint_str = (char *) calloc(strlen(control_cert_fingerprint) + 1, sizeof(char))) == NULL){
 				report_error("init_io_target(): calloc(%d, %d): %s", (int) strlen(control_cert_fingerprint) + 1, (int) sizeof(char), strerror(errno));
 				return(-1);
@@ -1082,12 +1090,12 @@ int init_io_target(){
  *  any errors.
  *
  **********************************************************************************************************************/
-int dummy_verify_callback(int preverify_ok, X509_STORE_CTX* ctx) {
+int dummy_verify_callback(int preverify_ok, X509_STORE_CTX *ctx){
 
-	/*  The point of a dummy function is that it's components won't be used.  */
-	/*  We will nop reference them however to silence the noise from the compiler. */
-	preverify_ok += 0;
-	ctx += 0;
+	// If statement is just to quiet the compiler. We only return 1, as promised.
+	if(preverify_ok || ctx){
+		return(1);
+	}
 
 	return(1);
 }

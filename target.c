@@ -79,9 +79,30 @@ int do_target(){
 		return(-1);
 	}
 
-	io->interactive = 1;
 	if(!(config->interactive && message->data[0])){
 		io->interactive = 0;
+	}else{
+
+		// Now that we know if we're interactive or not, close unecessary fds.
+		if(io->first_run){
+			if(close(STDIN_FILENO) == -1){
+				report_error("main(): close(STDIN_FILENO): %s", strerror(errno));
+				return(-1);
+			}
+
+			if(!verbose){
+				if(close(STDOUT_FILENO) == -1){
+					report_error("main(): close(STDOUT_FILENO): %s", strerror(errno));
+					return(-1);
+				}
+
+				if(close(STDERR_FILENO) == -1){
+					report_error("main(): close(STDERR_FILENO): %s", strerror(errno));
+					return(-1);
+				}
+			}
+		}
+		io->interactive = 1;
 	}
 
 	if(!io->interactive){
@@ -124,7 +145,6 @@ int do_target(){
 
 
 	if(message->data_len){
-		// free() called in this function.
 		if((shell = (char *) calloc(message->data_len + 1, sizeof(char))) == NULL){
 			report_error("do_target(): calloc(%d, %d): %s", message->data_len + 1, (int) sizeof(char), strerror(errno));
 			return(-1);
@@ -205,7 +225,6 @@ int do_target(){
 	}
 
 	/*  - Send basic information back to the control node about the connecting host. */
-	// free() called in this function.
 	if((buff_head = (char *) calloc(LOCAL_BUFF_SIZE, sizeof(char))) == NULL){
 		report_error("do_target(): calloc(%d, %d): %s", LOCAL_BUFF_SIZE, (int) sizeof(char), strerror(errno));
 		return(-1);
@@ -259,24 +278,24 @@ int do_target(){
 
 	remote_printf("################################################################################\r\n");
 
-/*
-	if(close(STDIN_FILENO) == -1){
-		report_error("do_target(): close(STDIN_FILENO): %s", strerror(errno));
-		return(-1);
-	}
+	/*
+		 if(close(STDIN_FILENO) == -1){
+		 report_error("do_target(): close(STDIN_FILENO): %s", strerror(errno));
+		 return(-1);
+		 }
 
-	if(!verbose){
-		if(close(STDOUT_FILENO) == -1){
-			report_error("do_target(): close(STDOUT_FILENO): %s", strerror(errno));
-			return(-1);
-		}
+		 if(!verbose){
+		 if(close(STDOUT_FILENO) == -1){
+		 report_error("do_target(): close(STDOUT_FILENO): %s", strerror(errno));
+		 return(-1);
+		 }
 
-		if(close(STDERR_FILENO) == -1){
-			report_error("do_target(): close(STDERR_FILENO): %s", strerror(errno));
-			return(-1);
-		}
-	}
-*/
+		 if(close(STDERR_FILENO) == -1){
+		 report_error("do_target(): close(STDERR_FILENO): %s", strerror(errno));
+		 return(-1);
+		 }
+		 }
+	 */
 
 
 	/*  - Fork a child to run the shell. */
@@ -355,7 +374,7 @@ int do_target(){
 	// the STDIN_FILENO, STDOUT_FILENO, or STDERR_FILENO values by chance.. 
 	// Set it to STDERR_FILENO + 1 to clear the way for the following dup2()s.
 	if(pty_slave < STDERR_FILENO + 1){
-		
+
 		if(dup2(pty_slave, STDERR_FILENO + 1) == -1){
 			report_error("do_target(): dup2(%d, STDERR_FILENO + 1): %s", pty_slave, strerror(errno));
 			return(-1);
@@ -394,7 +413,8 @@ int do_target(){
 	/*  - Child: Set the pty as controlling. */
 	if(ioctl(STDIN_FILENO, TIOCSCTTY, 1) == -1){
 		report_error("do_target(): ioctl(STDIN_FILENO, TIOCSCTTY, 1): %s", strerror(errno));
-		return(-1);
+		//	WSL will fail on this step. Changing this to an error report only error, non-fatal.
+		//		return(-1);
 	}
 
 	if(!shell){

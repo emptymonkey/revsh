@@ -99,7 +99,6 @@ int broker(){
 			return(-1);
 		}
 
-		// free() called in clean_io().
 		if((io->tty_winsize = (struct winsize *) calloc(1, sizeof(struct winsize))) == NULL){
 			report_error("broker(): calloc(1, %d): %s", (int) sizeof(struct winsize), strerror(errno));
 			return(-1);
@@ -137,6 +136,7 @@ int broker(){
 	if(config->nop){
 		timeout_ptr = &timeout;
 	}
+
 
 	/*  Start the broker() loop. */
 	while(1){
@@ -234,7 +234,7 @@ int broker(){
 		}
 
 		// Local tty / shell fd will have priority over all the other connections.
-		if(FD_ISSET(io->local_in_fd, &write_fds)){
+		if(FD_ISSET(io->local_out_fd, &write_fds)){
 
 			if((retval = handle_local_write()) == -1){
 				goto RETURN;

@@ -47,8 +47,23 @@
 		io->remote_write()) doesn't catch escape sequences appropriately.
 		This also dovetails nicely into abstracting the operator's main tty out of the
 		flow, so it can be replaced with a more full featured implementation.
+
+		-- This, and many other features will be better if I re-write the whole thing
+			in go with better modularity, multi-threading, better UI, division of labor, 
+			c10k viable, etc.  :(
 	
 	- Add tun/tap support for FreeBSD.
+
+	- Add "Certificate Knocking":
+		-- Manually perform challange response validation of target cert.
+			--- Kill "client" (target) cert verification during SSL handshake.
+			--- Change protocol to start with an HTTP request. Random string dir will be sha1sum of target cert.
+				----  e.g. "GET /a646ceed9e8b7245b616accf5e715fa15093122d HTTP 1.1\n\n"
+			--- Control sends HTTP response with challenge number encrypted with target private key.
+			--- Target responds with an HTTP request that is the random string dir and the unencrypted challenge number as a subdir.
+				----  e.g. "GET /a646ceed9e8b7245b616accf5e715fa15093122d/6222703937 HTTP 1.1\n\n"
+			--- At this point both ends drop down to the previous revsh protocol.
+		-- Alternatively, do something similar (mutual challange response) involving cookies.
 
 	 XXX */
 
@@ -280,6 +295,7 @@ int main(int argc, char **argv){
 	message = &io->message;
 
 	/* Set defaults. */
+	io->first_run = 1;
 	io->control_proto_major = PROTOCOL_MAJOR_VERSION;
 	io->control_proto_minor = PROTOCOL_MINOR_VERSION;
 	io->local_in_fd = fileno(stdin);
@@ -532,8 +548,8 @@ int main(int argc, char **argv){
 	}
 
 	/* Grab some entropy and seed rand(). */
-	if((tmp_fd = open("/dev/random", O_RDONLY)) == -1){
-		report_error("main(): open(\"/dev/random\", O_RDONLY): %s", strerror(errno));
+	if((tmp_fd = open("/dev/urandom", O_RDONLY)) == -1){
+		report_error("main(): open(\"/dev/urandom\", O_RDONLY): %s", strerror(errno));
 		return(-1);
 	}
 
@@ -594,26 +610,11 @@ int main(int argc, char **argv){
 		return(-1);
 	}
 
-	// Close unnecessary file descriptors in target.
-	if(io->target){
-		if(close(STDIN_FILENO) == -1){
-			report_error("main(): close(STDIN_FILENO): %s", strerror(errno));
-			return(-1);
-		}
-
-		if(!verbose){
-			if(close(STDOUT_FILENO) == -1){
-				report_error("main(): close(STDOUT_FILENO): %s", strerror(errno));
-				return(-1);
-			}
-
-			if(close(STDERR_FILENO) == -1){
-				report_error("main(): close(STDERR_FILENO): %s", strerror(errno));
-				return(-1);
-			}
-		}
+	if (signal(SIGPIPE, SIG_IGN) == SIG_ERR) {
+		report_error("main(): signal(SIGPIPE, SIG_IGN): %s", strerror(errno));
+		return(-1);
 	}
-
+	
 	// We will occasionally fork() children in certain conditions. We will never handle them directly.
 	if(signal(SIGCHLD, SIG_IGN) == SIG_ERR){
 		report_error("main(): signal(SIGCHLD, SIG_IGN): %s", strerror(errno));
@@ -622,6 +623,12 @@ int main(int argc, char **argv){
 
 	/* Call the appropriate conductor. */
 	if(!io->target){
+	
+		if(verbose){
+			print_config();
+		}
+
+	
 		do{
 			retval = do_control();
 
@@ -653,7 +660,7 @@ int main(int argc, char **argv){
 				nanosleep(&req, NULL);
 			}
 
-		} while(retval != -1 && config->keepalive);
+		} while((retval != -1 && config->keepalive) || retval == -3);
 
 	}else{
 
@@ -730,6 +737,7 @@ void clean_io(){
 
 	struct message_helper *message_ptr;
 
+	io->first_run = 0;
 
 	io->target_proto_major = 0;
 	io->target_proto_minor = 0;
@@ -822,3 +830,207 @@ int posix_openpt(int flags){
 #endif /* FREEBSD */
 
 
+/* 
+	Prints the final state of the config_help object.
+*/
+void print_config(){
+
+	struct proxy_request_node *pr_node;
+
+	printf("\nLaunching with following configuration:\n\n");
+
+
+/* We don't print anything when non-interactive, so this is a nop test.
+	printf("\tInteractive:\t\t");
+	if(config->interactive){
+		printf("True");
+	}else{
+		printf("False");
+	}
+	printf("\n");
+*/
+
+	printf("\tBindshell:\t\t");
+	if(config->bindshell){
+		printf("True");
+	}else{
+		printf("False");
+	}
+	printf("\n");
+
+	printf("\tSOCKS Port:\t\t");
+	if(config->socks){
+		printf("%s", config->socks);
+	}else{
+		printf("None");
+	}
+	printf("\n");
+	
+	printf("\tTUN:\t\t\t");
+	if(config->tun){
+		printf("True");
+	}else{
+		printf("False");
+	}
+	printf("\n");
+
+	printf("\tTAP:\t\t\t");
+	if(config->tap){
+		printf("True");
+	}else{
+		printf("False");
+	}
+	printf("\n");
+
+	printf("\tIP Address:\t\t");
+	if(config->ip_addr){
+		printf("%s", config->ip_addr);
+	}else{
+		printf("None");
+	}
+	printf("\n");
+
+	printf("\tKeys Directory:\t\t");
+	if(config->keys_dir){
+		printf("%s", config->keys_dir);
+	}else{
+		printf("None");
+	}
+	printf("\n");
+
+	printf("\tRC File:\t\t");
+	if(config->rc_file){
+		printf("%s", config->rc_file);
+	}else{
+		printf("None");
+	}
+	printf("\n");
+
+	printf("\tShell:\t\t\t");
+	if(config->shell){
+		printf("%s", config->shell);
+	}else{
+		printf("%s", DEFAULT_SHELL);
+	}
+	printf("\n");
+
+	printf("\tLocal Forwarder:\t");
+	if(config->local_forward){
+		printf("%s", config->local_forward);
+	}else{
+		printf("None");
+	}
+	printf("\n");
+
+	printf("\tLog File:\t\t");
+	if(config->log_file){
+		printf("%s", config->log_file);
+	}else{
+		printf("None");
+	}
+	printf("\n");
+
+	printf("\tKeep-alive:\t\t");
+	if(config->keepalive){
+		printf("True");
+	}else{
+		printf("False");
+	}
+	printf("\n");
+
+	printf("\tNOPs:\t\t\t");
+	if(config->nop){
+		printf("True");
+	}else{
+		printf("False");
+	}
+	printf("\n");
+
+	printf("\tRetry Timer - Min:\t%d\n", config->retry_start);
+	printf("\tRetry Timer - Max:\t%d\n", config->retry_stop);
+	printf("\tTimeout:\t\t%d\n", config->timeout);
+
+
+#ifdef OPENSSL
+
+	printf("\tEncryption:\t\t");
+	switch(config->encryption){
+
+		case 0:
+			printf("\033[01;31mPlaintext\033[00m");
+			break;
+
+		case 1:
+			printf("\033[01;31mAnonymous Diffie-Hellman\033[00m");
+			break;
+
+		case 2:
+			printf("Ephemeral Diffie-Hellman");
+			break;
+
+		default:
+			printf("Invalid!");
+			break;
+	}
+	printf("\n");
+
+	printf("\tCipher List:\t\t");
+	if(config->cipher_list){
+		printf("%s", config->cipher_list);
+	}else{
+		printf("None");
+	}
+	printf("\n");
+
+#endif /* OPENSSL */
+
+	printf("\tProxies:");
+	pr_node = config->proxy_request_head;
+	if(!pr_node){
+		printf("\t\tNone");
+	}else{
+		printf("\n");
+
+		while(pr_node){
+			printf("\t\t\t\t");
+
+			switch(pr_node->type){
+
+				case PROXY_STATIC:
+					printf("%7s", "STATIC");
+					break;
+
+				case PROXY_DYNAMIC:
+					printf("%7s", "DYNAMIC");
+					break;
+
+				case PROXY_TUN:
+					printf("%7s", "TUN");
+					break;
+
+				case PROXY_TAP:
+					printf("%7s", "TAP");
+					break;
+
+				default:
+					printf("Invalid!");
+					break;
+			}
+			printf(", ");
+
+			if(pr_node->remote){
+				printf("%6s", "REMOTE");
+			}else{
+				printf("%6s", "LOCAL");
+			}
+			printf(", ");
+
+			printf("%s\n", pr_node->request_string);
+			pr_node = pr_node->next;
+		}
+
+	}
+
+	printf("\n\n");
+	fflush(stdout);
+}

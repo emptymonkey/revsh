@@ -2,13 +2,19 @@
 
 _revsh_ is a tool for establishing [reverse shells](http://en.wikipedia.org/wiki/Reverse_shell) with [terminal](http://en.wikipedia.org/wiki/Computer_terminal) support, reverse [VPNs](https://en.wikipedia.org/wiki/Virtual_private_network) for [advanced pivoting](https://en.wikipedia.org/wiki/Exploit_(computer_security)#Pivoting), as well as arbitrary data tunneling.
 
+## News ##
+
+* __2018-08-09__: New release. Mosly bug / stability fixes and better documentation on the build process with OpenSSL 1.1.0. See the _Installation_ section below for the updated build instructions.
+
+## Overview ##
+
 **What is a "reverse shell"?**
 
 A reverse shell is a network connection that grants [shell](http://en.wikipedia.org/wiki/Shell_%28computing%29) access to a remote host. As opposed to other remote login tools such as [telnet](http://en.wikipedia.org/wiki/Telnet) and [ssh](http://en.wikipedia.org/wiki/Secure_Shell), a reverse shell is initiated by the remote host. This technique of connecting outbound from the remote network allows for circumvention of firewalls that are configured to block inbound connections only. 
 
 **What is a "reverse VPN"?**
 
-_revsh_ is capable of attaching a virtual ethernet card (tun/tap) to both ends of its crypto tunnel. These cards can then be used to forward raw IP packets or ethernet frames. When combined with an Iptables NAT rule, or bridging a real ethernet card, this allows for the operator to receive a fully routable IP address on the target machines network. This, essentially, is a full VPN that has performed a connect-back call to the operator to circumvent in-bound packet filtering and grant the operator full network access.
+_revsh_ is capable of attaching a virtual ethernet card (tun/tap) to both ends of its crypto tunnel. These cards can then be used to forward raw IP packets or ethernet frames. When combined with an Iptables NAT rule, or bridging a real ethernet card, this allows for the operator to receive a fully routable IP address on the target machines network. This, essentially, is a full VPN that has performed a connect-back call to the operator to circumvent in-bound packet filtering and grant the operator full network access. (See ["Documentation/REVERSE_VPN.md"](https://github.com/emptymonkey/revsh/blob/master/Documentation/REVERSE_VPN.md) for more information.)
 
 **What is a "bind shell"?**
 
@@ -41,7 +47,7 @@ In addition, _revsh_ also offers the following features:
  * Escape sequence commands to kill non-responsive nodes, or print connection statistics.
 
 
-_revsh_ is intended as a supplementary tool for a [pentester's](http://en.wikipedia.org/wiki/Pentester) toolkit that provides the full set of terminal features across an encrypted tunnel. All together in a small (~75k) easy to use binary.
+_revsh_ is intended as a supplementary tool for a [pentester's](http://en.wikipedia.org/wiki/Pentester) toolkit that provides the full set of terminal features across an encrypted tunnel.
 
 **Where can I use _revsh_?**
 
@@ -59,69 +65,69 @@ _revsh_ was developed on x86_64 Linux. Here is a brief list of Arch / OS combina
 	Control:	revsh -c [CONTROL_OPTIONS] [MUTUAL_OPTIONS] [ADDRESS[:PORT]]
 	Target:		revsh     [TARGET_OPTIONS] [MUTUAL_OPTIONS] [ADDRESS[:PORT]]
 	
+		ADDRESS		The address of the control listener.		(Default is "0.0.0.0".)
+		PORT		The port of the control listener.		(Default is "2200".)
+	
 	CONTROL_OPTIONS:
-	  -c           Run in "command and control" mode.             (Default is target mode.)
-	  -a           Enable Anonymous Diffie-Hellman mode.          (Default is Ephemeral Diffie-Hellman.)
-	  -d KEYS_DIR  Reference the keys in an alternate directory.  (Default is "~/.revsh/keys/".)
-	  -f RC_FILE   Reference an alternate rc file.                (Default is "~/.revsh/rc".)
-	  -s SHELL     Invoke SHELL as the remote shell.              (Default is "/bin/bash".)
-	  -F LOG_FILE  Log general use and errors to LOG_FILE.        (No default set.)
+		-c		Run in "command and control" mode.		(Default is target mode.)
+		-a		Enable Anonymous Diffie-Hellman mode.		(Default is Ephemeral Diffie-Hellman.)
+		-d KEYS_DIR	Reference the keys in an alternate directory.	(Default is "~/.revsh/keys/".)
+		-f RC_FILE	Reference an alternate rc file.			(Default is "~/.revsh/rc".)
+		-s SHELL	Invoke SHELL as the remote shell.		(Default is "/bin/bash".)
+		-F LOG_FILE	Log general use and errors to LOG_FILE.		(No default set.)
 	
 	TARGET_OPTIONS:
-	  -t SEC       Set the connection timeout to SEC seconds.     (Default is "3600".)
-	  -r SEC1,SEC2 Set the retry time to be SEC1 seconds, or      (Default is "600,1200".)
-	               to be random in the range from SEC1 to SEC2.
+		-t SEC		Set the connection timeout to SEC seconds.	(Default is "3600".)
+		-r SEC1,SEC2	Set the retry time to be SEC1 seconds, or	(Default is "600,1200".)
+				to be random in the range from SEC1 to SEC2.
 	
 	MUTUAL_OPTIONS:
-	  -k           Run in keep-alive mode. Node will neither
-	               exit normally, nor seppuku from timeout.
-	  -L [LHOST:]LPORT:RHOST:RPORT
-	               Static socket forwarding with a local
-	               listener at LHOST:LPORT forwarding to
-	               RHOST:RPORT.
-	  -R [RHOST:]RPORT:LHOST:LPORT
-	               Static socket forwarding with a remote
-	               listener at RHOST:RPORT forwarding to
-	               LHOST:LPORT.
-	  -D [LHOST:]LPORT
-	               Dynamic socket forwarding with a local
-	               listener at LHOST:LPORT.                       (Socks 4, 4a, and 5. TCP connect only.)
-	  -B [RHOST:]RPORT
-	               Dynamic socket forwarding with a remote
-	               listener at LHOST:LPORT.                       (Socks 4, 4a, and 5. TCP connect only.)
-	  -x           Disable automatic setup of proxies.            (Defaults: Proxy D2280 and tun/tap devices.)
-	  -b           Start in bind shell mode.                      (Default is reverse shell mode.)
-	               The -b flag must be invoked on both ends.
-	  -n           Non-interactive netcat style data broker.      (Default is interactive w/remote tty.)
-	               No tty. Useful for copying files.
-	  -v           Verbose. -vv and -vvv increase verbosity.
-	  -h           Print this help.
-	  -e           Print out some usage examples.
-	
-	  ADDRESS      The address of the control listener.           (Default is "0.0.0.0".)
-	  PORT         The port of the control listener.              (Default is "2200".)
-
+		-k		Run in keep-alive mode.
+				Node will neither exit normally, nor timeout.
+		-L [LHOST:]LPORT:RHOST:RPORT
+				Static socket forwarding with a local listener
+				at LHOST:LPORT forwarding to RHOST:RPORT.
+		-R [RHOST:]RPORT:LHOST:LPORT
+				Static socket forwarding with a remote listener
+				at RHOST:RPORT forwarding to LHOST:LPORT.
+		-D [LHOST:]LPORT
+				Dynamic socket forwarding with a local listener
+				at LHOST:LPORT.					(Socks 4, 4a, and 5. TCP connect only.)
+		-B [RHOST:]RPORT
+				Dynamic socket forwarding with a remote
+				listener at LHOST:LPORT.			(Socks 4, 4a, and 5. TCP connect only.)
+		-x		Disable automatic setup of proxies.		(Defaults: Proxy D2280 and tun/tap devices.)
+		-b		Start in bind shell mode.			(Default is reverse shell mode.)
+				The -b flag must be invoked on both ends.
+		-n		Non-interactive netcat style data broker.	(Default is interactive w/remote tty.)
+				No tty. Useful for copying files.
+		-v		Verbose. -vv and -vvv increase verbosity.
+		-V		Print the program and protocol versions.
+		-h		Print this help.
+		-e		Print out some usage examples.
 
 ## Installation ##
 
-	sudo apt-get install openssl libssl-dev     # Pre-req for building.
+First, you will need to build OpenSSL from source. (See __NOTE__ below.)
+
+	git clone https://github.com/openssl/openssl.git
+	cd openssl/
+	./config no-shared -static	# These options are needed to build static applications against OpenSSL.
+	make && make test	# We skip "make install" so we don't conflict with your systems default OpenSSL. We will build _revsh_ against the OpenSSL we just compiled in this tree.
+	cd ..
+
+Now build revsh.
+
 	git clone https://github.com/emptymonkey/revsh.git
 	cd revsh
 	vi config.h        # Set up new defaults that fit your situation.
+	vi Makefile        # Check that the selected build environment is the one you want. (It probably already is by default.)
 	make               # This *can* take a very long time, though it usually doesn't.
 	make install
-	cd ~/.revsh
-	vi rc              # Add your favorite startup commands to really customize the feel of your remote shell.
+	vi ~/.revsh/rc     # Add your favorite startup commands to really customize the feel of your remote shell.
 	revsh -h
 
-## Compatability Note! ##
-
-~~_revsh_ was developed with OpenSSL 1.0.2. Kali linux now ships with OpenSSL 1.1.0. There are notable changes to the API. Currently _revsh_ will not build with OpenSSL 1.1.0. (See Issue \#10.) This is being worked on, but no timeline set for a fix. I may take the opportunity to move away from OpenSSL entirely. Sorry for the inconvienience.~~
-
-Update! OpenSSL 1.1 works now, but it needs to be built from source for the moment. This is noted, and the Makefile update, in the "devel" branch. 
-
-	git checkout devel
-  
+__NOTE:__ With the release of OpenSSL 1.1.0, OpenSSL needs to be built from source for use in a statically linked binary. Building a statically linked binary against the OpenSSL libraries that ship with most Linux distros (including Kali) will *not* work. (If it builds at all, it will SEGFAULT.)
 
 ## Examples ##
 

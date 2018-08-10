@@ -238,14 +238,12 @@ struct message_helper *message_helper_create(char *data, unsigned short data_len
 
 	struct message_helper *new_mh;
 
-	// free() called in message_helper_destroy().
 	new_mh = (struct message_helper *) calloc(1, sizeof(struct message_helper));
 	if(!new_mh){
 		report_error("message_helper_create(): calloc(1, %d): %s", (int) sizeof(struct message_helper), strerror(errno));
 		return(NULL);
 	}
 
-	// free() called in message_helper_destroy().
 	new_mh->data = (char *) calloc(message_data_size, sizeof(char));
 	if(!new_mh->data){
 		report_error("message_helper_create(): calloc(1, %d): %s", (int) sizeof(struct message_helper), strerror(errno));

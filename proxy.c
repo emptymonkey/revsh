@@ -47,7 +47,6 @@ struct proxy_node *proxy_node_new(char *proxy_string, int proxy_type){
 	}
 	new_node->proxy_type = proxy_type;
 
-	// free() called in proxy_node_delete().
 	if((new_node->orig_request = (char *) calloc(strlen(proxy_string) + 1, sizeof(char))) == NULL){
 			report_error("proxy_node_new(): calloc(%d, sizeof(char)): %s", (int) strlen(proxy_string), strerror(errno));
 		free(new_node);
@@ -55,7 +54,6 @@ struct proxy_node *proxy_node_new(char *proxy_string, int proxy_type){
 	}
 	memcpy(new_node->orig_request, proxy_string, strlen(proxy_string));
 
-	// free() called in io_clean().
 	if((new_node->mem_ptr = (char *) calloc(strlen(proxy_string) + 1, sizeof(char))) == NULL){
 			report_error("proxy_node_new(): calloc(%d, sizeof(char)): %s", (int) strlen(proxy_string), strerror(errno));
 		free(new_node);
@@ -207,7 +205,6 @@ int proxy_connect(char *rhost_rport){
 
 	count = strlen(tmp_ptr);
 
-	// free() called in this function.
 	if((rhost = (char *) calloc(count + 1, sizeof(char))) == NULL){
 		report_error("proxy_connect(): calloc(%d, %d): %s", count + 1, (int) sizeof(char), strerror(errno));
 		return(-1);
@@ -283,7 +280,6 @@ struct proxy_node *proxy_node_create(){
 
 	struct proxy_node *cur_proxy_node, *tmp_proxy_node;
 
-	// free() called in proxy_node_delete().
 	if((cur_proxy_node = (struct proxy_node *) calloc(1, sizeof(struct proxy_node))) == NULL){
 		report_error("proxy_node_create(): calloc(1, %d): %s", (int) sizeof(struct proxy_node), strerror(errno));
 		return(NULL);
@@ -395,7 +391,6 @@ struct connection_node *connection_node_create(){
 
 	struct connection_node *cur_connection_node, *tmp_connection_node;
 
-	// free() called in connection_node_delete().
 	if((cur_connection_node = (struct connection_node *) calloc(1, sizeof(struct connection_node))) == NULL){
 		report_error("connection_node_create(): calloc(1, %d): %s", (int) sizeof(struct connection_node), strerror(errno));
 		return(NULL);
@@ -790,8 +785,10 @@ char *addr_to_string(int atype, char *addr, char *port, int len){
 
 	// strlen("255.255.255.255:65535") -> 21
 	int string_len = 21;
-	// strlen(":65535") -> 6
-	int port_len = 6;
+	// ntohs returns a uint16_t. Max size of that number is 6 bytes. Plus one for the leading ':'.
+	// Note that the largest value *should* be 65535, which is 6 not 7 characters long. Doing so will make
+	// the compiler grumpy.
+	int port_len = 7;
 
 	if(atype == 0x03){
 		string_len = len;
@@ -802,7 +799,6 @@ char *addr_to_string(int atype, char *addr, char *port, int len){
 		string_len = 47;
 	}
 
-	// free() called in connection_node_delete().
 	if((ptr = (char *) calloc(string_len + 1, sizeof(char))) == NULL){
 		report_error("addr_to_string(): calloc(%d, %d): %s", string_len + 1, (int) sizeof(char), strerror(errno));
 		return(NULL);
