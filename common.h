@@ -12,7 +12,7 @@
 # define _XOPEN_SOURCE  500
 #endif 
 
-#define REVSH_VERSION "1.0.3"
+#define REVSH_VERSION "1.0.4"
 
 
 /******************************************************************************
