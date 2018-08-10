@@ -14,7 +14,7 @@ A reverse shell is a network connection that grants [shell](http://en.wikipedia.
 
 **What is a "reverse VPN"?**
 
-_revsh_ is capable of attaching a virtual ethernet card (tun/tap) to both ends of its crypto tunnel. These cards can then be used to forward raw IP packets or ethernet frames. When combined with an Iptables NAT rule, or bridging a real ethernet card, this allows for the operator to receive a fully routable IP address on the target machines network. This, essentially, is a full VPN that has performed a connect-back call to the operator to circumvent in-bound packet filtering and grant the operator full network access.
+_revsh_ is capable of attaching a virtual ethernet card (tun/tap) to both ends of its crypto tunnel. These cards can then be used to forward raw IP packets or ethernet frames. When combined with an Iptables NAT rule, or bridging a real ethernet card, this allows for the operator to receive a fully routable IP address on the target machines network. This, essentially, is a full VPN that has performed a connect-back call to the operator to circumvent in-bound packet filtering and grant the operator full network access. (See ["Documentation/REVERSE_VPN.md"](https://github.com/emptymonkey/revsh/blob/master/Documentation/REVERSE_VPN.md) for more information.)
 
 **What is a "bind shell"?**
 
