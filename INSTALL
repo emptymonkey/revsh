@@ -1,8 +1,26 @@
 
-# Pre-req for building.
-sudo apt-get install openssl libssl-dev
 
-# Grab the source.
+################################################################################
+# Build OpenSSL
+################################################################################
+
+# Download OpenSSL source.
+git clone https://github.com/openssl/openssl.git
+cd openssl/
+
+# Configure OpenSSL to be used in building static applications.
+./config no-shared -static
+
+# Build the libraries and leave the directory.
+make && make test
+cd ..
+
+
+################################################################################
+# Build revsh
+################################################################################
+
+# Download the revsh source code.
 git clone https://github.com/emptymonkey/revsh.git
 cd revsh
 
@@ -12,13 +30,13 @@ vi config.h
 # Set install directories and pick build type. (Optional.)
 vi Makefile
 
-# This *can* take a very long time, though it usually doesn't.
+# Build revsh.
+## This *can* take a very long time, though it usually doesn't.
 make
 make install
 
 # Add your favorite startup commands to really customize the feel of your remote shell. (Optional.)
-cd ~/.revsh
-vi rc
+vi ~/.revsh/rc
 
 # Ready to go!
 revsh -h
