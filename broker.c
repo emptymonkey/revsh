@@ -105,7 +105,7 @@ int broker(){
 		}
 
 		/* Setup the TUN and TAP devices. Once setup, handle them as yet another connection in the connection_node linked list. */
-#ifndef FREEBSD
+#if !defined( FREEBSD) && !defined(SOLARIS)
 		if(!io->target){
 			if(config->tun){
 				if((cur_connection_node = handle_tun_tap_init(IFF_TUN)) == NULL){

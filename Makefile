@@ -20,12 +20,24 @@ MAN_DIR = /usr/share/man/man1/
 ########################################################################################################################
 
 ## Linux w/static libraries. (Full static build.)
-CFLAGS = -static -Wall -Wextra -std=c99 -pedantic -Os -DOPENSSL -I$(OPENSSL_DIR)/include
-STATIC_LIBS = $(OPENSSL_DIR)/libssl.a $(OPENSSL_DIR)/libcrypto.a
-LIBS = 
+#CFLAGS = -static -Wall -Wextra -std=c99 -pedantic -Os -DOPENSSL -I$(OPENSSL_DIR)/include
+#STATIC_LIBS = $(OPENSSL_DIR)/libssl.a $(OPENSSL_DIR)/libcrypto.a
+#LIBS = 
+#KEYS_DIR = keys
+#KEY_OF_C = in_the_key_of_c
+#IO_DEP = io_ssl.c
+
+## SOLARIS
+## NOTE:
+##      You'll want to change MAN_DIR variable above.
+##      Also, tun/tap support doesn't exist for you yet. Sorry. (But everything else should work fine.)
+CC = /usr/bin/gcc
+CFLAGS = -Wall -Os -I$(OPENSSL_DIR)/include -DSOLARIS -DOPENSSL
+LIBS = ../openssl/libssl.a ../openssl/libcrypto.a
 KEYS_DIR = keys
 KEY_OF_C = in_the_key_of_c
 IO_DEP = io_ssl.c
+
 
 ## FreeBSD
 ## NOTE: 

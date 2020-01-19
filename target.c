@@ -211,7 +211,10 @@ int do_target(){
 
 	if(ioctl(pty_master, TIOCSWINSZ, &tty_winsize) == -1){
 		report_error("do_target(): ioctl(%d, %d, %lx): %s", pty_master, TIOCGWINSZ, (unsigned long) &tty_winsize, strerror(errno));
+#ifndef SOLARIS
+                // On solaris, this isn't fatal.
 		return(-1);
+#endif
 	}
 
 	if((pty_name = ptsname(pty_master)) == NULL){
