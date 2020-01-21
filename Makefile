@@ -27,6 +27,18 @@ KEYS_DIR = keys
 KEY_OF_C = in_the_key_of_c
 IO_DEP = io_ssl.c
 
+## SOLARIS
+## NOTE:
+##      You'll want to change MAN_DIR variable above.
+##      Also, tun/tap support doesn't exist for you yet. Sorry. (But everything else should work fine.)
+#CC = /usr/bin/gcc
+#CFLAGS = -Wall -Os -I$(OPENSSL_DIR)/include -DSOLARIS -DOPENSSL
+#LIBS = ../openssl/libssl.a ../openssl/libcrypto.a
+#KEYS_DIR = keys
+#KEY_OF_C = in_the_key_of_c
+#IO_DEP = io_ssl.c
+
+
 ## FreeBSD
 ## NOTE: 
 ##	You'll want to change MAN_DIR variable above.

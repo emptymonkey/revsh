@@ -503,7 +503,7 @@ int handle_message_dt_connection_ht_create_tun_tap(){
 	unsigned short id = message->header_id;
 
 
-#ifdef FREEBSD
+#if defined(FREEBSD) || defined(SOLARIS)
 	// ENOSYS : It's not clear to me if ENOSYS is reserved for the OS or if this is a reasonable use case. 
 	handle_send_dt_connection_ht_destroy(origin, id, ENOSYS);
 	report_error("handle_message_dt_connection_ht_create_tun_tap(): revsh does not currently support tun/tap devices on FreeBSD.");
@@ -1301,7 +1301,7 @@ int handle_send_dt_nop(){
  ******************************************************************************/
 struct connection_node *handle_tun_tap_init(int ifr_flag){
 
-#ifdef FREEBSD
+#if  defined(FREEBSD) || defined(SOLARIS)
 	report_error("handle_tun_tap_init(): revsh does not currently support tun/tap devices on FreeBSD.");
 	return(NULL);
 #else
