@@ -331,6 +331,12 @@ int init_io_target(){
 	name.sin_family = AF_INET;
 	name.sin_port = htons(strtol(ip_port, NULL, 10));
 
+    if(inet_pton(AF_INET, ip_address, &name.sin_addr)<=0)
+    {
+		report_error("init_io_target(): inet_pton(AF_INET, \"%s\", %p): %s", ip_address, &name.sin_addr, strerror(errno));
+		return(-1);
+    }
+
 	free(ip_address);
 
 	if((tmp_sock = socket(AF_INET, SOCK_STREAM, 0)) == -1){
