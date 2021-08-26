@@ -110,7 +110,7 @@ _revsh_ was developed on x86_64 Linux. Here is a brief list of Arch / OS combina
 
 First, you will need to build OpenSSL from source. (See __NOTE__ below.)
 
-	git clone https://github.com/openssl/openssl.git
+	git clone --branch OpenSSL_1_1_0-stable https://github.com/openssl/openssl.git
 	cd openssl/
 	./config no-shared -static	# These options are needed to build static applications against OpenSSL.
 	make && make test	# We skip "make install" so we don't conflict with your systems default OpenSSL. We will build _revsh_ against the OpenSSL we just compiled in this tree.
