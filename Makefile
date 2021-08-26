@@ -20,7 +20,7 @@ MAN_DIR = /usr/share/man/man1/
 ########################################################################################################################
 
 ## Linux w/static libraries. (Full static build.)
-CFLAGS = -static -Wall -Wextra -std=c99 -pedantic -Os -DOPENSSL -I$(OPENSSL_DIR)/include
+CFLAGS = -static -Wall -Wextra -std=c99 -pedantic -Os -DOPENSSL -I$(OPENSSL_DIR)/include -fcommon
 STATIC_LIBS = $(OPENSSL_DIR)/libssl.a $(OPENSSL_DIR)/libcrypto.a
 LIBS = 
 KEYS_DIR = keys
