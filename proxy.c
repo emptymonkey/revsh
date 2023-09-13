@@ -783,6 +783,7 @@ int parse_addr_string(char *addr_string, unsigned char ip[4], unsigned short *po
 			char *tmp_buf = calloc(1, len);
 			memcpy(tmp_buf, s_start, len);
 			int n = atoi(tmp_buf);
+			free(tmp_buf);
 
 			if(parsed_elements < 4) {
 				ip[parsed_elements] = n;

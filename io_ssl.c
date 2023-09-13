@@ -1066,6 +1066,7 @@ int init_io_target(){
 			char *domain = strdup(config->ip_addr);
 			char *p = strchr(domain, ':');
 			if (!p) {
+				free(domain);
 				return(-1);
 			}
 			*p = 0;
@@ -1088,6 +1089,8 @@ int init_io_target(){
 			socks5_connection_request[i++] = port & 0xff;		// DST.PORT
 
 			write(io->remote_fd, socks5_connection_request, socks5_connection_request_len);
+			free(domain);
+			free(socks5_connection_request);
 
 			// Receive initial part of socks5 response packet
 			char socks5_response_part1[4] = {0};
@@ -1141,6 +1144,7 @@ int init_io_target(){
 			char *http_connect_request = calloc(1, strlen(http_connect_request_fmt) - 2 + strlen(config->ip_addr) + 1);
 			sprintf(http_connect_request, http_connect_request_fmt, config->ip_addr);
 			write(io->remote_fd, http_connect_request, strlen(http_connect_request));
+			free(http_connect_request);
 
 			// Read http reponse header
 			char http_header[4096] = {0};
