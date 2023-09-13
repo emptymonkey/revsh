@@ -25,6 +25,7 @@ int message_push(){
 		header_len += sizeof(message->header_type) + sizeof(message->header_origin) + sizeof(message->header_id);
 		if(message->header_type == DT_PROXY_HT_CREATE || message->header_type == DT_PROXY_HT_REPORT || message->header_type == DT_CONNECTION_HT_CREATE){
 			header_len += sizeof(message->header_proxy_type);
+			header_len += sizeof(message->header_socks_type);
 		}
 	}
 
@@ -87,6 +88,12 @@ int message_push(){
 
 		if(message->header_type == DT_PROXY_HT_CREATE || message->header_type == DT_PROXY_HT_REPORT || message->header_type == DT_CONNECTION_HT_CREATE){
 			tmp_short = htons(message->header_proxy_type);
+			if(io->remote_write(&tmp_short, sizeof(tmp_short)) == -1){
+				report_error("message_push(): remote_write(%lx, %d): %s", \
+						(unsigned long) &tmp_short, (int) sizeof(tmp_short), strerror(errno));
+				return(-1);
+			}
+			tmp_short = htons(message->header_socks_type);
 			if(io->remote_write(&tmp_short, sizeof(tmp_short)) == -1){
 				report_error("message_push(): remote_write(%lx, %d): %s", \
 						(unsigned long) &tmp_short, (int) sizeof(tmp_short), strerror(errno));
@@ -188,6 +195,13 @@ int message_pull(){
 			}	
 			message->header_proxy_type = ntohs(message->header_proxy_type);
 			header_len -= sizeof(message->header_proxy_type);
+			if((retval = io->remote_read(&message->header_socks_type, sizeof(message->header_socks_type))) == -1){
+				report_error("message_pull(): remote_read(%lx, %d): %s", \
+						(unsigned long) &message->header_socks_type, (int) sizeof(message->header_socks_type), strerror(errno));
+				return(-1);
+			}
+			message->header_socks_type = ntohs(message->header_socks_type);
+			header_len -= sizeof(message->header_socks_type);
 		}
 	}
 
