@@ -410,6 +410,41 @@ struct connection_node *connection_node_create(){
 	return(cur_connection_node);
 }
 
+/******************************************************************************
+ *
+ * connection_node_socks_reply()
+ *
+ * Inputs: A pointer to the connection_node and the socks reply type to send (0
+ * for error. 1 for ok).
+ *
+ * Outputs: None.
+ *
+ * Purpose: Report back to the socks client whether the requested connection
+ * request succeeded or not.
+ *
+ ******************************************************************************/
+void connection_node_socks_reply(struct connection_node *cur_connection_node, int ok){
+	char *reply_buff = NULL;
+	int reply_buff_len = 0;
+	if (cur_connection_node->socks_type == 4) {
+		if(ok) {
+			reply_buff = SOCKS_V4_REPLY_OK;
+		}
+		else {
+			reply_buff = SOCKS_V4_REPLY_ERR;
+		}
+		reply_buff_len = SOCKS_V4_REPLY_LEN;
+	} else if (cur_connection_node->socks_type == 5) {
+		if(ok) {
+			reply_buff = SOCKS_V5_REPLY_OK;
+		}
+		else {
+			reply_buff = SOCKS_V5_REPLY_ERR;
+		}
+		reply_buff_len = SOCKS_V5_REPLY_LEN;
+	}
+	write(cur_connection_node->fd, reply_buff, reply_buff_len);
+}
 
 /******************************************************************************
  *
@@ -555,6 +590,7 @@ int parse_socks_request(struct connection_node *cur_connection_node){
 
 	// Socks 4 or 4a.
 	if(head[index] == 4){
+		cur_connection_node->socks_type = 4;
 
 		/*
 		 * +----+----+----+----+----+----+----+----+----+----+....+----+
@@ -641,6 +677,7 @@ int parse_socks_request(struct connection_node *cur_connection_node){
 
 		// SOCKS 5
 	}else if(head[index] == 5){
+		cur_connection_node->socks_type = 5;
 
 		if(cur_connection_node->state == CON_SOCKS_INIT){
 			index += 1;
