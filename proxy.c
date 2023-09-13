@@ -419,7 +419,8 @@ struct connection_node *connection_node_create(){
  *
  * Outputs: None.
  *
- * Purpose: Initialize a new connection node, and put it into it's place in the linked list.
+ * Purpose: Report back to the socks client whether the requested connection
+ * request succeeded or not.
  *
  ******************************************************************************/
 void connection_node_socks_reply(struct connection_node *cur_connection_node, int ok){
