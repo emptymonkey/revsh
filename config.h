@@ -10,6 +10,26 @@
 #define CONTROL_ADDRESS "0.0.0.0"
 #define CONTROL_PORT "2200"
 
+/*
+ * Outbound proxy for target
+ */
+
+// Default: no proxy
+#define OUTBOUND_PROXY_TYPE NULL
+#define OUTBOUND_PROXY_ADDR NULL
+
+// socks4
+//#define OUTBOUND_PROXY_TYPE "socks4"
+//#define OUTBOUND_PROXY_ADDR "127.0.0.1:1080"
+
+// socks5h
+//#define OUTBOUND_PROXY_TYPE "socks5h"
+//#define OUTBOUND_PROXY_ADDR "localhost:1080"
+
+// http
+//#define OUTBOUND_PROXY_TYPE "http"
+//#define OUTBOUND_PROXY_ADDR "127.0.0.1:3128"
+
 // Default socks proxy listener port.
 #define SOCKS_LISTENER "2280"
 

@@ -55,6 +55,8 @@ struct config_helper {
 	int tap;
 
 	char *ip_addr;
+	char *outbound_proxy_type;
+	char *outbound_proxy_addr;
 	char *keys_dir;
 	char *rc_file;
 	char *shell;
