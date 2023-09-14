@@ -22,7 +22,7 @@
 //#define OUTBOUND_PROXY_TYPE "socks4"
 //#define OUTBOUND_PROXY_ADDR "127.0.0.1:1080"
 
-// socks4a (CONTRL_ADDRESS can be domain to be resolved on target)
+// socks4a (CONTRL_ADDRESS can be domain to be resolved by the proxy)
 //#define OUTBOUND_PROXY_TYPE "socks4a"
 //#define OUTBOUND_PROXY_ADDR "127.0.0.1:1080"
 
@@ -30,11 +30,11 @@
 //#define OUTBOUND_PROXY_TYPE "socks5"
 //#define OUTBOUND_PROXY_ADDR "127.0.0.1:1080"
 
-// socks5h (CONTRL_ADDRESS can be domain to be resolved on target)
+// socks5h (CONTRL_ADDRESS can be domain to be resolved by the proxy)
 //#define OUTBOUND_PROXY_TYPE "socks5h"
 //#define OUTBOUND_PROXY_ADDR "127.0.0.1:1080"
 
-// http (CONTRL_ADDRESS can be domain to be resolved on target)
+// http (CONTRL_ADDRESS can be domain to be resolved by the proxy)
 //#define OUTBOUND_PROXY_TYPE "http"
 //#define OUTBOUND_PROXY_ADDR "127.0.0.1:3128"
 
