@@ -1,6 +1,7 @@
 
 #include "common.h"
 #include "keys/dh_params.c"
+#include <stdio.h>
 #include <string.h>
 
 extern sig_atomic_t sig_found;
@@ -1027,11 +1028,17 @@ int init_io_target(){
 
 			// Send socks4 connection request
 			unsigned char socks_request[] = { 0x04, 0x01, port >> 8, port & 0xff, ip[0], ip[1], ip[2], ip[3], 0x00 };
-			write(io->remote_fd, socks_request, sizeof(socks_request));
+			if(write(io->remote_fd, socks_request, sizeof(socks_request)) == -1) {
+				report_error("init_io_target(): write socks4 request: %s", strerror(errno));
+				return(-1);
+			}
 
 			// Read socks4 connection response
 			char socks_response[8] = {0};
-			read(io->remote_fd, socks_response, sizeof(socks_response));
+			if(read(io->remote_fd, socks_response, sizeof(socks_response)) == -1) {
+				report_error("init_io_target(): read socks4 response: %s", strerror(errno));
+				return(-1);
+			}
 			if(socks_response[0] != 0x00 || socks_response[1] != 0x5a) {
 				report_error("init_io_target(): socks4");
 				return(-1);
@@ -1052,11 +1059,17 @@ int init_io_target(){
 
 			// Send socks5 greeting (no authentication support)
 			unsigned char socks5_greeting[] = { 0x05, 0x01, 0x00 };
-			write(io->remote_fd, socks5_greeting, sizeof(socks5_greeting));
+			if(write(io->remote_fd, socks5_greeting, sizeof(socks5_greeting)) == -1) {
+				report_error("init_io_target(): write socks5 greeting: %s", strerror(errno));
+				return(-1);
+			}
 
 			// Receive socks5 choice
 			char socks5_choice[2] = {0};
-			read(io->remote_fd, socks5_choice, sizeof(socks5_choice));
+			if(read(io->remote_fd, socks5_choice, sizeof(socks5_choice)) == -1) {
+				report_error("init_io_target(): read socks5 choice: %s", strerror(errno));
+				return(-1);
+			}
 			if(socks5_choice[0] != 0x05 || socks5_choice[1] != 0x00) {
 				report_error("init_io_target(): socks5 choice");
 				return(-1);
@@ -1081,20 +1094,26 @@ int init_io_target(){
 			socks5_connection_request[i++] = 0x03;				// ATYP: DOMAINNAME
 			socks5_connection_request[i++] = strlen(domain);	// number of octets of name that follow
 
-			for(int j = 0; j < strlen(domain); j++) {
+			for(size_t j = 0; j < strlen(domain); j++) {
 				socks5_connection_request[i++] = domain[j];
 			}
 
 			socks5_connection_request[i++] = port >> 8;			// DST.PORT
 			socks5_connection_request[i++] = port & 0xff;		// DST.PORT
 
-			write(io->remote_fd, socks5_connection_request, socks5_connection_request_len);
+			if(write(io->remote_fd, socks5_connection_request, socks5_connection_request_len) == -1) {
+				report_error("init_io_target(): write socks5 connection request: %s", strerror(errno));
+				return(-1);
+			}
 			free(domain);
 			free(socks5_connection_request);
 
 			// Receive initial part of socks5 response packet
 			char socks5_response_part1[4] = {0};
-			read(io->remote_fd, socks5_response_part1, sizeof(socks5_response_part1));
+			if(read(io->remote_fd, socks5_response_part1, sizeof(socks5_response_part1)) == -1) {
+				report_error("init_io_target(): read socks5 response part 1: %s", strerror(errno));
+				return(-1);
+			}
 			if(socks5_response_part1[0] != 0x05 || socks5_response_part1[1] != 0x00) {
 				report_error("init_io_target(): socks5 response");
 				return(-1);
@@ -1106,17 +1125,26 @@ int init_io_target(){
 				// IPV4 ADDR
 				case 0x01: {
 					char socks5_response_part2[6] = {0};
-					read(io->remote_fd, socks5_response_part2, sizeof(socks5_response_part2));
+					if(read(io->remote_fd, socks5_response_part2, sizeof(socks5_response_part2)) == -1) {
+						report_error("init_io_target(): read socks5 response part 2 (atyp 1): %s", strerror(errno));
+						return(-1);
+					}
 					break;
 				}
 				// DOMAINNAME
 				case 0x03: {
 					while(1) {
 						char socks5_response_part2 = 0;
-						read(io->remote_fd, &socks5_response_part2, 1);
+						if(read(io->remote_fd, &socks5_response_part2, 1) == -1) {
+							report_error("init_io_target(): read socks5 response part 2 (atyp 3): %s", strerror(errno));
+							return(-1);
+						}
 						if(socks5_response_part2 == 0) {
 							unsigned short port = 0;
-							read(io->remote_fd, &port, 2);
+							if(read(io->remote_fd, &port, 2) == -1) {
+								report_error("init_io_target(): read socks5 response part 2 (atyp 3): %s", strerror(errno));
+								return(-1);
+							}
 							break;
 						}
 					}
@@ -1143,13 +1171,19 @@ int init_io_target(){
 			char *http_connect_request_fmt = "CONNECT %s HTTP/1.1\r\n\r\n";
 			char *http_connect_request = calloc(1, strlen(http_connect_request_fmt) - 2 + strlen(config->ip_addr) + 1);
 			sprintf(http_connect_request, http_connect_request_fmt, config->ip_addr);
-			write(io->remote_fd, http_connect_request, strlen(http_connect_request));
+			if(write(io->remote_fd, http_connect_request, strlen(http_connect_request)) == -1) {
+				report_error("init_io_target(): write http connection request: %s", strerror(errno));
+				return(-1);
+			}
 			free(http_connect_request);
 
 			// Read http reponse header
 			char http_header[4096] = {0};
-			for(int i = 0; i < sizeof(http_header); i++) {
-				read(io->remote_fd, http_header + i, 1);
+			for(size_t i = 0; i < sizeof(http_header); i++) {
+				if(read(io->remote_fd, http_header + i, 1) == -1) {
+					report_error("init_io_target(): read http connection response header: %s", strerror(errno));
+					return(-1);
+				}
 				if(strstr(http_header, "\r\n\r\n"))
 					break;
 			}
