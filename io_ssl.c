@@ -1010,27 +1010,73 @@ int init_io_target(){
 	// Outbound proxy connection
 	if(config->outbound_proxy_type && config->outbound_proxy_addr) {
 
-		// Outbound SOCKS4 proxy
-		if(strcmp(config->outbound_proxy_type, "socks4") == 0) {
+		// Outbound SOCKS4/SOCKS4A proxy
+		if(strcmp(config->outbound_proxy_type, "socks4") == 0 || strcmp(config->outbound_proxy_type, "socks4a") == 0) {
 
 			if(verbose) {
-				printf("Requesting socks4 connection to %s...", config->ip_addr);
+				printf("Requesting %s connection to %s...", config->outbound_proxy_type, config->ip_addr);
 				fflush(stdout);
 			}
 
-			// Parse control ip and port from string
-			unsigned char ip[4] = {0};
-			unsigned short port = 0;
-			if(!parse_addr_string(config->ip_addr, ip, &port)) {
-				report_error("init_io_target(): parse_addr_string");
-				return(-1);
-			}
+			if(strcmp(config->outbound_proxy_type, "socks4") == 0) {
+				// Parse control ip and port from string
+				unsigned char ip[4] = {0};
+				unsigned short port = 0;
+				if(!parse_addr_string(config->ip_addr, ip, &port)) {
+					report_error("init_io_target(): parse_addr_string");
+					return(-1);
+				}
 
-			// Send socks4 connection request
-			unsigned char socks_request[] = { 0x04, 0x01, port >> 8, port & 0xff, ip[0], ip[1], ip[2], ip[3], 0x00 };
-			if(write(io->remote_fd, socks_request, sizeof(socks_request)) == -1) {
-				report_error("init_io_target(): write socks4 request: %s", strerror(errno));
-				return(-1);
+				// Send socks4 connection request
+				unsigned char socks_request[] = {
+					0x04,			// VER: 4
+					0x01,			// CMD: CONNECT
+					port >> 8,		// DSTPORT
+					port & 0xff,	// DSTPORT
+					ip[0],			// DSTIP
+					ip[1],			// DSTIP
+					ip[2],			// DSTIP
+					ip[3],			// DSTIP
+					0x00			// ID
+				};
+				if(write(io->remote_fd, socks_request, sizeof(socks_request)) == -1) {
+					report_error("init_io_target(): write socks4 request: %s", strerror(errno));
+					return(-1);
+				}
+			} else if(strcmp(config->outbound_proxy_type, "socks4a") == 0) {
+				// Send socks4a connection request (domain)
+				char *domain = strdup(config->ip_addr);
+				char *p = strchr(domain, ':');
+				if (!p) {
+					free(domain);
+					return(-1);
+				}
+				*p = 0;
+				unsigned short port = atoi(p+1);
+
+				int socks4a_connection_request_len = 9 + strlen(domain) + 1;
+				unsigned char *socks4a_connection_request = calloc(1, socks4a_connection_request_len + 1);
+				int i = 0;
+				socks4a_connection_request[i++] = 0x04;				// VER: 4
+				socks4a_connection_request[i++] = 0x01;				// CMD: CONNECT
+				socks4a_connection_request[i++] = port >> 8;		// DSTPORT
+				socks4a_connection_request[i++] = port & 0xff;		// DSTPORT
+				socks4a_connection_request[i++] = 0x00;				// DSTIP
+				socks4a_connection_request[i++] = 0x00;				// DSTIP
+				socks4a_connection_request[i++] = 0x00;				// DSTIP
+				socks4a_connection_request[i++] = 0x01;				// DSTIP
+				socks4a_connection_request[i++] = 0x00;				// ID
+
+				for(size_t j = 0; j < strlen(domain); j++) {
+					socks4a_connection_request[i++] = domain[j];
+				}
+
+				if(write(io->remote_fd, socks4a_connection_request, socks4a_connection_request_len) == -1) {
+					report_error("init_io_target(): write socks4a connection request (atyp 3): %s", strerror(errno));
+					return(-1);
+				}
+				free(domain);
+				free(socks4a_connection_request);
 			}
 
 			// Read socks4 connection response
