@@ -18,13 +18,17 @@
 #define OUTBOUND_PROXY_TYPE NULL
 #define OUTBOUND_PROXY_ADDR NULL
 
-// socks4
+// socks4 (CONTORL_ADDRESS must be ipv4 address)
 //#define OUTBOUND_PROXY_TYPE "socks4"
+//#define OUTBOUND_PROXY_ADDR "127.0.0.1:1080"
+
+// socks5 (CONTORL_ADDRESS must be ipv4 address)
+//#define OUTBOUND_PROXY_TYPE "socks5"
 //#define OUTBOUND_PROXY_ADDR "127.0.0.1:1080"
 
 // socks5h
 //#define OUTBOUND_PROXY_TYPE "socks5h"
-//#define OUTBOUND_PROXY_ADDR "localhost:1080"
+//#define OUTBOUND_PROXY_ADDR "127.0.0.1:1080"
 
 // http
 //#define OUTBOUND_PROXY_TYPE "http"

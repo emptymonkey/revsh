@@ -1049,11 +1049,11 @@ int init_io_target(){
 			}
 		}
 
-		// Outbound SOCKS5H proxy
-		else if(strcmp(config->outbound_proxy_type, "socks5h") == 0) {
+		// Outbound SOCKS5/SOCKS5H proxy
+		else if(strcmp(config->outbound_proxy_type, "socks5") == 0 || strcmp(config->outbound_proxy_type, "socks5h") == 0) {
 
 			if(verbose) {
-				printf("Requesting socks5 connection to %s...", config->ip_addr);
+				printf("Requesting %s connection to %s...", config->outbound_proxy_type, config->ip_addr);
 				fflush(stdout);
 			}
 
@@ -1075,38 +1075,72 @@ int init_io_target(){
 				return(-1);
 			}
 
-			// Send socks5 connection request (domain)
-			char *domain = strdup(config->ip_addr);
-			char *p = strchr(domain, ':');
-			if (!p) {
+			if (strcmp(config->outbound_proxy_type, "socks5") == 0) {
+
+				// Parse control ip and port from string
+				unsigned char ip[4] = {0};
+				unsigned short port = 0;
+				if(!parse_addr_string(config->ip_addr, ip, &port)) {
+					report_error("init_io_target(): parse_addr_string");
+					return(-1);
+				}
+
+				// Send socks5 connection request (ipv4)
+				unsigned char socks5_connection_request[] = {
+					0x05,			// VER: 5
+					0x01,			// CMD: CONNECT
+					0x00,			// RSV
+					0x01,			// ATYP: IP V4 address
+					ip[0],			// ipv4 addr
+					ip[1],			// ipv4 addr
+					ip[2],			// ipv4 addr
+					ip[3],			// ipv4 addr
+					port >> 8,		// port
+					port & 0xff,	// port
+				};
+
+				if(write(io->remote_fd, socks5_connection_request, sizeof(socks5_connection_request)) == -1) {
+					report_error("init_io_target(): write socks5 connection request (atyp 1): %s", strerror(errno));
+					return(-1);
+				}
+
+			} else if(strcmp(config->outbound_proxy_type, "socks5h") == 0) {
+
+				// Send socks5 connection request (domain)
+				char *domain = strdup(config->ip_addr);
+				char *p = strchr(domain, ':');
+				if (!p) {
+					free(domain);
+					return(-1);
+				}
+				*p = 0;
+				unsigned short port = atoi(p+1);
+
+				int socks5_connection_request_len = 7 + strlen(domain);
+				unsigned char *socks5_connection_request = calloc(1, socks5_connection_request_len + 1);
+				int i = 0;
+				socks5_connection_request[i++] = 0x05;				// VER: 5
+				socks5_connection_request[i++] = 0x01;				// CMD: CONNECT
+				socks5_connection_request[i++] = 0x00;				// RSV
+				socks5_connection_request[i++] = 0x03;				// ATYP: DOMAINNAME
+				socks5_connection_request[i++] = strlen(domain);	// number of octets of name that follow
+
+				for(size_t j = 0; j < strlen(domain); j++) {
+					socks5_connection_request[i++] = domain[j];
+				}
+
+				socks5_connection_request[i++] = port >> 8;			// DST.PORT
+				socks5_connection_request[i++] = port & 0xff;		// DST.PORT
+
+				if(write(io->remote_fd, socks5_connection_request, socks5_connection_request_len) == -1) {
+					report_error("init_io_target(): write socks5 connection request (atyp 3): %s", strerror(errno));
+					return(-1);
+				}
 				free(domain);
-				return(-1);
-			}
-			*p = 0;
-			unsigned short port = atoi(p+1);
+				free(socks5_connection_request);
 
-			int socks5_connection_request_len = 7 + strlen(domain);
-			unsigned char *socks5_connection_request = calloc(1, socks5_connection_request_len + 1);
-			int i = 0;
-			socks5_connection_request[i++] = 0x05;				// VER: 5
-			socks5_connection_request[i++] = 0x01;				// CMD: CONNECT
-			socks5_connection_request[i++] = 0x00;				// RSV
-			socks5_connection_request[i++] = 0x03;				// ATYP: DOMAINNAME
-			socks5_connection_request[i++] = strlen(domain);	// number of octets of name that follow
-
-			for(size_t j = 0; j < strlen(domain); j++) {
-				socks5_connection_request[i++] = domain[j];
 			}
 
-			socks5_connection_request[i++] = port >> 8;			// DST.PORT
-			socks5_connection_request[i++] = port & 0xff;		// DST.PORT
-
-			if(write(io->remote_fd, socks5_connection_request, socks5_connection_request_len) == -1) {
-				report_error("init_io_target(): write socks5 connection request: %s", strerror(errno));
-				return(-1);
-			}
-			free(domain);
-			free(socks5_connection_request);
 
 			// Receive initial part of socks5 response packet
 			char socks5_response_part1[4] = {0};
