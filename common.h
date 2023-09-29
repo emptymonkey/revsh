@@ -140,6 +140,13 @@
 #define ESCAPE_CR 1
 #define ESCAPE_TILDE 2
 
+/* Outbound proxy */
+#define OUTBOUND_PROXY_TYPE_NULL 0
+#define OUTBOUND_PROXY_TYPE_SOCKS4 1
+#define OUTBOUND_PROXY_TYPE_SOCKS4A 2
+#define OUTBOUND_PROXY_TYPE_SOCKS5 3
+#define OUTBOUND_PROXY_TYPE_SOCKS5H 4
+#define OUTBOUND_PROXY_TYPE_HTTP 5
 
 /******************************************************************************
  * global variables

@@ -1011,14 +1011,14 @@ int init_io_target(){
 	if(config->outbound_proxy_type && config->outbound_proxy_addr) {
 
 		// Outbound SOCKS4/SOCKS4A proxy
-		if(strcmp(config->outbound_proxy_type, "socks4") == 0 || strcmp(config->outbound_proxy_type, "socks4a") == 0) {
+		if(config->outbound_proxy_type == OUTBOUND_PROXY_TYPE_SOCKS4 || config->outbound_proxy_type == OUTBOUND_PROXY_TYPE_SOCKS4A) {
 
-			if(verbose) {
-				printf("Requesting %s connection to %s...", config->outbound_proxy_type, config->ip_addr);
-				fflush(stdout);
-			}
+			if(config->outbound_proxy_type == OUTBOUND_PROXY_TYPE_SOCKS4) {
+				if(verbose) {
+					printf("Requesting socks4 connection to %s...", config->ip_addr);
+					fflush(stdout);
+				}
 
-			if(strcmp(config->outbound_proxy_type, "socks4") == 0) {
 				// Parse control ip and port from string
 				unsigned char ip[4] = {0};
 				unsigned short port = 0;
@@ -1043,7 +1043,12 @@ int init_io_target(){
 					report_error("init_io_target(): write socks4 request: %s", strerror(errno));
 					return(-1);
 				}
-			} else if(strcmp(config->outbound_proxy_type, "socks4a") == 0) {
+			} else if(config->outbound_proxy_type == OUTBOUND_PROXY_TYPE_SOCKS4A) {
+				if(verbose) {
+					printf("Requesting socks4a connection to %s...", config->ip_addr);
+					fflush(stdout);
+				}
+
 				// Send socks4a connection request (domain)
 				char *domain = strdup(config->ip_addr);
 				char *p = strchr(domain, ':');
@@ -1097,11 +1102,16 @@ int init_io_target(){
 		}
 
 		// Outbound SOCKS5/SOCKS5H proxy
-		else if(strcmp(config->outbound_proxy_type, "socks5") == 0 || strcmp(config->outbound_proxy_type, "socks5h") == 0) {
+		else if(config->outbound_proxy_type == OUTBOUND_PROXY_TYPE_SOCKS5 || config->outbound_proxy_type == OUTBOUND_PROXY_TYPE_SOCKS5H) {
 
 			if(verbose) {
-				printf("Requesting %s connection to %s...", config->outbound_proxy_type, config->ip_addr);
-				fflush(stdout);
+				if(config->outbound_proxy_type == OUTBOUND_PROXY_TYPE_SOCKS5) {
+					printf("Requesting socks5 connection to %s...", config->ip_addr);
+					fflush(stdout);
+				} else if(config->outbound_proxy_type == OUTBOUND_PROXY_TYPE_SOCKS5H) {
+					printf("Requesting socks5h connection to %s...", config->ip_addr);
+					fflush(stdout);
+				}
 			}
 
 			// Send socks5 greeting (no authentication support)
@@ -1122,7 +1132,7 @@ int init_io_target(){
 				return(-1);
 			}
 
-			if (strcmp(config->outbound_proxy_type, "socks5") == 0) {
+			if (config->outbound_proxy_type == OUTBOUND_PROXY_TYPE_SOCKS5) {
 
 				// Parse control ip and port from string
 				unsigned char ip[4] = {0};
@@ -1151,7 +1161,7 @@ int init_io_target(){
 					return(-1);
 				}
 
-			} else if(strcmp(config->outbound_proxy_type, "socks5h") == 0) {
+			} else if(config->outbound_proxy_type == OUTBOUND_PROXY_TYPE_SOCKS5H) {
 
 				// Send socks5 connection request (domain)
 				char *domain = strdup(config->ip_addr);
@@ -1243,7 +1253,7 @@ int init_io_target(){
 		}
 
 		// Outbound HTTP proxy
-		else if(strcmp(config->outbound_proxy_type, "http") == 0) {
+		else if(config->outbound_proxy_type == OUTBOUND_PROXY_TYPE_HTTP) {
 			if(verbose) {
 				printf("Requesting http connection to %s...", config->ip_addr);
 				fflush(stdout);

@@ -15,28 +15,23 @@
  */
 
 // Default: no proxy
-#define OUTBOUND_PROXY_TYPE NULL
-#define OUTBOUND_PROXY_ADDR NULL
+//#define OUTBOUND_PROXY_TYPE OUTBOUND_PROXY_TYPE_NULL
+//#define OUTBOUND_PROXY_ADDR NULL
 
-// socks4 (CONTORL_ADDRESS must be ipv4 address)
-//#define OUTBOUND_PROXY_TYPE "socks4"
-//#define OUTBOUND_PROXY_ADDR "127.0.0.1:1080"
+// socks4 (CONTROL_ADDRESS must be ipv4 address)
+//#define OUTBOUND_PROXY_TYPE OUTBOUND_PROXY_TYPE_SOCKS4
 
-// socks4a (CONTRL_ADDRESS can be domain to be resolved by the proxy)
-//#define OUTBOUND_PROXY_TYPE "socks4a"
-//#define OUTBOUND_PROXY_ADDR "127.0.0.1:1080"
+// socks4a (CONTROL_ADDRESS can be domain to be resolved by the proxy)
+//#define OUTBOUND_PROXY_TYPE OUTBOUND_PROXY_TYPE_SOCKS4A
 
-// socks5 (CONTORL_ADDRESS must be ipv4 address)
-//#define OUTBOUND_PROXY_TYPE "socks5"
-//#define OUTBOUND_PROXY_ADDR "127.0.0.1:1080"
+// socks5 (CONTROL_ADDRESS must be ipv4 address)
+//#define OUTBOUND_PROXY_TYPE OUTBOUND_PROXY_TYPE_SOCKS5
 
-// socks5h (CONTRL_ADDRESS can be domain to be resolved by the proxy)
-//#define OUTBOUND_PROXY_TYPE "socks5h"
-//#define OUTBOUND_PROXY_ADDR "127.0.0.1:1080"
+// socks5h (CONTROL_ADDRESS can be domain to be resolved by the proxy)
+//#define OUTBOUND_PROXY_TYPE OUTBOUND_PROXY_TYPE_SOCKS5H
 
-// http (CONTRL_ADDRESS can be domain to be resolved by the proxy)
-//#define OUTBOUND_PROXY_TYPE "http"
-//#define OUTBOUND_PROXY_ADDR "127.0.0.1:3128"
+// http (CONTROL_ADDRESS can be domain to be resolved by the proxy, control port must be allowed by proxy such as 443)
+//#define OUTBOUND_PROXY_TYPE OUTBOUND_PROXY_TYPE_HTTP
 
 // Default socks proxy listener port.
 #define SOCKS_LISTENER "2280"
