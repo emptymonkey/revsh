@@ -1283,7 +1283,7 @@ int init_io_target(){
 				const char *HTTP_PROXY_HEADER_FMT = "Proxy-Authorization: basic %s\r\n";
 				char *http_proxy_header = calloc(1, strlen(HTTP_PROXY_HEADER_FMT) - 2 + strlen(credential_b64) + 1);
 				sprintf(http_proxy_header, HTTP_PROXY_HEADER_FMT, credential_b64);
-				free(credential);
+				free(credential_b64);
 
 				// Add proxy authorizationheader
 				http_connect_request = realloc(http_connect_request, strlen(http_connect_request) + strlen(http_proxy_header) + 1);
