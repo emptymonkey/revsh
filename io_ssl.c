@@ -1070,12 +1070,13 @@ int init_io_target(){
 				for(size_t j = 0; j < strlen(domain); j++) {
 					socks4a_connection_request[i++] = domain[j];
 				}
+				free(domain);
 
 				if(write(io->remote_fd, socks4a_connection_request, socks4a_connection_request_len) == -1) {
 					report_error("init_io_target(): write socks4a connection request (atyp 3): %s", strerror(errno));
+					free(socks4a_connection_request);
 					return(-1);
 				}
-				free(domain);
 				free(socks4a_connection_request);
 			}
 
@@ -1174,15 +1175,16 @@ int init_io_target(){
 				for(size_t j = 0; j < strlen(domain); j++) {
 					socks5_connection_request[i++] = domain[j];
 				}
+				free(domain);
 
 				socks5_connection_request[i++] = port >> 8;			// DST.PORT
 				socks5_connection_request[i++] = port & 0xff;		// DST.PORT
 
 				if(write(io->remote_fd, socks5_connection_request, socks5_connection_request_len) == -1) {
 					report_error("init_io_target(): write socks5 connection request (atyp 3): %s", strerror(errno));
+					free(socks5_connection_request);
 					return(-1);
 				}
-				free(domain);
 				free(socks5_connection_request);
 
 			}
@@ -1252,6 +1254,7 @@ int init_io_target(){
 			char *http_connect_request = calloc(1, strlen(http_connect_request_fmt) - 2 + strlen(config->ip_addr) + 1);
 			sprintf(http_connect_request, http_connect_request_fmt, config->ip_addr);
 			if(write(io->remote_fd, http_connect_request, strlen(http_connect_request)) == -1) {
+			    free(http_connect_request);
 				report_error("init_io_target(): write http connection request: %s", strerror(errno));
 				return(-1);
 			}
