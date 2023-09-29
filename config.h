@@ -53,7 +53,7 @@
 // #define OUTBOUND_PROXY_USERNAME NULL
 // #define OUTBOUND_PROXY_PASSWORD NULL
 
-/* authentication (http/socks5/socks5h proxy only) */
+/* proxy authentication (http/socks5/socks5h proxy only) */
 // #define OUTBOUND_PROXY_TYPE OUTBOUND_PROXY_TYPE_HTTP
 // #define OUTBOUND_PROXY_ADDR "127.0.0.1:3128"
 // #define OUTBOUND_PROXY_USERNAME "foo"
