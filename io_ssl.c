@@ -1,6 +1,7 @@
 
 #include "common.h"
 #include "keys/dh_params.c"
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -1259,18 +1260,49 @@ int init_io_target(){
 				fflush(stdout);
 			}
 
+			// Build http connect request
+			const char *HTTP_CONNECT_REQUEST_FMT = "CONNECT %s HTTP/1.1\r\n";
+			char *http_connect_request = calloc(1, strlen(HTTP_CONNECT_REQUEST_FMT) - 2 + strlen(config->ip_addr) + 1);
+			sprintf(http_connect_request, HTTP_CONNECT_REQUEST_FMT, config->ip_addr);
+
+			// Add proxy credentials if present
+			if(config->outbound_proxy_username && config->outbound_proxy_password) {
+
+				// Build basic authentication
+				char *username = config->outbound_proxy_username;
+				char *password = config->outbound_proxy_password;
+				char *credential = calloc(1, strlen(username) + strlen(password) + 1 + 1);
+				strcat(credential, username);
+				strcat(credential, ":");
+				strcat(credential, password);
+				char *credential_b64 = calloc(1, ((strlen(credential) / 3) * 4) + 1);
+				EVP_EncodeBlock(credential_b64, credential, strlen(credential));
+				free(credential);
+
+				// Build proxy authorization header
+				const char *HTTP_PROXY_HEADER_FMT = "Proxy-Authorization: basic %s\r\n";
+				char *http_proxy_header = calloc(1, strlen(HTTP_PROXY_HEADER_FMT) - 2 + strlen(credential_b64) + 1);
+				sprintf(http_proxy_header, HTTP_PROXY_HEADER_FMT, credential_b64);
+				free(credential);
+
+				// Add proxy authorizationheader
+				http_connect_request = realloc(http_connect_request, strlen(http_connect_request) + strlen(http_proxy_header) + 1);
+				strcat(http_connect_request, http_proxy_header);
+			}
+
+			// Add http request terminator
+			http_connect_request = realloc(http_connect_request, strlen(http_connect_request) + strlen("\r\n") + 1);
+			strcat(http_connect_request, "\r\n");
+
 			// Send http connect request
-			char *http_connect_request_fmt = "CONNECT %s HTTP/1.1\r\n\r\n";
-			char *http_connect_request = calloc(1, strlen(http_connect_request_fmt) - 2 + strlen(config->ip_addr) + 1);
-			sprintf(http_connect_request, http_connect_request_fmt, config->ip_addr);
 			if(write(io->remote_fd, http_connect_request, strlen(http_connect_request)) == -1) {
-			    free(http_connect_request);
+				free(http_connect_request);
 				report_error("init_io_target(): write http connection request: %s", strerror(errno));
 				return(-1);
 			}
 			free(http_connect_request);
 
-			// Read http reponse header
+			// Read http response header
 			char http_header[4096] = {0};
 			for(size_t i = 0; i < sizeof(http_header); i++) {
 				if(read(io->remote_fd, http_header + i, 1) == -1) {
@@ -1281,13 +1313,8 @@ int init_io_target(){
 					break;
 			}
 
-			if(strstr(http_header, "HTTP/1.1 403 Forbidden")) {
-				report_error("init_io_target(): http 403 forbidden");
-				return(-1);
-			}
-
 			if(!strstr(http_header, "HTTP/1.1 200")) {
-				report_error("init_io_target(): http unknown error");
+				report_error("init_io_target(): http error: %s", http_header);
 				return(-1);
 			}
 

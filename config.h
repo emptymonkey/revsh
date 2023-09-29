@@ -15,23 +15,49 @@
  */
 
 // Default: no proxy
-//#define OUTBOUND_PROXY_TYPE OUTBOUND_PROXY_TYPE_NULL
-//#define OUTBOUND_PROXY_ADDR NULL
+#define OUTBOUND_PROXY_TYPE OUTBOUND_PROXY_TYPE_NULL
+#define OUTBOUND_PROXY_ADDR NULL
+#define OUTBOUND_PROXY_USERNAME NULL
+#define OUTBOUND_PROXY_PASSWORD NULL
 
-// socks4 (CONTROL_ADDRESS must be ipv4 address)
-//#define OUTBOUND_PROXY_TYPE OUTBOUND_PROXY_TYPE_SOCKS4
+/* Examples */
 
-// socks4a (CONTROL_ADDRESS can be domain to be resolved by the proxy)
-//#define OUTBOUND_PROXY_TYPE OUTBOUND_PROXY_TYPE_SOCKS4A
+/* socks4 (CONTROL_ADDRESS must be ipv4 address) */
+// #define OUTBOUND_PROXY_TYPE OUTBOUND_PROXY_TYPE_SOCKS4
+// #define OUTBOUND_PROXY_ADDR "127.0.0.1:1080"
+// #define OUTBOUND_PROXY_USERNAME NULL
+// #define OUTBOUND_PROXY_PASSWORD NULL
 
-// socks5 (CONTROL_ADDRESS must be ipv4 address)
-//#define OUTBOUND_PROXY_TYPE OUTBOUND_PROXY_TYPE_SOCKS5
+/* socks4a (CONTROL_ADDRESS can be domain to be resolved by the proxy) */
+// #define OUTBOUND_PROXY_TYPE OUTBOUND_PROXY_TYPE_SOCKS4A
+// #define OUTBOUND_PROXY_ADDR "127.0.0.1:1080"
+// #define OUTBOUND_PROXY_USERNAME NULL
+// #define OUTBOUND_PROXY_PASSWORD NULL
 
-// socks5h (CONTROL_ADDRESS can be domain to be resolved by the proxy)
-//#define OUTBOUND_PROXY_TYPE OUTBOUND_PROXY_TYPE_SOCKS5H
+/* socks5 (CONTROL_ADDRESS must be ipv4 address) */
+// #define OUTBOUND_PROXY_TYPE OUTBOUND_PROXY_TYPE_SOCKS5
+// #define OUTBOUND_PROXY_ADDR "127.0.0.1:1080"
+// #define OUTBOUND_PROXY_USERNAME NULL
+// #define OUTBOUND_PROXY_PASSWORD NULL
 
-// http (CONTROL_ADDRESS can be domain to be resolved by the proxy, control port must be allowed by proxy such as 443)
-//#define OUTBOUND_PROXY_TYPE OUTBOUND_PROXY_TYPE_HTTP
+/* socks5h (CONTROL_ADDRESS can be domain to be resolved by the proxy) */
+// #define OUTBOUND_PROXY_TYPE OUTBOUND_PROXY_TYPE_SOCKS5H
+// #define OUTBOUND_PROXY_ADDR "127.0.0.1:1080"
+// #define OUTBOUND_PROXY_USERNAME NULL
+// #define OUTBOUND_PROXY_PASSWORD NULL
+
+/* http (CONTROL_ADDRESS can be domain to be resolved by the proxy). Check proxy
+ * access control, for squid port 443 usually allowed */
+// #define OUTBOUND_PROXY_TYPE OUTBOUND_PROXY_TYPE_HTTP
+// #define OUTBOUND_PROXY_ADDR "127.0.0.1:3128"
+// #define OUTBOUND_PROXY_USERNAME NULL
+// #define OUTBOUND_PROXY_PASSWORD NULL
+
+/* authentication (http proxy only) */
+// #define OUTBOUND_PROXY_TYPE OUTBOUND_PROXY_TYPE_HTTP
+// #define OUTBOUND_PROXY_ADDR "127.0.0.1:3128"
+// #define OUTBOUND_PROXY_USERNAME "foo"
+// #define OUTBOUND_PROXY_PASSWORD "bar"
 
 // Default socks proxy listener port.
 #define SOCKS_LISTENER "2280"

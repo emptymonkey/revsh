@@ -57,6 +57,8 @@ struct config_helper {
 	char *ip_addr;
 	int outbound_proxy_type;
 	char *outbound_proxy_addr;
+	char *outbound_proxy_username;
+	char *outbound_proxy_password;
 	char *keys_dir;
 	char *rc_file;
 	char *shell;
