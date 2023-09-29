@@ -1115,11 +1115,20 @@ int init_io_target(){
 				}
 			}
 
-			// Send socks5 greeting (no authentication support)
-			unsigned char socks5_greeting[] = { 0x05, 0x01, 0x00 };
-			if(write(io->remote_fd, socks5_greeting, sizeof(socks5_greeting)) == -1) {
-				report_error("init_io_target(): write socks5 greeting: %s", strerror(errno));
-				return(-1);
+			if(config->outbound_proxy_username && config->outbound_proxy_password) {
+				// Send socks5 greeting (supported: no auth, username/password)
+				unsigned char socks5_greeting[] = { 0x05, 0x02, 0x00 , 0x02};
+				if(write(io->remote_fd, socks5_greeting, sizeof(socks5_greeting)) == -1) {
+					report_error("init_io_target(): write socks5 greeting: %s", strerror(errno));
+					return(-1);
+				}
+			} else {
+				// Send socks5 greeting (supported: no auth)
+				unsigned char socks5_greeting[] = { 0x05, 0x01, 0x00 };
+				if(write(io->remote_fd, socks5_greeting, sizeof(socks5_greeting)) == -1) {
+					report_error("init_io_target(): write socks5 greeting: %s", strerror(errno));
+					return(-1);
+				}
 			}
 
 			// Receive socks5 choice
@@ -1128,9 +1137,66 @@ int init_io_target(){
 				report_error("init_io_target(): read socks5 choice: %s", strerror(errno));
 				return(-1);
 			}
-			if(socks5_choice[0] != 0x05 || socks5_choice[1] != 0x00) {
+			if(socks5_choice[0] != 0x05) {
 				report_error("init_io_target(): socks5 choice");
 				return(-1);
+			}
+
+			// Chosen authentication method
+			switch (socks5_choice[1]) {
+				case 0x00:
+					// No auth
+					break;
+				case 0x02: {
+					// Username/Password
+					if(config->outbound_proxy_username && config->outbound_proxy_password) {
+						// Allocate buffer for socks5 client authentication request (0x02)
+						unsigned char id_len = strlen(config->outbound_proxy_username) & 0xff;
+						unsigned char pw_len = strlen(config->outbound_proxy_password) & 0xff;
+						int socks5_auth_len = 1 + 1 + id_len + 1 + pw_len;
+						unsigned char *socks5_auth = calloc(1, socks5_auth_len);
+
+						// Build socks5 client authentication request (0x02)
+						int i = 0;
+						socks5_auth[i++] = 0x01; 	// VER
+						socks5_auth[i++] = id_len;	// IDLEN
+						// ID
+						for(size_t j = 0; j < id_len; j++) {
+							socks5_auth[i++] = config->outbound_proxy_username[j];
+						}
+						socks5_auth[i++] = pw_len;	// PWLEN
+						// PW
+						for(size_t j = 0; j < pw_len; j++) {
+							socks5_auth[i++] = config->outbound_proxy_password[j];
+						}
+
+						// Send client authentication request (0x02)
+						if(write(io->remote_fd, socks5_auth, socks5_auth_len) == -1) {
+							report_error("init_io_target(): write socks5 auth: %s", strerror(errno));
+							free(socks5_auth);
+							return(-1);
+						}
+						free(socks5_auth);
+
+						// Receive socks5 server response
+						char socks5_auth_response[2] = {0};
+						if(read(io->remote_fd, socks5_auth_response, sizeof(socks5_auth_response)) == -1) {
+							report_error("init_io_target(): read socks5 auth response: %s", strerror(errno));
+							return(-1);
+						}
+						if(socks5_auth_response[0] != 0x01 || socks5_auth_response[1] != 0x00) {
+							report_error("init_io_target(): socks5 auth response");
+							return(-1);
+						}
+					} else {
+						report_error("init_io_target(): socks5 missing credentials");
+						return(-1);
+					}
+					break;
+				}
+				default:
+					report_error("init_io_target(): socks5 unsupported server choice: %#04x", socks5_choice[1]);
+					return(-1);
 			}
 
 			if (config->outbound_proxy_type == OUTBOUND_PROXY_TYPE_SOCKS5) {
@@ -1199,7 +1265,6 @@ int init_io_target(){
 				free(socks5_connection_request);
 
 			}
-
 
 			// Receive initial part of socks5 response packet
 			char socks5_response_part1[4] = {0};
