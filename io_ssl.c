@@ -1275,7 +1275,7 @@ int init_io_target(){
 				strcat(credential, username);
 				strcat(credential, ":");
 				strcat(credential, password);
-				char *credential_b64 = calloc(1, ((strlen(credential) / 3) * 4) + 1);
+				char *credential_b64 = calloc(1, (((strlen(credential) + 2) / 3) * 4) + 1);
 				EVP_EncodeBlock(credential_b64, credential, strlen(credential));
 				free(credential);
 
