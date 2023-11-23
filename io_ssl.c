@@ -1341,7 +1341,7 @@ int init_io_target(){
 				strcat(credential, ":");
 				strcat(credential, password);
 				char *credential_b64 = calloc(1, (((strlen(credential) + 2) / 3) * 4) + 1);
-				EVP_EncodeBlock(credential_b64, credential, strlen(credential));
+				EVP_EncodeBlock((unsigned char*) credential_b64, (unsigned char*) credential, strlen(credential));
 				free(credential);
 
 				// Build proxy authorization header

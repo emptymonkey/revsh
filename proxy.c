@@ -776,7 +776,7 @@ int parse_socks_request(struct connection_node *cur_connection_node){
  ******************************************************************************/
 int parse_addr_string(char *addr_string, unsigned char ip[4], unsigned short *port) {
 	int parsed_elements = 0;
-	int s_start = addr_string;
+	char *s_start = addr_string;
 	for(char *p = addr_string; ; p++) {
 		if(*p == '.' || *p == ':' || *p == '\x00') {
 			int len = p - s_start;
