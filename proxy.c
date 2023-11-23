@@ -443,7 +443,9 @@ void connection_node_socks_reply(struct connection_node *cur_connection_node, in
 		}
 		reply_buff_len = SOCKS_V5_REPLY_LEN;
 	}
-	write(cur_connection_node->fd, reply_buff, reply_buff_len);
+	if(write(cur_connection_node->fd, reply_buff, reply_buff_len) == -1) {
+		report_error("connection_node_socks_reply(): write(%d, %lx, %d): %s", cur_connection_node->fd, (unsigned long) reply_buff, reply_buff_len, strerror(errno));
+	}
 }
 
 /******************************************************************************
