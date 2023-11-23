@@ -20,6 +20,8 @@ struct message_helper {
 	// Proxy types are defined in the protocol.h file.
 	unsigned short header_proxy_type;
 
+	unsigned short header_socks_type;
+
 	char *data;
 
 	struct message_helper *next;
@@ -122,6 +124,7 @@ struct connection_node {
 	unsigned short origin;
 	unsigned short id;
 	unsigned short proxy_type;
+	unsigned short socks_type;
 	int fd;
 
 	// A copy of the original rhost_rport string in the related proxy_node struct, to simplify retry requests.
