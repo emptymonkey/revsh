@@ -1,6 +1,9 @@
 
 #include "common.h"
 #include "keys/dh_params.c"
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
 
 extern sig_atomic_t sig_found;
 
@@ -945,9 +948,15 @@ int init_io_target(){
 
 	}else{
 
-		/*  - Open a network connection back to the control node. */
-		if((io->connect = BIO_new_connect(config->ip_addr)) == NULL){
-			report_error("init_io_target(): BIO_new_connect(%s): %s", config->ip_addr, strerror(errno));
+		/*  - Open a network connection back to the control node or proxy. */
+		char *ip_addr = config->ip_addr;
+
+		if(config->outbound_proxy_type && config->outbound_proxy_addr) {
+			ip_addr = config->outbound_proxy_addr;
+		}
+
+		if((io->connect = BIO_new_connect(ip_addr)) == NULL){
+			report_error("init_io_target(): BIO_new_connect(%s): %s", ip_addr, strerror(errno));
 			if(verbose){
 				ERR_print_errors_fp(stderr);
 			}
@@ -955,7 +964,7 @@ int init_io_target(){
 		}
 
 		if(verbose){
-			printf("Connecting to %s...", config->ip_addr);
+			printf("Connecting to %s...", ip_addr);
 			fflush(stdout);
 		}
 
@@ -997,6 +1006,387 @@ int init_io_target(){
 			ERR_print_errors_fp(stderr);
 		}
 		return(-1);
+	}
+
+	// Outbound proxy connection
+	if(config->outbound_proxy_type && config->outbound_proxy_addr) {
+
+		// Outbound SOCKS4/SOCKS4A proxy
+		if(config->outbound_proxy_type == OUTBOUND_PROXY_TYPE_SOCKS4 || config->outbound_proxy_type == OUTBOUND_PROXY_TYPE_SOCKS4A) {
+
+			if(config->outbound_proxy_type == OUTBOUND_PROXY_TYPE_SOCKS4) {
+				if(verbose) {
+					printf("Requesting socks4 connection to %s...", config->ip_addr);
+					fflush(stdout);
+				}
+
+				// Parse control ip and port from string
+				unsigned char ip[4] = {0};
+				unsigned short port = 0;
+				if(!parse_addr_string(config->ip_addr, ip, &port)) {
+					report_error("init_io_target(): parse_addr_string");
+					return(-1);
+				}
+
+				// Send socks4 connection request
+				unsigned char socks_request[] = {
+					0x04,			// VER: 4
+					0x01,			// CMD: CONNECT
+					port >> 8,		// DSTPORT
+					port & 0xff,	// DSTPORT
+					ip[0],			// DSTIP
+					ip[1],			// DSTIP
+					ip[2],			// DSTIP
+					ip[3],			// DSTIP
+					0x00			// ID
+				};
+				if(write(io->remote_fd, socks_request, sizeof(socks_request)) == -1) {
+					report_error("init_io_target(): write socks4 request: %s", strerror(errno));
+					return(-1);
+				}
+			} else if(config->outbound_proxy_type == OUTBOUND_PROXY_TYPE_SOCKS4A) {
+				if(verbose) {
+					printf("Requesting socks4a connection to %s...", config->ip_addr);
+					fflush(stdout);
+				}
+
+				// Send socks4a connection request (domain)
+				char *domain = strdup(config->ip_addr);
+				char *p = strchr(domain, ':');
+				if (!p) {
+					free(domain);
+					return(-1);
+				}
+				*p = 0;
+				unsigned short port = atoi(p+1);
+
+				int socks4a_connection_request_len = 9 + strlen(domain) + 1;
+				unsigned char *socks4a_connection_request = calloc(1, socks4a_connection_request_len + 1);
+				int i = 0;
+				socks4a_connection_request[i++] = 0x04;				// VER: 4
+				socks4a_connection_request[i++] = 0x01;				// CMD: CONNECT
+				socks4a_connection_request[i++] = port >> 8;		// DSTPORT
+				socks4a_connection_request[i++] = port & 0xff;		// DSTPORT
+				socks4a_connection_request[i++] = 0x00;				// DSTIP
+				socks4a_connection_request[i++] = 0x00;				// DSTIP
+				socks4a_connection_request[i++] = 0x00;				// DSTIP
+				socks4a_connection_request[i++] = 0x01;				// DSTIP
+				socks4a_connection_request[i++] = 0x00;				// ID
+
+				for(size_t j = 0; j < strlen(domain); j++) {
+					socks4a_connection_request[i++] = domain[j];
+				}
+				free(domain);
+
+				if(write(io->remote_fd, socks4a_connection_request, socks4a_connection_request_len) == -1) {
+					report_error("init_io_target(): write socks4a connection request (atyp 3): %s", strerror(errno));
+					free(socks4a_connection_request);
+					return(-1);
+				}
+				free(socks4a_connection_request);
+			}
+
+			// Read socks4 connection response
+			char socks_response[8] = {0};
+			if(read(io->remote_fd, socks_response, sizeof(socks_response)) == -1) {
+				report_error("init_io_target(): read socks4 response: %s", strerror(errno));
+				return(-1);
+			}
+			if(socks_response[0] != 0x00 || socks_response[1] != 0x5a) {
+				report_error("init_io_target(): socks4");
+				return(-1);
+			}
+
+			if(verbose){
+				printf("\tConnected!\r\n");
+			}
+		}
+
+		// Outbound SOCKS5/SOCKS5H proxy
+		else if(config->outbound_proxy_type == OUTBOUND_PROXY_TYPE_SOCKS5 || config->outbound_proxy_type == OUTBOUND_PROXY_TYPE_SOCKS5H) {
+
+			if(verbose) {
+				if(config->outbound_proxy_type == OUTBOUND_PROXY_TYPE_SOCKS5) {
+					printf("Requesting socks5 connection to %s...", config->ip_addr);
+					fflush(stdout);
+				} else if(config->outbound_proxy_type == OUTBOUND_PROXY_TYPE_SOCKS5H) {
+					printf("Requesting socks5h connection to %s...", config->ip_addr);
+					fflush(stdout);
+				}
+			}
+
+			if(config->outbound_proxy_username && config->outbound_proxy_password) {
+				// Send socks5 greeting (supported: no auth, username/password)
+				unsigned char socks5_greeting[] = { 0x05, 0x02, 0x00 , 0x02};
+				if(write(io->remote_fd, socks5_greeting, sizeof(socks5_greeting)) == -1) {
+					report_error("init_io_target(): write socks5 greeting: %s", strerror(errno));
+					return(-1);
+				}
+			} else {
+				// Send socks5 greeting (supported: no auth)
+				unsigned char socks5_greeting[] = { 0x05, 0x01, 0x00 };
+				if(write(io->remote_fd, socks5_greeting, sizeof(socks5_greeting)) == -1) {
+					report_error("init_io_target(): write socks5 greeting: %s", strerror(errno));
+					return(-1);
+				}
+			}
+
+			// Receive socks5 choice
+			char socks5_choice[2] = {0};
+			if(read(io->remote_fd, socks5_choice, sizeof(socks5_choice)) == -1) {
+				report_error("init_io_target(): read socks5 choice: %s", strerror(errno));
+				return(-1);
+			}
+			if(socks5_choice[0] != 0x05) {
+				report_error("init_io_target(): socks5 choice");
+				return(-1);
+			}
+
+			// Chosen authentication method
+			switch (socks5_choice[1]) {
+				case 0x00:
+					// No auth
+					break;
+				case 0x02: {
+					// Username/Password
+					if(config->outbound_proxy_username && config->outbound_proxy_password) {
+						// Allocate buffer for socks5 client authentication request (0x02)
+						unsigned char id_len = strlen(config->outbound_proxy_username) & 0xff;
+						unsigned char pw_len = strlen(config->outbound_proxy_password) & 0xff;
+						int socks5_auth_len = 1 + 1 + id_len + 1 + pw_len;
+						unsigned char *socks5_auth = calloc(1, socks5_auth_len);
+
+						// Build socks5 client authentication request (0x02)
+						int i = 0;
+						socks5_auth[i++] = 0x01; 	// VER
+						socks5_auth[i++] = id_len;	// IDLEN
+						// ID
+						for(size_t j = 0; j < id_len; j++) {
+							socks5_auth[i++] = config->outbound_proxy_username[j];
+						}
+						socks5_auth[i++] = pw_len;	// PWLEN
+						// PW
+						for(size_t j = 0; j < pw_len; j++) {
+							socks5_auth[i++] = config->outbound_proxy_password[j];
+						}
+
+						// Send client authentication request (0x02)
+						if(write(io->remote_fd, socks5_auth, socks5_auth_len) == -1) {
+							report_error("init_io_target(): write socks5 auth: %s", strerror(errno));
+							free(socks5_auth);
+							return(-1);
+						}
+						free(socks5_auth);
+
+						// Receive socks5 server response
+						char socks5_auth_response[2] = {0};
+						if(read(io->remote_fd, socks5_auth_response, sizeof(socks5_auth_response)) == -1) {
+							report_error("init_io_target(): read socks5 auth response: %s", strerror(errno));
+							return(-1);
+						}
+						if(socks5_auth_response[0] != 0x01 || socks5_auth_response[1] != 0x00) {
+							report_error("init_io_target(): socks5 auth response");
+							return(-1);
+						}
+					} else {
+						report_error("init_io_target(): socks5 missing credentials");
+						return(-1);
+					}
+					break;
+				}
+				default:
+					report_error("init_io_target(): socks5 unsupported server choice: %#04x", socks5_choice[1]);
+					return(-1);
+			}
+
+			if (config->outbound_proxy_type == OUTBOUND_PROXY_TYPE_SOCKS5) {
+
+				// Parse control ip and port from string
+				unsigned char ip[4] = {0};
+				unsigned short port = 0;
+				if(!parse_addr_string(config->ip_addr, ip, &port)) {
+					report_error("init_io_target(): parse_addr_string");
+					return(-1);
+				}
+
+				// Send socks5 connection request (ipv4)
+				unsigned char socks5_connection_request[] = {
+					0x05,			// VER: 5
+					0x01,			// CMD: CONNECT
+					0x00,			// RSV
+					0x01,			// ATYP: IP V4 address
+					ip[0],			// ipv4 addr
+					ip[1],			// ipv4 addr
+					ip[2],			// ipv4 addr
+					ip[3],			// ipv4 addr
+					port >> 8,		// port
+					port & 0xff,	// port
+				};
+
+				if(write(io->remote_fd, socks5_connection_request, sizeof(socks5_connection_request)) == -1) {
+					report_error("init_io_target(): write socks5 connection request (atyp 1): %s", strerror(errno));
+					return(-1);
+				}
+
+			} else if(config->outbound_proxy_type == OUTBOUND_PROXY_TYPE_SOCKS5H) {
+
+				// Send socks5 connection request (domain)
+				char *domain = strdup(config->ip_addr);
+				char *p = strchr(domain, ':');
+				if (!p) {
+					free(domain);
+					return(-1);
+				}
+				*p = 0;
+				unsigned short port = atoi(p+1);
+
+				int socks5_connection_request_len = 7 + strlen(domain);
+				unsigned char *socks5_connection_request = calloc(1, socks5_connection_request_len + 1);
+				int i = 0;
+				socks5_connection_request[i++] = 0x05;				// VER: 5
+				socks5_connection_request[i++] = 0x01;				// CMD: CONNECT
+				socks5_connection_request[i++] = 0x00;				// RSV
+				socks5_connection_request[i++] = 0x03;				// ATYP: DOMAINNAME
+				socks5_connection_request[i++] = strlen(domain);	// number of octets of name that follow
+
+				for(size_t j = 0; j < strlen(domain); j++) {
+					socks5_connection_request[i++] = domain[j];
+				}
+				free(domain);
+
+				socks5_connection_request[i++] = port >> 8;			// DST.PORT
+				socks5_connection_request[i++] = port & 0xff;		// DST.PORT
+
+				if(write(io->remote_fd, socks5_connection_request, socks5_connection_request_len) == -1) {
+					report_error("init_io_target(): write socks5 connection request (atyp 3): %s", strerror(errno));
+					free(socks5_connection_request);
+					return(-1);
+				}
+				free(socks5_connection_request);
+
+			}
+
+			// Receive initial part of socks5 response packet
+			char socks5_response_part1[4] = {0};
+			if(read(io->remote_fd, socks5_response_part1, sizeof(socks5_response_part1)) == -1) {
+				report_error("init_io_target(): read socks5 response part 1: %s", strerror(errno));
+				return(-1);
+			}
+			if(socks5_response_part1[0] != 0x05 || socks5_response_part1[1] != 0x00) {
+				report_error("init_io_target(): socks5 response");
+				return(-1);
+			}
+
+			// Receive remaining socks5 response packet according to atyp
+			char atyp = socks5_response_part1[3];
+			switch (atyp) {
+				// IPV4 ADDR
+				case 0x01: {
+					char socks5_response_part2[6] = {0};
+					if(read(io->remote_fd, socks5_response_part2, sizeof(socks5_response_part2)) == -1) {
+						report_error("init_io_target(): read socks5 response part 2 (atyp 1): %s", strerror(errno));
+						return(-1);
+					}
+					break;
+				}
+				// DOMAINNAME
+				case 0x03: {
+					while(1) {
+						char socks5_response_part2 = 0;
+						if(read(io->remote_fd, &socks5_response_part2, 1) == -1) {
+							report_error("init_io_target(): read socks5 response part 2 (atyp 3): %s", strerror(errno));
+							return(-1);
+						}
+						if(socks5_response_part2 == 0) {
+							unsigned short port = 0;
+							if(read(io->remote_fd, &port, 2) == -1) {
+								report_error("init_io_target(): read socks5 response part 2 (atyp 3): %s", strerror(errno));
+								return(-1);
+							}
+							break;
+						}
+					}
+				}
+				default: {
+					report_error("init_io_target(): socks5 response unsupported atyp");
+					return(-1);
+				}
+			}
+
+			if(verbose){
+				printf("\tConnected!\r\n");
+			}
+		}
+
+		// Outbound HTTP proxy
+		else if(config->outbound_proxy_type == OUTBOUND_PROXY_TYPE_HTTP) {
+			if(verbose) {
+				printf("Requesting http connection to %s...", config->ip_addr);
+				fflush(stdout);
+			}
+
+			// Build http connect request
+			const char *HTTP_CONNECT_REQUEST_FMT = "CONNECT %s HTTP/1.1\r\n";
+			char *http_connect_request = calloc(1, strlen(HTTP_CONNECT_REQUEST_FMT) - 2 + strlen(config->ip_addr) + 1);
+			sprintf(http_connect_request, HTTP_CONNECT_REQUEST_FMT, config->ip_addr);
+
+			// Add proxy credentials if present
+			if(config->outbound_proxy_username && config->outbound_proxy_password) {
+
+				// Build basic authentication
+				char *username = config->outbound_proxy_username;
+				char *password = config->outbound_proxy_password;
+				char *credential = calloc(1, strlen(username) + strlen(password) + 1 + 1);
+				strcat(credential, username);
+				strcat(credential, ":");
+				strcat(credential, password);
+				char *credential_b64 = calloc(1, (((strlen(credential) + 2) / 3) * 4) + 1);
+				EVP_EncodeBlock((unsigned char*) credential_b64, (unsigned char*) credential, strlen(credential));
+				free(credential);
+
+				// Build proxy authorization header
+				const char *HTTP_PROXY_HEADER_FMT = "Proxy-Authorization: basic %s\r\n";
+				char *http_proxy_header = calloc(1, strlen(HTTP_PROXY_HEADER_FMT) - 2 + strlen(credential_b64) + 1);
+				sprintf(http_proxy_header, HTTP_PROXY_HEADER_FMT, credential_b64);
+				free(credential_b64);
+
+				// Add proxy authorizationheader
+				http_connect_request = realloc(http_connect_request, strlen(http_connect_request) + strlen(http_proxy_header) + 1);
+				strcat(http_connect_request, http_proxy_header);
+			}
+
+			// Add http request terminator
+			http_connect_request = realloc(http_connect_request, strlen(http_connect_request) + strlen("\r\n") + 1);
+			strcat(http_connect_request, "\r\n");
+
+			// Send http connect request
+			if(write(io->remote_fd, http_connect_request, strlen(http_connect_request)) == -1) {
+				free(http_connect_request);
+				report_error("init_io_target(): write http connection request: %s", strerror(errno));
+				return(-1);
+			}
+			free(http_connect_request);
+
+			// Read http response header
+			char http_header[4096] = {0};
+			for(size_t i = 0; i < sizeof(http_header); i++) {
+				if(read(io->remote_fd, http_header + i, 1) == -1) {
+					report_error("init_io_target(): read http connection response header: %s", strerror(errno));
+					return(-1);
+				}
+				if(strstr(http_header, "\r\n\r\n"))
+					break;
+			}
+
+			if(!strstr(http_header, "HTTP/1.1 200")) {
+				report_error("init_io_target(): http error: %s", http_header);
+				return(-1);
+			}
+
+			if(verbose){
+				printf("\tConnected!\r\n");
+			}
+		}
 	}
 
 	if(config->encryption > PLAINTEXT){

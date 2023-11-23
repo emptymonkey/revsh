@@ -309,6 +309,10 @@ int main(int argc, char **argv){
 	io->escape_depth = 0;
 
 	config->interactive = 1;
+	config->outbound_proxy_type = OUTBOUND_PROXY_TYPE;
+	config->outbound_proxy_addr = OUTBOUND_PROXY_ADDR;
+	config->outbound_proxy_username = OUTBOUND_PROXY_USERNAME;
+	config->outbound_proxy_password = OUTBOUND_PROXY_PASSWORD;
 	config->shell = NULL;
 	config->rc_file = RC_FILE;
 	config->keys_dir = KEYS_DIR;

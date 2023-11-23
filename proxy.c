@@ -763,6 +763,50 @@ int parse_socks_request(struct connection_node *cur_connection_node){
 
 /******************************************************************************
  *
+ * parse_addr_string()
+ *
+ * Inputs: Address string to parse.
+ *         Parsed ip.
+ *         Parsed port.
+ *
+ * Outputs: 1 on success, 0 otherwise.
+ *
+ * Purpose: Parse address string into ip and port.
+ *
+ ******************************************************************************/
+int parse_addr_string(char *addr_string, unsigned char ip[4], unsigned short *port) {
+	int parsed_elements = 0;
+	char *s_start = addr_string;
+	for(char *p = addr_string; ; p++) {
+		if(*p == '.' || *p == ':' || *p == '\x00') {
+			int len = p - s_start;
+			char *tmp_buf = calloc(1, len);
+			memcpy(tmp_buf, s_start, len);
+			int n = atoi(tmp_buf);
+			free(tmp_buf);
+
+			if(parsed_elements < 4) {
+				ip[parsed_elements] = n;
+			} else {
+				*port = n;
+			}
+
+			parsed_elements++;
+			s_start = p+1;
+		}
+		if(*p == '\x00') {
+			break;
+		}
+	}
+	if(parsed_elements == 5) {
+		return(1);
+	}
+	return(0);
+}
+
+
+/******************************************************************************
+ *
  * addr_to_string()
  *
  * Inputs: The type of the socks request.

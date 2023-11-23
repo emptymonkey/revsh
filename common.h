@@ -140,6 +140,13 @@
 #define ESCAPE_CR 1
 #define ESCAPE_TILDE 2
 
+/* Outbound proxy */
+#define OUTBOUND_PROXY_TYPE_NULL 0
+#define OUTBOUND_PROXY_TYPE_SOCKS4 1
+#define OUTBOUND_PROXY_TYPE_SOCKS4A 2
+#define OUTBOUND_PROXY_TYPE_SOCKS5 3
+#define OUTBOUND_PROXY_TYPE_SOCKS5H 4
+#define OUTBOUND_PROXY_TYPE_HTTP 5
 
 /******************************************************************************
  * global variables
@@ -254,6 +261,7 @@ void connection_node_delete(struct connection_node *);
 struct connection_node *connection_node_find(unsigned short origin, unsigned short id);
 void connection_node_queue(struct connection_node *cur_connection_node);
 int parse_socks_request(struct connection_node *cur_connection_node);
+int parse_addr_string(char *addr_string, unsigned char ip[4], unsigned short *port);
 char *addr_to_string(int atype, char *addr, char *port, int len);
 
 /* report.c */
