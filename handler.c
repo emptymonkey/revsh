@@ -445,6 +445,7 @@ int handle_message_dt_connection_ht_create(){
 	cur_connection_node->origin = message->header_origin;
 	cur_connection_node->id = message->header_id;
 	cur_connection_node->proxy_type = message->header_proxy_type;
+	cur_connection_node->socks_type = message->header_socks_type;
 
 	if((cur_connection_node->rhost_rport = (char *) calloc(message->data_len + 1, sizeof(char))) == NULL){
 		report_error("handle_message_dt_connection_ht_create(): calloc(%d, %d): %s", message->data_len + 1, (int) sizeof(char), strerror(errno));
@@ -581,6 +582,11 @@ int handle_connection_activate(struct connection_node *cur_connection_node){
 			fprintf(stderr, "\rConnection failed: %s, %s\n", cur_connection_node->rhost_rport, strerror(optval));
 		}
 
+		if(handle_send_dt_connection_ht_refused(cur_connection_node->origin, cur_connection_node->id) == -1){
+			report_error("handle_connection_activate(): handle_send_dt_connection_ht_refused(%d, %d, 0): %s", cur_connection_node->origin, cur_connection_node->id, strerror(errno));
+			return(-1);
+		}
+
 		if(handle_send_dt_connection_ht_destroy(cur_connection_node->origin, cur_connection_node->id, 0) == -1){
 			report_error("handle_connection_activate(): handle_send_dt_connection_ht_destroy(%d, %d, 0): %s", cur_connection_node->origin, cur_connection_node->id, strerror(errno));
 			return(-1);
@@ -591,6 +597,8 @@ int handle_connection_activate(struct connection_node *cur_connection_node){
 	}
 
 	cur_connection_node->state = CON_ACTIVE;
+
+	handle_send_dt_connection_ht_connected(cur_connection_node->origin, cur_connection_node->id);
 
 	return(0);
 }
@@ -725,6 +733,64 @@ int handle_message_dt_connection_ht_data(){
 			}
 		}
 	}
+
+	return(0);
+}
+
+
+/******************************************************************************
+ *
+ * handle_message_dt_connection_ht_connected()
+ *
+ * Inputs: None, but we will leverage the global io struct.
+ * Outputs: 0 for success. -1 on fatal error. -2 on non-fatal error.
+ *
+ * Purpose: Handle the broker case where a connection has succeeded.
+ *
+ ******************************************************************************/
+int handle_message_dt_connection_ht_connected(){
+	struct connection_node *cur_connection_node;
+
+
+	if((cur_connection_node = connection_node_find(message->header_origin, message->header_id)) == NULL){
+
+		if(handle_send_dt_connection_ht_destroy(message->header_origin, message->header_id, 0) == -1){
+			report_error("handle_message_dt_connection(): handle_send_dt_connection_ht_destroy(%d, %d, 0): %s", message->header_origin, message->header_id, strerror(errno));
+			return(-1);
+		}
+		return(-2);
+	}
+
+	connection_node_socks_reply(cur_connection_node, 1);
+
+	return(0);
+}
+
+
+/******************************************************************************
+ *
+ * handle_message_dt_connection_ht_refused()
+ *
+ * Inputs: None, but we will leverage the global io struct.
+ * Outputs: 0 for success. -1 on fatal error. -2 on non-fatal error.
+ *
+ * Purpose: Handle the broker case where a connection was refused.
+ *
+ ******************************************************************************/
+int handle_message_dt_connection_ht_refused(){
+	struct connection_node *cur_connection_node;
+
+
+	if((cur_connection_node = connection_node_find(message->header_origin, message->header_id)) == NULL){
+
+		if(handle_send_dt_connection_ht_destroy(message->header_origin, message->header_id, 0) == -1){
+			report_error("handle_message_dt_connection(): handle_send_dt_connection_ht_destroy(%d, %d, 0): %s", message->header_origin, message->header_id, strerror(errno));
+			return(-1);
+		}
+		return(-2);
+	}
+
+	connection_node_socks_reply(cur_connection_node, 0);
 
 	return(0);
 }
@@ -995,31 +1061,23 @@ int handle_connection_socks_init(struct connection_node *cur_connection_node){
 	if(new_state == CON_SOCKS_V5_AUTH){
 		reply_buff = SOCKS_V5_AUTH_REPLY;
 		reply_buff_len = SOCKS_V5_AUTH_REPLY_LEN;
-	}else if(new_state == CON_ACTIVE){
-		if(cur_connection_node->state == CON_SOCKS_INIT){
-			reply_buff = SOCKS_V4_REPLY;
-			reply_buff_len = SOCKS_V4_REPLY_LEN;
-		}else if(cur_connection_node->state == CON_SOCKS_V5_AUTH){
-			reply_buff = SOCKS_V5_REPLY;
-			reply_buff_len = SOCKS_V5_REPLY_LEN;
-		}
-	}
+		retval = write(cur_connection_node->fd, reply_buff, reply_buff_len);
 
-	retval = write(cur_connection_node->fd, reply_buff, reply_buff_len);
-
-	if(retval == -1){
-		report_error("handle_connection_socks_init(): write(%d, %lx, %d): %s", cur_connection_node->fd, (unsigned long) reply_buff, reply_buff_len, strerror(errno));
-		return(-1);
-	}
-
-	if(retval != reply_buff_len){
-		report_error("handle_connection_socks_init(): write(%d, %lx, %d): Unable to send SOCKS reply.", cur_connection_node->fd, (unsigned long) reply_buff, reply_buff_len);
-		if(handle_send_dt_connection_ht_destroy(cur_connection_node->origin, cur_connection_node->id, 0) == -1){
-			report_error("handle_connection_socks_init(): handle_send_dt_connection_ht_destroy(%d, %d, 0): %s", cur_connection_node->origin, cur_connection_node->id, strerror(errno));
+		if(retval == -1){
+			report_error("handle_connection_socks_init(): write(%d, %lx, %d): %s", cur_connection_node->fd, (unsigned long) reply_buff, reply_buff_len, strerror(errno));
 			return(-1);
 		}
-		connection_node_delete(cur_connection_node);
+
+		if(retval != reply_buff_len){
+			report_error("handle_connection_socks_init(): write(%d, %lx, %d): Unable to send SOCKS reply.", cur_connection_node->fd, (unsigned long) reply_buff, reply_buff_len);
+			if(handle_send_dt_connection_ht_destroy(cur_connection_node->origin, cur_connection_node->id, 0) == -1){
+				report_error("handle_connection_socks_init(): handle_send_dt_connection_ht_destroy(%d, %d, 0): %s", cur_connection_node->origin, cur_connection_node->id, strerror(errno));
+				return(-1);
+			}
+			connection_node_delete(cur_connection_node);
+		}
 	}
+
 
 	cur_connection_node->state = new_state;
 
@@ -1179,7 +1237,6 @@ int handle_send_dt_proxy_ht_report(struct proxy_node *cur_proxy_node){
 	return(0);
 }
 
-
 /******************************************************************************
  *
  * handle_send_dt_connection_ht_destroy()
@@ -1242,6 +1299,7 @@ int handle_send_dt_connection_ht_create(struct connection_node *cur_connection_n
 	message->header_origin = cur_connection_node->origin;
 	message->header_id = cur_connection_node->id;
 	message->header_proxy_type = cur_connection_node->proxy_type;
+	message->header_socks_type = cur_connection_node->socks_type;
 
 	memset(message->data, 0, io->message_data_size);
 	count = strlen(cur_connection_node->rhost_rport);
@@ -1281,6 +1339,68 @@ int handle_send_dt_nop(){
 	message->data_len = 0;
 	if(message_push() == -1){
 		report_error("handle_send_dt_nop(): message_push(): %s", strerror(errno));
+		return(-1);
+	}
+
+	return(0);
+}
+
+
+/******************************************************************************
+ *
+ * handle_send_dt_connection_ht_connected()
+ *
+ * Inputs: The origin and id tuple that identify the related connection.
+ *   We will also leverage the global io struct.
+ * Outputs: 0 for success. -1 on fatal error.
+ *
+ * Purpose: Handle the broker case where we need to notify the remote node
+ *   that a connection has been successfully connected.
+ *
+ ******************************************************************************/
+int handle_send_dt_connection_ht_connected(unsigned short origin, unsigned short id){
+
+	int retval;
+
+	message->data_type = DT_CONNECTION;
+	message->header_type = DT_CONNECTION_HT_CONNECTED;
+	message->header_origin = origin;
+	message->header_id = id;
+	message->data_len = 0;
+
+	if((retval = message_push()) == -1){
+		report_error("handle_send_dt_connection_ht_connected(): message_push(): %s", strerror(errno));
+		return(-1);
+	}
+
+	return(0);
+}
+
+
+/******************************************************************************
+ *
+ * handle_send_dt_connection_ht_refused()
+ *
+ * Inputs: The origin and id tuple that identify the related connection.
+ *   We will also leverage the global io struct.
+ * Outputs: 0 for success. -1 on fatal error.
+ *
+ * Purpose: Handle the broker case where we need to notify the remote node
+ *   that a connection has been refused.
+ *
+ ******************************************************************************/
+int handle_send_dt_connection_ht_refused(unsigned short origin, unsigned short id){
+
+	int retval;
+
+	message->data_type = DT_CONNECTION;
+	message->header_type = DT_CONNECTION_HT_REFUSED;
+	message->header_origin = origin;
+	message->header_id = id;
+	message->data_len = 0;
+
+	if((retval = message_push()) == -1){
+		report_error("handle_send_dt_connection_ht_refused(): message_push(): %s", strerror(errno));
 		return(-1);
 	}
 

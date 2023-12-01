@@ -10,7 +10,7 @@
  */
 
 #define PROTOCOL_MAJOR_VERSION 1
-#define PROTOCOL_MINOR_VERSION 0
+#define PROTOCOL_MINOR_VERSION 1
 
 /**********************************************************************************************************************
  *
@@ -167,6 +167,8 @@
 // As such, this reporting is typically handled as a best effort without guarantee of delivery.
 #define DT_ERROR 6
 
+#define DT_CONNECTION_HT_CONNECTED 7
+#define DT_CONNECTION_HT_REFUSED 8
 /* 
  * Other protocol constants used in messaging.
  */

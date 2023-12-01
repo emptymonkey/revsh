@@ -112,11 +112,13 @@
 #define CON_DORMANT 4
 
 /* Apparently reply strings for socks requests are static in the modern era. */
-#define SOCKS_V4_REPLY "\x00\x5a\x00\x00\x00\x00\x00\x00"
+#define SOCKS_V4_REPLY_OK "\x00\x5a\x00\x00\x00\x00\x00\x00"
+#define SOCKS_V4_REPLY_ERR "\x00\x5b\x00\x00\x00\x00\x00\x00"
 #define SOCKS_V4_REPLY_LEN 8
 #define SOCKS_V5_AUTH_REPLY "\x05\x00"
 #define SOCKS_V5_AUTH_REPLY_LEN 2
-#define SOCKS_V5_REPLY "\x05\x00\x00\x01\x00\x00\x00\x00\x00\x00"
+#define SOCKS_V5_REPLY_OK "\x05\x00\x00\x01\x00\x00\x00\x00\x00\x00"
+#define SOCKS_V5_REPLY_ERR "\x05\x01\x00\x01\x00\x00\x00\x00\x00\x00"
 #define SOCKS_V5_REPLY_LEN 10
 
 /* Maximum possible size of a socks request. */
@@ -203,6 +205,8 @@ int handle_message_dt_connection_ht_create_tun_tap();
 int handle_message_dt_connection_ht_response();
 int handle_connection_activate(struct connection_node *cur_connection_node);
 int handle_message_dt_connection_ht_active_dormant();
+int handle_message_dt_connection_ht_connected();
+int handle_message_dt_connection_ht_refused();
 int handle_message_dt_connection_ht_data();
 int handle_proxy_read(struct proxy_node *cur_proxy_node);
 int handle_connection_write(struct connection_node *cur_connection_node);
@@ -213,6 +217,8 @@ int handle_send_dt_proxy_ht_create(char *proxy_string, int proxy_type);
 int handle_send_dt_proxy_ht_report(struct proxy_node *cur_proxy_node);
 int handle_send_dt_connection_ht_destroy(unsigned short origin, unsigned short id, unsigned short header_errno);
 int handle_send_dt_connection_ht_create(struct connection_node *cur_connection_node);
+int handle_send_dt_connection_ht_connected(unsigned short origin, unsigned short id);
+int handle_send_dt_connection_ht_refused(unsigned short origin, unsigned short id);
 int handle_send_dt_nop();
 struct connection_node *handle_tun_tap_init(int ifr_flag);
 
@@ -253,6 +259,7 @@ struct connection_node *connection_node_create();
 void connection_node_delete(struct connection_node *);
 struct connection_node *connection_node_find(unsigned short origin, unsigned short id);
 void connection_node_queue(struct connection_node *cur_connection_node);
+void connection_node_socks_reply(struct connection_node *, int ok);
 int parse_socks_request(struct connection_node *cur_connection_node);
 char *addr_to_string(int atype, char *addr, char *port, int len);
 
