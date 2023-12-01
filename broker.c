@@ -352,6 +352,20 @@ int broker(){
 							goto RETURN;
 						}
 
+					}else if(message->header_type == DT_CONNECTION_HT_CONNECTED){
+
+						if((retval = handle_message_dt_connection_ht_connected()) == -1){
+							report_error("broker(): handle_message_dt_connection_ht_connected(): %s", strerror(errno));
+							goto RETURN;
+						}
+
+					}else if(message->header_type == DT_CONNECTION_HT_REFUSED){
+
+						if((retval = handle_message_dt_connection_ht_refused()) == -1){
+							report_error("broker(): handle_message_dt_connection_ht_refused(): %s", strerror(errno));
+							goto RETURN;
+						}
+
 					}else{
 						// Unknown connection type. Report but soldier on.
 						report_error("broker(): Unknown Connection Header Type: %d: Ignoring.", message->header_type);
